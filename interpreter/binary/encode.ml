@@ -95,6 +95,8 @@ let encode m =
       | I64Type -> vs7 (-0x02)
       | F32Type -> vs7 (-0x03)
       | F64Type -> vs7 (-0x04)
+      | S32Type -> vs7 (-0x05)
+      | S64Type -> vs7 (-0x06)
 
     let elem_type = function
       | AnyFuncType -> vs7 (-0x10)
@@ -362,6 +364,22 @@ let encode m =
       | Convert (F64 F64Op.PromoteF32) -> op 0xbb
       | Convert (F64 F64Op.DemoteF64) -> assert false
       | Convert (F64 F64Op.ReinterpretInt) -> op 0xbf
+
+
+      | Load {ty = S32Type | S64Type; sz = _; _} -> assert false
+      | Store {ty = S32Type | S64Type; sz = _; _} -> assert false
+      | Const {it = S32 c; _} -> assert false
+      | Const {it = S64 c; _} -> assert false
+      | Test (S32 S32Op.Eqz) -> assert false
+      | Test (S64 S64Op.Eqz) -> assert false
+      | Compare (S32 _) -> assert false
+      | Compare (S64 _) -> assert false
+      | Unary (S32 _) -> assert false
+      | Unary (S64 _) -> assert false
+      | Binary (S32 _) -> assert false
+      | Binary (S64 _) -> assert false
+      | Convert (S32 _) -> assert false
+      | Convert (S64 _) -> assert false
 
     let const c =
       list instr c.it; end_ ()

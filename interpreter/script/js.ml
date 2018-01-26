@@ -178,26 +178,31 @@ let lookup (mods : modules) x_opt name at =
 let eq_of = function
   | I32Type -> Values.I32 I32Op.Eq
   | I64Type -> Values.I64 I64Op.Eq
+  | S32Type -> Values.S32 S32Op.Eq
+  | S64Type -> Values.S64 S64Op.Eq
   | F32Type -> Values.F32 F32Op.Eq
   | F64Type -> Values.F64 F64Op.Eq
 
 let and_of = function
-  | I32Type | F32Type -> Values.I32 I32Op.And
-  | I64Type | F64Type -> Values.I64 I64Op.And
+  | I32Type | S32Type | F32Type -> Values.I32 I32Op.And
+  | I64Type | S64Type | F64Type -> Values.I64 I64Op.And
 
 let reinterpret_of = function
   | I32Type -> I32Type, Nop
   | I64Type -> I64Type, Nop
+  | S32Type -> assert false
+  | S64Type -> assert false
   | F32Type -> I32Type, Convert (Values.I32 I32Op.ReinterpretFloat)
   | F64Type -> I64Type, Convert (Values.I64 I64Op.ReinterpretFloat)
+  
 
 let canonical_nan_of = function
-  | I32Type | F32Type -> Values.I32 (F32.to_bits F32.pos_nan)
-  | I64Type | F64Type -> Values.I64 (F64.to_bits F64.pos_nan)
+  | I32Type | S32Type | F32Type -> Values.I32 (F32.to_bits F32.pos_nan)
+  | I64Type | S64Type | F64Type -> Values.I64 (F64.to_bits F64.pos_nan)
 
 let abs_mask_of = function
-  | I32Type | F32Type -> Values.I32 Int32.max_int
-  | I64Type | F64Type -> Values.I64 Int64.max_int
+  | I32Type | S32Type | F32Type -> Values.I32 Int32.max_int
+  | I64Type | S64Type | F64Type -> Values.I64 Int64.max_int
 
 let invoke ft lits at =
   [ft @@ at], FuncImport (1l @@ at) @@ at,
@@ -258,8 +263,8 @@ let wrap module_name item_name wrap_action wrap_assertion at =
 
 
 let is_js_value_type = function
-  | I32Type -> true
-  | I64Type | F32Type | F64Type -> false
+  | I32Type | S32Type -> true
+  | I64Type | S64Type | F32Type | F64Type -> false
 
 let is_js_global_type = function
   | GlobalType (t, mut) -> is_js_value_type t && mut = Immutable
@@ -307,6 +312,8 @@ let of_literal lit =
   match lit.it with
   | Values.I32 i -> I32.to_string_s i
   | Values.I64 i -> "int64(\"" ^ I64.to_string_s i ^ "\")"
+  | Values.S32 i -> S32.to_string_s i
+  | Values.S64 i -> "sec64(\"" ^ S64.to_string_s i ^ "\")"
   | Values.F32 z -> of_float (F32.to_float z)
   | Values.F64 z -> of_float (F64.to_float z)
 

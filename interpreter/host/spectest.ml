@@ -12,6 +12,8 @@ let global (GlobalType (t, _) as gt) =
     match t with
     | I32Type -> I32 666l
     | I64Type -> I64 666L
+    | S32Type -> S32 666l
+    | S64Type -> S64 666L
     | F32Type -> F32 (F32.of_float 666.6)
     | F64Type -> F64 (F64.of_float 666.6)
   in Global.alloc gt v

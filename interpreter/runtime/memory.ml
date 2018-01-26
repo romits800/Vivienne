@@ -109,6 +109,8 @@ let load_value mem a o t =
   match t with
   | I32Type -> I32 (Int64.to_int32 n)
   | I64Type -> I64 n
+  | S32Type -> S32 (Int64.to_int32 n)
+  | S64Type -> S64 n
   | F32Type -> F32 (F32.of_bits (Int64.to_int32 n))
   | F64Type -> F64 (F64.of_bits n)
 
@@ -117,6 +119,8 @@ let store_value mem a o v =
     match v with
     | I32 x -> Int64.of_int32 x
     | I64 x -> x
+    | S32 x -> Int64.of_int32 x
+    | S64 x -> x
     | F32 x -> Int64.of_int32 (F32.to_bits x)
     | F64 x -> F64.to_bits x
   in storen mem a o (Types.size (Values.type_of v)) x

@@ -130,6 +130,56 @@ struct
     | ReinterpretFloat -> "reinterpret/f" ^ xx
 end
 
+module SecOp =
+struct
+  open Ast.SecOp
+
+  let testop xx = function
+    | Eqz -> "eqz"
+
+  let relop xx = function
+    | Eq -> "eq"
+    | Ne -> "ne"
+    | LtS -> "lt_s"
+    | LtU -> "lt_u"
+    | GtS -> "gt_s"
+    | GtU -> "gt_u"
+    | LeS -> "le_s"
+    | LeU -> "le_u"
+    | GeS -> "ge_s"
+    | GeU -> "ge_u"
+
+  let unop xx = function
+    | Clz -> "clz"
+    | Ctz -> "ctz"
+    | Popcnt -> "popcnt"
+
+  let binop xx = function
+    | Add -> "add"
+    | Sub -> "sub"
+    | Mul -> "mul"
+    | RemS -> "rem_s"
+    | RemU -> "rem_u"
+    | And -> "and"
+    | Or -> "or"
+    | Xor -> "xor"
+    | Shl -> "shl"
+    | ShrS -> "shr_s"
+    | ShrU -> "shr_u"
+    | Rotl -> "rotl"
+    | Rotr -> "rotr"
+
+  let cvtop xx = function
+    | ExtendSI32 -> "extend_s/i32"
+    | ExtendUI32 -> "extend_u/i32"
+    | WrapI64 -> "wrap/i64"
+    | TruncSF32 -> "trunc_s/f32"
+    | TruncUF32 -> "trunc_u/f32"
+    | TruncSF64 -> "trunc_s/f64"
+    | TruncUF64 -> "trunc_u/f64"
+    | ReinterpretFloat -> "reinterpret/f" ^ xx
+end
+
 module FloatOp =
 struct
   open Ast.FloatOp
@@ -172,20 +222,22 @@ struct
     | ReinterpretInt -> "reinterpret/i" ^ xx
 end
 
-let oper (intop, floatop) op =
+let oper (intop, secop, floatop) op =
   value_type (type_of op) ^ "." ^
   (match op with
   | I32 o -> intop "32" o
   | I64 o -> intop "64" o
+  | S32 o -> secop "32" o
+  | S64 o -> secop "64" o
   | F32 o -> floatop "32" o
   | F64 o -> floatop "64" o
   )
 
-let unop = oper (IntOp.unop, FloatOp.unop)
-let binop = oper (IntOp.binop, FloatOp.binop)
-let testop = oper (IntOp.testop, FloatOp.testop)
-let relop = oper (IntOp.relop, FloatOp.relop)
-let cvtop = oper (IntOp.cvtop, FloatOp.cvtop)
+let unop = oper (IntOp.unop, SecOp.unop, FloatOp.unop)
+let binop = oper (IntOp.binop, SecOp.binop, FloatOp.binop)
+let testop = oper (IntOp.testop, SecOp.testop, FloatOp.testop)
+let relop = oper (IntOp.relop, SecOp.relop, FloatOp.relop)
+let cvtop = oper (IntOp.cvtop, SecOp.cvtop, FloatOp.cvtop)
 
 let mem_size = function
   | Memory.Mem8 -> "8"
@@ -386,6 +438,8 @@ let literal lit =
   match lit.it with
   | Values.I32 i -> Node ("i32.const " ^ I32.to_string_s i, [])
   | Values.I64 i -> Node ("i64.const " ^ I64.to_string_s i, [])
+  | Values.S32 i -> Node ("s32.const " ^ S32.to_string_s i, [])
+  | Values.S64 i -> Node ("s64.const " ^ S64.to_string_s i, [])
   | Values.F32 z -> Node ("f32.const " ^ F32.to_string z, [])
   | Values.F64 z -> Node ("f64.const " ^ F64.to_string z, [])
 

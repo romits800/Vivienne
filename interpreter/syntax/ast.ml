@@ -33,6 +33,18 @@ struct
              | ReinterpretFloat
 end
 
+module SecOp =
+struct
+  type unop = Clz | Ctz | Popcnt
+  type binop = Add | Sub | Mul | RemS | RemU
+             | And | Or | Xor | Shl | ShrS | ShrU | Rotl | Rotr
+  type testop = Eqz
+  type relop = Eq | Ne | LtS | LtU | GtS | GtU | LeS | LeU | GeS | GeU
+  type cvtop = ExtendSI32 | ExtendUI32 | WrapI64
+             | TruncSF32 | TruncUF32 | TruncSF64 | TruncUF64
+             | ReinterpretFloat
+end
+
 module FloatOp =
 struct
   type unop = Neg | Abs | Ceil | Floor | Trunc | Nearest | Sqrt
@@ -46,14 +58,16 @@ end
 
 module I32Op = IntOp
 module I64Op = IntOp
+module S32Op = SecOp
+module S64Op = SecOp
 module F32Op = FloatOp
 module F64Op = FloatOp
 
-type unop = (I32Op.unop, I64Op.unop, F32Op.unop, F64Op.unop) Values.op
-type binop = (I32Op.binop, I64Op.binop, F32Op.binop, F64Op.binop) Values.op
-type testop = (I32Op.testop, I64Op.testop, F32Op.testop, F64Op.testop) Values.op
-type relop = (I32Op.relop, I64Op.relop, F32Op.relop, F64Op.relop) Values.op
-type cvtop = (I32Op.cvtop, I64Op.cvtop, F32Op.cvtop, F64Op.cvtop) Values.op
+type unop = (I32Op.unop, I64Op.unop, S32Op.unop, S64Op.unop, F32Op.unop, F64Op.unop) Values.op
+type binop = (I32Op.binop, I64Op.binop, S32Op.binop, S64Op.binop, F32Op.binop, F64Op.binop) Values.op
+type testop = (I32Op.testop, I64Op.testop, S32Op.testop, S64Op.testop, F32Op.testop, F64Op.testop) Values.op
+type relop = (I32Op.relop, I64Op.relop, S32Op.relop, S64Op.relop, F32Op.relop, F64Op.relop) Values.op
+type cvtop = (I32Op.cvtop, I64Op.cvtop, S32Op.cvtop, S64Op.cvtop, F32Op.cvtop, F64Op.cvtop) Values.op
 
 type 'a memop =
   {ty : value_type; align : int; offset : Memory.offset; sz : 'a option}

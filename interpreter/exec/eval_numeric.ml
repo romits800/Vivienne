@@ -68,6 +68,61 @@ end
 module I32Op = IntOp (I32) (Values.I32Value)
 module I64Op = IntOp (I64) (Values.I64Value)
 
+(* Secret operators *)
+
+module SecOp (SXX : Int.S) (Value : ValueType with type t = SXX.t) =
+struct
+  open Ast.SecOp
+
+  let to_value = Value.to_value
+  let of_value = of_arg Value.of_value
+
+  let unop op =
+    let f = match op with
+      | Clz -> SXX.clz
+      | Ctz -> SXX.ctz
+      | Popcnt -> SXX.popcnt
+    in fun v -> to_value (f (of_value 1 v))
+
+  let binop op =
+    let f = match op with
+      | Add -> SXX.add
+      | Sub -> SXX.sub
+      | Mul -> SXX.mul
+      | RemS -> SXX.rem_s
+      | RemU -> SXX.rem_u
+      | And -> SXX.and_
+      | Or -> SXX.or_
+      | Xor -> SXX.xor
+      | Shl -> SXX.shl
+      | ShrU -> SXX.shr_u
+      | ShrS -> SXX.shr_s
+      | Rotl -> SXX.rotl
+      | Rotr -> SXX.rotr
+    in fun v1 v2 -> to_value (f (of_value 1 v1) (of_value 2 v2))
+
+  let testop op =
+    let f = match op with
+      | Eqz -> SXX.eqz
+    in fun v -> f (of_value 1 v)
+
+  let relop op =
+    let f = match op with
+      | Eq -> SXX.eq
+      | Ne -> SXX.ne
+      | LtS -> SXX.lt_s
+      | LtU -> SXX.lt_u
+      | LeS -> SXX.le_s
+      | LeU -> SXX.le_u
+      | GtS -> SXX.gt_s
+      | GtU -> SXX.gt_u
+      | GeS -> SXX.ge_s
+      | GeU -> SXX.ge_u
+    in fun v1 v2 -> f (of_value 1 v1) (of_value 2 v2)
+end
+
+module S32Op = SecOp (S32) (Values.S32Value)
+module S64Op = SecOp (S64) (Values.S64Value)
 
 (* Float operators *)
 
@@ -151,6 +206,18 @@ struct
     | WrapI64 -> raise (TypeError (1, v, I64Type))
 end
 
+module S32CvtOp =
+struct
+  let cvtop op v =
+    raise (TypeError (1, v, S32Type))
+end
+
+module S64CvtOp =
+struct
+  let cvtop op v =
+    raise (TypeError (1, v, S64Type))
+end
+
 module F32CvtOp =
 struct
   open Ast.FloatOp
@@ -184,14 +251,16 @@ end
 
 (* Dispatch *)
 
-let op i32 i64 f32 f64 = function
+let op i32 i64 s32 s64 f32 f64 = function
   | I32 x -> i32 x
   | I64 x -> i64 x
+  | S32 x -> s32 x
+  | S64 x -> s64 x
   | F32 x -> f32 x
   | F64 x -> f64 x
 
-let eval_unop = op I32Op.unop I64Op.unop F32Op.unop F64Op.unop
-let eval_binop = op I32Op.binop I64Op.binop F32Op.binop F64Op.binop
-let eval_testop = op I32Op.testop I64Op.testop F32Op.testop F64Op.testop
-let eval_relop = op I32Op.relop I64Op.relop F32Op.relop F64Op.relop
-let eval_cvtop = op I32CvtOp.cvtop I64CvtOp.cvtop F32CvtOp.cvtop F64CvtOp.cvtop
+let eval_unop = op I32Op.unop I64Op.unop S32Op.unop S64Op.unop F32Op.unop F64Op.unop
+let eval_binop = op I32Op.binop I64Op.binop S32Op.binop S64Op.binop F32Op.binop F64Op.binop
+let eval_testop = op I32Op.testop I64Op.testop S32Op.testop S64Op.testop F32Op.testop F64Op.testop
+let eval_relop = op I32Op.relop I64Op.relop S32Op.relop S64Op.relop F32Op.relop F64Op.relop
+let eval_cvtop = op I32CvtOp.cvtop I64CvtOp.cvtop S32CvtOp.cvtop S64CvtOp.cvtop F32CvtOp.cvtop F64CvtOp.cvtop
