@@ -284,11 +284,15 @@ let rec check_instr (c : context) (e : instr) (s : infer_stack_type) : op_type =
 
   | Test testop ->
     let t = type_testop testop in
-    [t] --> [I32Type]
+    if t = S32Type || t = S64Type
+    then [t] --> [S32Type]
+    else [t] --> [I32Type]
 
   | Compare relop ->
     let t = type_relop relop in
-    [t; t] --> [I32Type]
+    if t = S32Type || t = S64Type
+    then [t; t] --> [S32Type]
+    else [t; t] --> [I32Type]
 
   | Unary unop ->
     let t = type_unop unop in

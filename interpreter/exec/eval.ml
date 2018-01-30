@@ -228,13 +228,18 @@ let rec step (c : config) : config =
 
       | Const v, vs ->
         v.it :: vs, []
-
       | Test testop, v :: vs' ->
-        (try value_of_bool (Eval_numeric.eval_testop testop v) :: vs', []
+        let from_bool = (match testop with
+          | (S32 _ | S64 _) -> value_of_sec_bool
+          | _ -> value_of_bool) in 
+        (try from_bool (Eval_numeric.eval_testop testop v) :: vs', []
         with exn -> vs', [Trapped (numeric_error e.at exn) @@ e.at])
 
       | Compare relop, v2 :: v1 :: vs' ->
-        (try value_of_bool (Eval_numeric.eval_relop relop v1 v2) :: vs', []
+        let from_bool = (match relop with
+          | (S32 _ | S64 _) -> value_of_sec_bool
+          | _ -> value_of_bool) in
+        (try from_bool (Eval_numeric.eval_relop relop v1 v2) :: vs', []
         with exn -> vs', [Trapped (numeric_error e.at exn) @@ e.at])
 
       | Unary unop, v :: vs' ->

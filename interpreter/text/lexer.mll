@@ -48,6 +48,8 @@ let string s =
 let value_type = function
   | "i32" -> Types.I32Type
   | "i64" -> Types.I64Type
+  | "s32" -> Types.S32Type
+  | "s64" -> Types.S64Type
   | "f32" -> Types.F32Type
   | "f64" -> Types.F64Type
   | _ -> assert false
@@ -58,13 +60,31 @@ let intop t i32 i64 =
   | "i64" -> i64
   | _ -> assert false
 
+let secop t i32 i64 s32 s64 =
+  match t with
+  | "i32" -> i32
+  | "i64" -> i64
+  | "s32" -> s32
+  | "s64" -> s64
+  | _ -> assert false
+
 let floatop t f32 f64 =
   match t with
   | "f32" -> f32
   | "f64" -> f64
   | _ -> assert false
 
-let numop t i32 i64 f32 f64 =
+let numop t i32 i64 f32 f64 s32 s64 =
+  match t with
+  | "i32" -> i32
+  | "i64" -> i64
+  | "s32" -> s32
+  | "s64" -> s64
+  | "f32" -> f32
+  | "f64" -> f64
+  | _ -> assert false
+
+let pubop t i32 i64 f32 f64 =
   match t with
   | "i32" -> i32
   | "i64" -> i64
@@ -138,8 +158,11 @@ let name = '$' (letter | digit | '_' | symbol)+
 let reserved = ([^'\"''('')'';'] # space)+  (* hack for table size *)
 
 let ixx = "i" ("32" | "64")
+let sxx = "s" ("32" | "64")
+let intxx = ixx | sxx
 let fxx = "f" ("32" | "64")
-let nxx = ixx | fxx
+let nxx = ixx | fxx | sxx
+let pxx = ixx | fxx
 let mixx = "i" ("8" | "16" | "32" | "64")
 let mfxx = "f" ("32" | "64")
 let sign = "s" | "u"
@@ -171,7 +194,11 @@ rule token = parse
         (fun s -> let n = F32.of_string s.it in
           f32_const (n @@ s.at), Values.F32 n)
         (fun s -> let n = F64.of_string s.it in
-          f64_const (n @@ s.at), Values.F64 n))
+          f64_const (n @@ s.at), Values.F64 n)
+        (fun s -> let n = S32.of_string s.it in
+          s32_const (n @@ s.at), Values.S32 n)
+        (fun s -> let n = S64.of_string s.it in
+          s64_const (n @@ s.at), Values.S64 n))
     }
   | "anyfunc" { ANYFUNC }
   | "mut" { MUT }
@@ -199,13 +226,13 @@ rule token = parse
   | "get_global" { GET_GLOBAL }
   | "set_global" { SET_GLOBAL }
 
-  | (nxx as t)".load"
+  | (pxx as t)".load"
     { LOAD (fun a o ->
-        numop t (i32_load (opt a 2)) (i64_load (opt a 3))
+        pubop t (i32_load (opt a 2)) (i64_load (opt a 3))
                 (f32_load (opt a 2)) (f64_load (opt a 3)) o) }
-  | (nxx as t)".store"
+  | (pxx as t)".store"
     { STORE (fun a o ->
-        numop t (i32_store (opt a 2)) (i64_store (opt a 3))
+        pubop t (i32_store (opt a 2)) (i64_store (opt a 3))
                 (f32_store (opt a 2)) (f64_store (opt a 3)) o) }
   | (ixx as t)".load"(mem_size as sz)"_"(sign as s)
     { if t = "i32" && sz = "32" then error lexbuf "unknown operator";
@@ -235,9 +262,9 @@ rule token = parse
   | "offset="(nat as s) { OFFSET_EQ_NAT s }
   | "align="(nat as s) { ALIGN_EQ_NAT s }
 
-  | (ixx as t)".clz" { UNARY (intop t i32_clz i64_clz) }
-  | (ixx as t)".ctz" { UNARY (intop t i32_ctz i64_ctz) }
-  | (ixx as t)".popcnt" { UNARY (intop t i32_popcnt i64_popcnt) }
+  | (intxx as t)".clz" { UNARY (secop t i32_clz i64_clz s32_clz s64_clz) }
+  | (intxx as t)".ctz" { UNARY (secop t i32_ctz i64_ctz s32_ctz s64_ctz) }
+  | (intxx as t)".popcnt" { UNARY (secop t i32_popcnt i64_popcnt s32_popcnt s64_popcnt) }
   | (fxx as t)".neg" { UNARY (floatop t f32_neg f64_neg) }
   | (fxx as t)".abs" { UNARY (floatop t f32_abs f64_abs) }
   | (fxx as t)".sqrt" { UNARY (floatop t f32_sqrt f64_sqrt) }
@@ -246,21 +273,21 @@ rule token = parse
   | (fxx as t)".trunc" { UNARY (floatop t f32_trunc f64_trunc) }
   | (fxx as t)".nearest" { UNARY (floatop t f32_nearest f64_nearest) }
 
-  | (ixx as t)".add" { BINARY (intop t i32_add i64_add) }
-  | (ixx as t)".sub" { BINARY (intop t i32_sub i64_sub) }
-  | (ixx as t)".mul" { BINARY (intop t i32_mul i64_mul) }
+  | (intxx as t)".add" { BINARY (secop t i32_add i64_add s32_add s64_add) }
+  | (intxx as t)".sub" { BINARY (secop t i32_sub i64_sub s32_sub s64_sub) }
+  | (intxx as t)".mul" { BINARY (secop t i32_mul i64_mul s32_mul s64_mul) }
   | (ixx as t)".div_s" { BINARY (intop t i32_div_s i64_div_s) }
   | (ixx as t)".div_u" { BINARY (intop t i32_div_u i64_div_u) }
-  | (ixx as t)".rem_s" { BINARY (intop t i32_rem_s i64_rem_s) }
-  | (ixx as t)".rem_u" { BINARY (intop t i32_rem_u i64_rem_u) }
-  | (ixx as t)".and" { BINARY (intop t i32_and i64_and) }
-  | (ixx as t)".or" { BINARY (intop t i32_or i64_or) }
-  | (ixx as t)".xor" { BINARY (intop t i32_xor i64_xor) }
-  | (ixx as t)".shl" { BINARY (intop t i32_shl i64_shl) }
-  | (ixx as t)".shr_s" { BINARY (intop t i32_shr_s i64_shr_s) }
-  | (ixx as t)".shr_u" { BINARY (intop t i32_shr_u i64_shr_u) }
-  | (ixx as t)".rotl" { BINARY (intop t i32_rotl i64_rotl) }
-  | (ixx as t)".rotr" { BINARY (intop t i32_rotr i64_rotr) }
+  | (intxx as t)".rem_s" { BINARY (secop t i32_rem_s i64_rem_s s32_rem_s s64_rem_s) }
+  | (intxx as t)".rem_u" { BINARY (secop t i32_rem_u i64_rem_u s32_rem_u s64_rem_u) }
+  | (intxx as t)".and" { BINARY (secop t i32_and i64_and s32_and s64_and) }
+  | (intxx as t)".or" { BINARY (secop t i32_or i64_or s32_or s64_or) }
+  | (intxx as t)".xor" { BINARY (secop t i32_xor i64_xor s32_xor s64_xor) }
+  | (intxx as t)".shl" { BINARY (secop t i32_shl i64_shl s32_shl s64_shl) }
+  | (intxx as t)".shr_s" { BINARY (secop t i32_shr_s i64_shr_s s32_shr_s s64_shr_s) }
+  | (intxx as t)".shr_u" { BINARY (secop t i32_shr_u i64_shr_u s32_shr_u s64_shr_u) }
+  | (intxx as t)".rotl" { BINARY (secop t i32_rotl i64_rotl s32_rotl s64_rotl) }
+  | (intxx as t)".rotr" { BINARY (secop t i32_rotr i64_rotr s32_rotr s64_rotr) }
   | (fxx as t)".add" { BINARY (floatop t f32_add f64_add) }
   | (fxx as t)".sub" { BINARY (floatop t f32_sub f64_sub) }
   | (fxx as t)".mul" { BINARY (floatop t f32_mul f64_mul) }
@@ -269,18 +296,18 @@ rule token = parse
   | (fxx as t)".max" { BINARY (floatop t f32_max f64_max) }
   | (fxx as t)".copysign" { BINARY (floatop t f32_copysign f64_copysign) }
 
-  | (ixx as t)".eqz" { TEST (intop t i32_eqz i64_eqz) }
+  | (intxx as t)".eqz" { TEST (secop t i32_eqz i64_eqz s32_eqz s64_eqz) }
 
-  | (ixx as t)".eq" { COMPARE (intop t i32_eq i64_eq) }
-  | (ixx as t)".ne" { COMPARE (intop t i32_ne i64_ne) }
-  | (ixx as t)".lt_s" { COMPARE (intop t i32_lt_s i64_lt_s) }
-  | (ixx as t)".lt_u" { COMPARE (intop t i32_lt_u i64_lt_u) }
-  | (ixx as t)".le_s" { COMPARE (intop t i32_le_s i64_le_s) }
-  | (ixx as t)".le_u" { COMPARE (intop t i32_le_u i64_le_u) }
-  | (ixx as t)".gt_s" { COMPARE (intop t i32_gt_s i64_gt_s) }
-  | (ixx as t)".gt_u" { COMPARE (intop t i32_gt_u i64_gt_u) }
-  | (ixx as t)".ge_s" { COMPARE (intop t i32_ge_s i64_ge_s) }
-  | (ixx as t)".ge_u" { COMPARE (intop t i32_ge_u i64_ge_u) }
+  | (intxx as t)".eq" { COMPARE (secop t i32_eq i64_eq s32_eq s64_eq) }
+  | (intxx as t)".ne" { COMPARE (secop t i32_ne i64_ne s32_ne s64_ne) }
+  | (intxx as t)".lt_s" { COMPARE (secop t i32_lt_s i64_lt_s s32_lt_s s64_lt_s) }
+  | (intxx as t)".lt_u" { COMPARE (secop t i32_lt_u i64_lt_u s32_lt_u s64_lt_u) }
+  | (intxx as t)".le_s" { COMPARE (secop t i32_le_s i64_le_s s32_le_s s64_le_s) }
+  | (intxx as t)".le_u" { COMPARE (secop t i32_le_u i64_le_u s32_le_u s64_le_u) }
+  | (intxx as t)".gt_s" { COMPARE (secop t i32_gt_s i64_gt_s s32_gt_s s64_gt_s) }
+  | (intxx as t)".gt_u" { COMPARE (secop t i32_gt_u i64_gt_u s32_gt_u s64_gt_u) }
+  | (intxx as t)".ge_s" { COMPARE (secop t i32_ge_s i64_ge_s s32_ge_s s64_ge_s) }
+  | (intxx as t)".ge_u" { COMPARE (secop t i32_ge_u i64_ge_u s32_ge_u s64_ge_u) }
   | (fxx as t)".eq" { COMPARE (floatop t f32_eq f64_eq) }
   | (fxx as t)".ne" { COMPARE (floatop t f32_ne f64_ne) }
   | (fxx as t)".lt" { COMPARE (floatop t f32_lt f64_lt) }
