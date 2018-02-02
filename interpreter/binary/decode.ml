@@ -137,6 +137,8 @@ let value_type s =
   | -0x02 -> I64Type
   | -0x03 -> F32Type
   | -0x04 -> F64Type
+  | -0x05 -> S32Type
+  | -0x06 -> S64Type
   | _ -> error s (pos s - 1) "invalid value type"
 
 let elem_type s =

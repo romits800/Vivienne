@@ -170,14 +170,11 @@ struct
     | Rotr -> "rotr"
 
   let cvtop xx = function
-    | ExtendSI32 -> "extend_s/i32"
-    | ExtendUI32 -> "extend_u/i32"
-    | WrapI64 -> "wrap/i64"
-    | TruncSF32 -> "trunc_s/f32"
-    | TruncUF32 -> "trunc_u/f32"
-    | TruncSF64 -> "trunc_s/f64"
-    | TruncUF64 -> "trunc_u/f64"
-    | ReinterpretFloat -> "reinterpret/f" ^ xx
+    | WrapS64 -> "wrap/s64"
+    | ClassifyI32 -> "classify/i32"
+    | ClassifyI64 -> "classify/i64"
+    | ExtendUS32 -> "extend_u/s32"
+    | ExtendSS32 -> "extend_s/s32"
 end
 
 module FloatOp =

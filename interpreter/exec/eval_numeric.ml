@@ -208,14 +208,25 @@ end
 
 module S32CvtOp =
 struct
+  open Ast.SecOp
+
   let cvtop op v =
-    raise (TypeError (1, v, S32Type))
+    match op with
+    | ClassifyI32 -> S32 (I32Op.of_value 1 v)
+    | ClassifyI64 | ExtendSS32 | ExtendUS32 -> raise (TypeError (1, v, S32Type))
+    | WrapS64 -> S32 (I32_convert.wrap_i64 (S64Op.of_value 1 v))
 end
 
 module S64CvtOp =
 struct
+  open Ast.SecOp
+
   let cvtop op v =
-    raise (TypeError (1, v, S64Type))
+    match op with
+    | ClassifyI64 -> S64 (I64Op.of_value 1 v)
+    | ExtendSS32 -> S64 (I64_convert.extend_s_i32 (S32Op.of_value 1 v))
+    | ExtendUS32 -> S64 (I64_convert.extend_u_i32 (S32Op.of_value 1 v))
+    | WrapS64 | ClassifyI32 -> raise (TypeError (1, v, S64Type))
 end
 
 module F32CvtOp =

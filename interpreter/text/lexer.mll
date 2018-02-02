@@ -341,6 +341,12 @@ rule token = parse
   | "i32.reinterpret/f32" { CONVERT i32_reinterpret_f32 }
   | "i64.reinterpret/f64" { CONVERT i64_reinterpret_f64 }
 
+  | "s32.wrap/s64" { CONVERT s32_wrap_s64 }
+  | "s32.classify/i32" { CONVERT s32_classify_i32 }
+  | "s64.classify/i64" { CONVERT s64_classify_i64 }
+  | "s64.extend_u/s32" { CONVERT s64_extend_u_s32 }
+  | "s64.extend_s/s32" { CONVERT s64_extend_s_s32 }
+
   | "current_memory" { CURRENT_MEMORY }
   | "grow_memory" { GROW_MEMORY }
 
