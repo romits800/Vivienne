@@ -158,8 +158,6 @@ struct
     | Add -> "add"
     | Sub -> "sub"
     | Mul -> "mul"
-    | RemS -> "rem_s"
-    | RemU -> "rem_u"
     | And -> "and"
     | Or -> "or"
     | Xor -> "xor"

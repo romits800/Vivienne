@@ -36,7 +36,7 @@ end
 module SecOp =
 struct
   type unop = Clz | Ctz | Popcnt
-  type binop = Add | Sub | Mul | RemS | RemU
+  type binop = Add | Sub | Mul 
              | And | Or | Xor | Shl | ShrS | ShrU | Rotl | Rotr
   type testop = Eqz
   type relop = Eq | Ne | LtS | LtU | GtS | GtU | LeS | LeU | GeS | GeU

@@ -89,8 +89,6 @@ struct
       | Add -> SXX.add
       | Sub -> SXX.sub
       | Mul -> SXX.mul
-      | RemS -> SXX.rem_s
-      | RemU -> SXX.rem_u
       | And -> SXX.and_
       | Or -> SXX.or_
       | Xor -> SXX.xor

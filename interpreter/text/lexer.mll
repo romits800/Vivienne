@@ -278,8 +278,8 @@ rule token = parse
   | (intxx as t)".mul" { BINARY (secop t i32_mul i64_mul s32_mul s64_mul) }
   | (ixx as t)".div_s" { BINARY (intop t i32_div_s i64_div_s) }
   | (ixx as t)".div_u" { BINARY (intop t i32_div_u i64_div_u) }
-  | (intxx as t)".rem_s" { BINARY (secop t i32_rem_s i64_rem_s s32_rem_s s64_rem_s) }
-  | (intxx as t)".rem_u" { BINARY (secop t i32_rem_u i64_rem_u s32_rem_u s64_rem_u) }
+  | (ixx as t)".rem_s" { BINARY (intop t i32_rem_s i64_rem_s) }
+  | (ixx as t)".rem_u" { BINARY (intop t i32_rem_u i64_rem_u) }
   | (intxx as t)".and" { BINARY (secop t i32_and i64_and s32_and s64_and) }
   | (intxx as t)".or" { BINARY (secop t i32_or i64_or s32_or s64_or) }
   | (intxx as t)".xor" { BINARY (secop t i32_xor i64_xor s32_xor s64_xor) }

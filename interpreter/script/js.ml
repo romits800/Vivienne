@@ -190,8 +190,8 @@ let and_of = function
 let reinterpret_of = function
   | I32Type -> I32Type, Nop
   | I64Type -> I64Type, Nop
-  | S32Type -> assert false
-  | S64Type -> assert false
+  | S32Type -> S32Type, Nop
+  | S64Type -> S32Type, Nop
   | F32Type -> I32Type, Convert (Values.I32 I32Op.ReinterpretFloat)
   | F64Type -> I64Type, Convert (Values.I64 I64Op.ReinterpretFloat)
   
