@@ -368,18 +368,78 @@ let encode m =
 
       | Load {ty = S32Type | S64Type; sz = _; _} -> assert false
       | Store {ty = S32Type | S64Type; sz = _; _} -> assert false
-      | Const {it = S32 c; _} -> assert false
-      | Const {it = S64 c; _} -> assert false
-      | Test (S32 S32Op.Eqz) -> assert false
-      | Test (S64 S64Op.Eqz) -> assert false
-      | Compare (S32 _) -> assert false
-      | Compare (S64 _) -> assert false
-      | Unary (S32 _) -> assert false
-      | Unary (S64 _) -> assert false
-      | Binary (S32 _) -> assert false
-      | Binary (S64 _) -> assert false
-      | Convert (S32 _) -> assert false
-      | Convert (S64 _) -> assert false
+      | Const {it = S32 c; _} -> op 0xc0; op 0x41; vs32 c
+      | Const {it = S64 c; _} -> op 0xc0; op 0x42; vs64 c
+
+      | Test (S32 S32Op.Eqz) -> op 0xc0; op 0x45
+      | Test (S64 S64Op.Eqz) -> op 0xc0; op 0x50
+
+      | Compare (S32 S32Op.Eq) -> op 0xc0; op 0x46
+      | Compare (S32 S32Op.Ne) -> op 0xc0; op 0x47
+      | Compare (S32 S32Op.LtS) -> op 0xc0; op 0x48
+      | Compare (S32 S32Op.LtU) -> op 0xc0; op 0x49
+      | Compare (S32 S32Op.GtS) -> op 0xc0; op 0x4a
+      | Compare (S32 S32Op.GtU) -> op 0xc0; op 0x4b
+      | Compare (S32 S32Op.LeS) -> op 0xc0; op 0x4c
+      | Compare (S32 S32Op.LeU) -> op 0xc0; op 0x4d
+      | Compare (S32 S32Op.GeS) -> op 0xc0; op 0x4e
+      | Compare (S32 S32Op.GeU) -> op 0xc0; op 0x4f
+
+      | Compare (S64 S64Op.Eq) -> op 0xc0; op 0x51
+      | Compare (S64 S64Op.Ne) -> op 0xc0; op 0x52
+      | Compare (S64 S64Op.LtS) -> op 0xc0; op 0x53
+      | Compare (S64 S64Op.LtU) -> op 0xc0; op 0x54
+      | Compare (S64 S64Op.GtS) -> op 0xc0; op 0x55
+      | Compare (S64 S64Op.GtU) -> op 0xc0; op 0x56
+      | Compare (S64 S64Op.LeS) -> op 0xc0; op 0x57
+      | Compare (S64 S64Op.LeU) -> op 0xc0; op 0x58
+      | Compare (S64 S64Op.GeS) -> op 0xc0; op 0x59
+      | Compare (S64 S64Op.GeU) -> op 0xc0; op 0x5a
+
+      | Unary (S32 S32Op.Clz) -> op 0xc0; op 0x67
+      | Unary (S32 S32Op.Ctz) -> op 0xc0; op 0x68
+      | Unary (S32 S32Op.Popcnt) -> op 0xc0; op 0x69
+
+      | Unary (S64 S64Op.Clz) -> op 0xc0; op 0x79
+      | Unary (S64 S64Op.Ctz) -> op 0xc0; op 0x7a
+      | Unary (S64 S64Op.Popcnt) -> op 0xc0; op 0x7b
+
+      | Binary (S32 S32Op.Add) -> op 0xc0; op 0x6a
+      | Binary (S32 S32Op.Sub) -> op 0xc0; op 0x6b
+      | Binary (S32 S32Op.Mul) -> op 0xc0; op 0x6c
+      | Binary (S32 S32Op.And) -> op 0xc0; op 0x71
+      | Binary (S32 S32Op.Or) -> op 0xc0; op 0x72
+      | Binary (S32 S32Op.Xor) -> op 0xc0; op 0x73
+      | Binary (S32 S32Op.Shl) -> op 0xc0; op 0x74
+      | Binary (S32 S32Op.ShrS) -> op 0xc0; op 0x75
+      | Binary (S32 S32Op.ShrU) -> op 0xc0; op 0x76
+      | Binary (S32 S32Op.Rotl) -> op 0xc0; op 0x77
+      | Binary (S32 S32Op.Rotr) -> op 0xc0; op 0x78
+
+      | Binary (S64 S64Op.Add) -> op 0xc0; op 0x7c
+      | Binary (S64 S64Op.Sub) -> op 0xc0; op 0x7d
+      | Binary (S64 S64Op.Mul) -> op 0xc0; op 0x7e
+      | Binary (S64 S64Op.And) -> op 0xc0; op 0x83
+      | Binary (S64 S64Op.Or) -> op 0xc0; op 0x84
+      | Binary (S64 S64Op.Xor) -> op 0xc0; op 0x85
+      | Binary (S64 S64Op.Shl) -> op 0xc0; op 0x86
+      | Binary (S64 S64Op.ShrS) -> op 0xc0; op 0x87
+      | Binary (S64 S64Op.ShrU) -> op 0xc0; op 0x88
+      | Binary (S64 S64Op.Rotl) -> op 0xc0; op 0x89
+      | Binary (S64 S64Op.Rotr) -> op 0xc0; op 0x8a
+
+      | Convert (S32 S32Op.ExtendSS32) -> assert false
+      | Convert (S32 S32Op.ExtendUS32) -> assert false
+      | Convert (S32 S32Op.WrapS64) -> op 0xc0; op 0xa7
+
+      | Convert (S64 S64Op.ExtendSS32) -> op 0xc0; op 0xac
+      | Convert (S64 S64Op.ExtendUS32) -> op 0xc0; op 0xad
+      | Convert (S64 S64Op.WrapS64) -> assert false
+
+      | Convert (S32 S32Op.ClassifyI32) -> op 0xc1 
+      | Convert (S32 S32Op.ClassifyI64) -> assert false
+      | Convert (S64 S64Op.ClassifyI32) -> assert false
+      | Convert (S64 S64Op.ClassifyI64) -> op 0xc2
 
     let const c =
       list instr c.it; end_ ()

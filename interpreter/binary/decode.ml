@@ -433,6 +433,9 @@ let rec instr s =
   | 0xbd -> i64_reinterpret_f64
   | 0xbe -> f32_reinterpret_i32
   | 0xbf -> f64_reinterpret_i64
+  | 0xc0 -> secret s
+  | 0xc1 -> s32_classify_i32
+  | 0xc2 -> s64_classify_i64
 
   | b -> illegal s pos b
 
@@ -444,6 +447,97 @@ and instr_block' s es =
     let pos = pos s in
     let e' = instr s in
     instr_block' s (Source.(e' @@ region s pos pos) :: es)
+and secret s =
+  let pos = pos s in
+  match op s with
+(*
+  | 0x28 -> let a, o = memop s in i32_load a o
+  | 0x29 -> let a, o = memop s in i64_load a o
+  | 0x2a -> let a, o = memop s in f32_load a o
+  | 0x2b -> let a, o = memop s in f64_load a o
+  | 0x2c -> let a, o = memop s in i32_load8_s a o
+  | 0x2d -> let a, o = memop s in i32_load8_u a o
+  | 0x2e -> let a, o = memop s in i32_load16_s a o
+  | 0x2f -> let a, o = memop s in i32_load16_u a o
+  | 0x30 -> let a, o = memop s in i64_load8_s a o
+  | 0x31 -> let a, o = memop s in i64_load8_u a o
+  | 0x32 -> let a, o = memop s in i64_load16_s a o
+  | 0x33 -> let a, o = memop s in i64_load16_u a o
+  | 0x34 -> let a, o = memop s in i64_load32_s a o
+  | 0x35 -> let a, o = memop s in i64_load32_u a o
+
+  | 0x36 -> let a, o = memop s in i32_store a o
+  | 0x37 -> let a, o = memop s in i64_store a o
+  | 0x38 -> let a, o = memop s in f32_store a o
+  | 0x39 -> let a, o = memop s in f64_store a o
+  | 0x3a -> let a, o = memop s in i32_store8 a o
+  | 0x3b -> let a, o = memop s in i32_store16 a o
+  | 0x3c -> let a, o = memop s in i64_store8 a o
+  | 0x3d -> let a, o = memop s in i64_store16 a o
+  | 0x3e -> let a, o = memop s in i64_store32 a o
+*)
+
+  | 0x41 -> s32_const (at vs32 s)
+  | 0x42 -> s64_const (at vs64 s)
+
+  | 0x45 -> s32_eqz
+  | 0x46 -> s32_eq
+  | 0x47 -> s32_ne
+  | 0x48 -> s32_lt_s
+  | 0x49 -> s32_lt_u
+  | 0x4a -> s32_gt_s
+  | 0x4b -> s32_gt_u
+  | 0x4c -> s32_le_s
+  | 0x4d -> s32_le_u
+  | 0x4e -> s32_ge_s
+  | 0x4f -> s32_ge_u
+
+  | 0x50 -> s64_eqz
+  | 0x51 -> s64_eq
+  | 0x52 -> s64_ne
+  | 0x53 -> s64_lt_s
+  | 0x54 -> s64_lt_u
+  | 0x55 -> s64_gt_s
+  | 0x56 -> s64_gt_u
+  | 0x57 -> s64_le_s
+  | 0x58 -> s64_le_u
+  | 0x59 -> s64_ge_s
+  | 0x5a -> s64_ge_u
+
+  | 0x67 -> s32_clz
+  | 0x68 -> s32_ctz
+  | 0x69 -> s32_popcnt
+  | 0x6a -> s32_add
+  | 0x6b -> s32_sub
+  | 0x6c -> s32_mul
+  | 0x71 -> s32_and
+  | 0x72 -> s32_or
+  | 0x73 -> s32_xor
+  | 0x74 -> s32_shl
+  | 0x75 -> s32_shr_s
+  | 0x76 -> s32_shr_u
+  | 0x77 -> s32_rotl
+  | 0x78 -> s32_rotr
+
+  | 0x79 -> s64_clz
+  | 0x7a -> s64_ctz
+  | 0x7b -> s64_popcnt
+  | 0x7c -> s64_add
+  | 0x7d -> s64_sub
+  | 0x7e -> s64_mul
+  | 0x83 -> s64_and
+  | 0x84 -> s64_or
+  | 0x85 -> s64_xor
+  | 0x86 -> s64_shl
+  | 0x87 -> s64_shr_s
+  | 0x88 -> s64_shr_u
+  | 0x89 -> s64_rotl
+  | 0x8a -> s64_rotr
+
+  | 0xa7 -> s32_wrap_s64
+  | 0xac -> s64_extend_s_s32
+  | 0xad -> s64_extend_u_s32
+  | b -> illegal s pos b
 
 let const s =
   let c = at instr_block s in
