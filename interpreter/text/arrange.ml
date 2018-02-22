@@ -293,6 +293,8 @@ let rec instr e =
     | Store op -> storeop op, []
     | CurrentMemory -> "current_memory", []
     | GrowMemory -> "grow_memory", []
+    | CurrentSecretMemory -> "current_secret_memory", []
+    | GrowSecretMemory -> "grow_secret_memory", []
     | Const lit -> constop lit ^ " " ^ value lit, []
     | Test op -> testop op, []
     | Compare op -> relop op, []

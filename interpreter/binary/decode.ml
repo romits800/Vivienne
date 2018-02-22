@@ -479,6 +479,12 @@ and secret s =
   | 0x3d -> let a, o = memop s in s64_store16 a o
   | 0x3e -> let a, o = memop s in s64_store32 a o
 
+  | 0x3f ->
+    expect 0x00 s "zero flag expected";
+    current_secret_memory
+  | 0x40 ->
+    expect 0x00 s "zero flag expected";
+    grow_secret_memory
 
   | 0x41 -> s32_const (at vs32 s)
   | 0x42 -> s64_const (at vs64 s)

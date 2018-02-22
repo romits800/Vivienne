@@ -281,6 +281,14 @@ let rec check_instr (c : context) (e : instr) (s : infer_stack_type) : op_type =
     ignore (memory c (0l @@ e.at));
     [I32Type] --> [I32Type]
 
+  | CurrentSecretMemory ->
+    ignore (secret_memory c (0l @@ e.at));
+    [] --> [I32Type]
+
+  | GrowSecretMemory ->
+    ignore (secret_memory c (0l @@ e.at));
+    [I32Type] --> [I32Type]
+
   | Const v ->
     let t = type_value v.it in
     [] --> [t]

@@ -446,6 +446,8 @@ let encode m =
       | Convert (S32 S32Op.ClassifyI64) -> assert false
       | Convert (S64 S64Op.ClassifyI32) -> assert false
       | Convert (S64 S64Op.ClassifyI64) -> op 0xc2
+      | CurrentSecretMemory -> op 0xc0; op 0x3f; u8 0x00
+      | GrowSecretMemory -> op 0xc0; op 0x40; u8 0x00
 
     let const c =
       list instr c.it; end_ ()

@@ -294,3 +294,5 @@ let s64_extend_s_s32 = Convert (S64 S64Op.ExtendSS32)
 let current_memory = CurrentMemory
 let grow_memory = GrowMemory
 
+let current_secret_memory = CurrentSecretMemory
+let grow_secret_memory = GrowSecretMemory

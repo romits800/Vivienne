@@ -217,6 +217,18 @@ let rec step (c : config) : config =
           vs', []
         with exn -> vs', [Trapped (memory_error e.at exn) @@ e.at]);
 
+      | CurrentSecretMemory, vs ->
+        let mem = secret_memory frame.inst (0l @@ e.at) in
+        I32 (Memory.size mem) :: vs, []
+
+      | GrowSecretMemory, I32 delta :: vs' ->
+        let mem = secret_memory frame.inst (0l @@ e.at) in
+        let old_size = Memory.size mem in
+        let result =
+          try Memory.grow mem delta; old_size
+          with Memory.SizeOverflow | Memory.SizeLimit | Memory.OutOfMemory -> -1l
+        in I32 result :: vs', []
+
       | CurrentMemory, vs ->
         let mem = memory frame.inst (0l @@ e.at) in
         I32 (Memory.size mem) :: vs, []
