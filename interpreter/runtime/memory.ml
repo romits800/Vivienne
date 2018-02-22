@@ -11,8 +11,11 @@ type mem_size = Mem8 | Mem16 | Mem32
 type extension = SX | ZX
 
 type memory' = (int, int8_unsigned_elt, c_layout) Array1.t
-type memory = {mutable content : memory'; max : size option}
+type memory = {mutable content : memory'; max : size option; sec : secrecy}
 type t = memory
+
+let secret {sec;_} = sec = Secret
+let public {sec;_} = sec = Public
 
 exception Type
 exception Bounds
@@ -40,9 +43,9 @@ let create n =
     mem
   with Out_of_memory -> raise OutOfMemory
 
-let alloc (MemoryType {min; max}) =
+let alloc (MemoryType ({min; max}, sec)) =
   assert (within_limits min max);
-  {content = create min; max}
+  {content = create min; max; sec}
 
 let bound mem =
   Array1_64.dim mem.content
@@ -51,7 +54,7 @@ let size mem =
   Int64.(to_int32 (div (bound mem) page_size))
 
 let type_of mem =
-  MemoryType {min = size mem; max = mem.max}
+  MemoryType ({min = size mem; max = mem.max}, mem.sec)
 
 let grow mem delta =
   let old_size = size mem in

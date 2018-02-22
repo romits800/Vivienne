@@ -34,14 +34,17 @@ let lookup category list x =
   try Lib.List32.nth list x.it with Failure _ ->
     error x.at ("unknown " ^ category ^ " " ^ Int32.to_string x.it)
 
+let public (MemoryType (_,s)) = s = Public
+let secret (MemoryType (_,s)) = s = Secret
+
 let type_ (c : context) x = lookup "type" c.types x
 let func (c : context) x = lookup "function" c.funcs x
 let table (c : context) x = lookup "table" c.tables x
-let memory (c : context) x = lookup "memory" c.memories x
+let memory (c : context) x = lookup "memory" (List.filter public c.memories) x
+let secret_memory (c : context) x = lookup "secret_memory" (List.filter secret c.memories) x
 let global (c : context) x = lookup "global" c.globals x
 let local (c : context) x = lookup "local" c.locals x
 let label (c : context) x = lookup "label" c.labels x
-
 
 (* Stack typing *)
 
@@ -152,7 +155,9 @@ let type_cvtop at = function
 (* Expressions *)
 
 let check_memop (c : context) (memop : 'a memop) get_sz at =
-  ignore (memory c (0l @@ at));
+  if memop.ty = S32Type || memop.ty = S64Type
+  then ignore (secret_memory c (0l @@ at))
+  else ignore (memory c (0l @@ at));
   let size =
     match get_sz memop.sz with
     | None -> size memop.ty
@@ -350,7 +355,7 @@ let check_memory_size (sz : I32.t) at =
     "memory size must be at most 65536 pages (4GiB)"
 
 let check_memory_type (mt : memory_type) at =
-  let MemoryType lim = mt in
+  let MemoryType (lim, _sec) = mt in
   check_limits lim at;
   check_memory_size lim.min at;
   Lib.Option.app (fun max -> check_memory_size max at) lim.max
@@ -465,6 +470,16 @@ let check_export (c : context) (set : NameSet.t) (ex : export) : NameSet.t =
   require (not (NameSet.mem name set)) ex.at "duplicate export name";
   NameSet.add name set
 
+let check_memories (ms: memory_type list) =
+  match ms with
+  | []
+  | _::[]
+  | (MemoryType (_, Secret))::(MemoryType (_, Public))::[]
+  | (MemoryType (_, Public))::(MemoryType (_, Secret))::[] -> true
+  | _ -> false
+
+
+
 let check_module (m : module_) =
   let
     { types; imports; tables; memories; globals; funcs; start; elems; data;
@@ -495,5 +510,5 @@ let check_module (m : module_) =
   ignore (List.fold_left (check_export c) NameSet.empty exports);
   require (List.length c.tables <= 1) m.at
     "multiple tables are not allowed (yet)";
-  require (List.length c.memories <= 1) m.at
+  require (check_memories c.memories) m.at
     "multiple memories are not allowed (yet)"

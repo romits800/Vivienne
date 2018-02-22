@@ -1,13 +1,17 @@
 open Types
 open Values
-
-type memory
-type t = memory
+open Bigarray
 
 type size = int32  (* number of pages *)
 type address = int64
 type offset = int32
 
+type memory' = (int, int8_unsigned_elt, c_layout) Array1.t
+type memory = {mutable content : memory'; max : size option; sec : secrecy}
+type t = memory
+
+val public : memory -> bool
+val secret : memory -> bool
 type mem_size = Mem8 | Mem16 | Mem32
 type extension = SX | ZX
 

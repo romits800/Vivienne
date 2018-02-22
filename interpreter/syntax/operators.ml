@@ -35,6 +35,8 @@ let set_global x = SetGlobal x
 
 let i32_load align offset = Load {ty = I32Type; align; offset; sz = None}
 let i64_load align offset = Load {ty = I64Type; align; offset; sz = None}
+let s32_load align offset = Load {ty = S32Type; align; offset; sz = None}
+let s64_load align offset = Load {ty = S64Type; align; offset; sz = None}
 let f32_load align offset = Load {ty = F32Type; align; offset; sz = None}
 let f64_load align offset = Load {ty = F64Type; align; offset; sz = None}
 let i32_load8_s align offset =
@@ -57,9 +59,31 @@ let i64_load32_s align offset =
   Load {ty = I64Type; align; offset; sz = Some (Mem32, SX)}
 let i64_load32_u align offset =
   Load {ty = I64Type; align; offset; sz = Some (Mem32, ZX)}
+let s32_load8_s align offset =
+  Load {ty = S32Type; align; offset; sz = Some (Mem8, SX)}
+let s32_load8_u align offset =
+  Load {ty = S32Type; align; offset; sz = Some (Mem8, ZX)}
+let s32_load16_s align offset =
+  Load {ty = S32Type; align; offset; sz = Some (Mem16, SX)}
+let s32_load16_u align offset =
+  Load {ty = S32Type; align; offset; sz = Some (Mem16, ZX)}
+let s64_load8_s align offset =
+  Load {ty = S64Type; align; offset; sz = Some (Mem8, SX)}
+let s64_load8_u align offset =
+  Load {ty = S64Type; align; offset; sz = Some (Mem8, ZX)}
+let s64_load16_s align offset =
+  Load {ty = S64Type; align; offset; sz = Some (Mem16, SX)}
+let s64_load16_u align offset =
+  Load {ty = S64Type; align; offset; sz = Some (Mem16, ZX)}
+let s64_load32_s align offset =
+  Load {ty = S64Type; align; offset; sz = Some (Mem32, SX)}
+let s64_load32_u align offset =
+  Load {ty = S64Type; align; offset; sz = Some (Mem32, ZX)}
 
 let i32_store align offset = Store {ty = I32Type; align; offset; sz = None}
 let i64_store align offset = Store {ty = I64Type; align; offset; sz = None}
+let s32_store align offset = Store {ty = S32Type; align; offset; sz = None}
+let s64_store align offset = Store {ty = S64Type; align; offset; sz = None}
 let f32_store align offset = Store {ty = F32Type; align; offset; sz = None}
 let f64_store align offset = Store {ty = F64Type; align; offset; sz = None}
 let i32_store8 align offset =
@@ -72,6 +96,16 @@ let i64_store16 align offset =
   Store {ty = I64Type; align; offset; sz = Some Mem16}
 let i64_store32 align offset =
   Store {ty = I64Type; align; offset; sz = Some Mem32}
+let s32_store8 align offset =
+  Store {ty = S32Type; align; offset; sz = Some Mem8}
+let s32_store16 align offset =
+  Store {ty = S32Type; align; offset; sz = Some Mem16}
+let s64_store8 align offset =
+  Store {ty = S64Type; align; offset; sz = Some Mem8}
+let s64_store16 align offset =
+  Store {ty = S64Type; align; offset; sz = Some Mem16}
+let s64_store32 align offset =
+  Store {ty = S64Type; align; offset; sz = Some Mem32}
 
 let i32_clz = Unary (I32 I32Op.Clz)
 let i32_ctz = Unary (I32 I32Op.Ctz)

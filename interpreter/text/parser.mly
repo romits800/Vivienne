@@ -159,6 +159,7 @@ let inline_type_explicit (c : context) x ft at =
 %token ASSERT_MALFORMED ASSERT_INVALID ASSERT_SOFT_INVALID ASSERT_UNLINKABLE
 %token ASSERT_RETURN ASSERT_RETURN_CANONICAL_NAN ASSERT_RETURN_ARITHMETIC_NAN ASSERT_TRAP ASSERT_EXHAUSTION
 %token INPUT OUTPUT
+%token SECRET
 %token EOF
 
 %token<string> NAT
@@ -230,7 +231,8 @@ table_sig :
   | limits elem_type { TableType ($1, $2) }
 
 memory_sig :
-  | limits { MemoryType $1 }
+  | limits { MemoryType ($1, Public) }
+  | limits SECRET{ MemoryType ($1, Secret) }
 
 limits :
   | NAT { {min = nat32 $1 (ati 1); max = None} }
@@ -579,7 +581,7 @@ memory_fields :
   | LPAR DATA string_list RPAR  /* Sugar */
     { fun c x at ->
       let size = Int32.(div (add (of_int (String.length $3)) 65535l) 65536l) in
-      [{mtype = MemoryType {min = size; max = Some size}} @@ at],
+      [{mtype = MemoryType ({min = size; max = Some size}, Public)} @@ at],
       [{index = x;
         offset = [i32_const (0l @@ at) @@ at] @@ at; init = $3} @@ at],
       [], [] }

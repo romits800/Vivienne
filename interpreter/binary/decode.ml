@@ -165,14 +165,21 @@ let limits vu s =
   let max = opt vu has_max s in
   {min; max}
 
+let memory_limits vu s =
+  let flag = u8 s in
+  let min = vu s in
+  let max = opt vu (flag mod 2 = 1) s in
+  let sec = if flag < 2 then Public else Secret in
+  ({min; max}, sec)
+
 let table_type s =
   let t = elem_type s in
   let lim = limits vu32 s in
   TableType (lim, t)
 
 let memory_type s =
-  let lim = limits vu32 s in
-  MemoryType lim
+  let (lim, sec) = memory_limits vu32 s in
+  MemoryType (lim, sec)
 
 let mutability s =
   match u8 s with
@@ -450,32 +457,28 @@ and instr_block' s es =
 and secret s =
   let pos = pos s in
   match op s with
-(*
-  | 0x28 -> let a, o = memop s in i32_load a o
-  | 0x29 -> let a, o = memop s in i64_load a o
-  | 0x2a -> let a, o = memop s in f32_load a o
-  | 0x2b -> let a, o = memop s in f64_load a o
-  | 0x2c -> let a, o = memop s in i32_load8_s a o
-  | 0x2d -> let a, o = memop s in i32_load8_u a o
-  | 0x2e -> let a, o = memop s in i32_load16_s a o
-  | 0x2f -> let a, o = memop s in i32_load16_u a o
-  | 0x30 -> let a, o = memop s in i64_load8_s a o
-  | 0x31 -> let a, o = memop s in i64_load8_u a o
-  | 0x32 -> let a, o = memop s in i64_load16_s a o
-  | 0x33 -> let a, o = memop s in i64_load16_u a o
-  | 0x34 -> let a, o = memop s in i64_load32_s a o
-  | 0x35 -> let a, o = memop s in i64_load32_u a o
 
-  | 0x36 -> let a, o = memop s in i32_store a o
-  | 0x37 -> let a, o = memop s in i64_store a o
-  | 0x38 -> let a, o = memop s in f32_store a o
-  | 0x39 -> let a, o = memop s in f64_store a o
-  | 0x3a -> let a, o = memop s in i32_store8 a o
-  | 0x3b -> let a, o = memop s in i32_store16 a o
-  | 0x3c -> let a, o = memop s in i64_store8 a o
-  | 0x3d -> let a, o = memop s in i64_store16 a o
-  | 0x3e -> let a, o = memop s in i64_store32 a o
-*)
+  | 0x28 -> let a, o = memop s in s32_load a o
+  | 0x29 -> let a, o = memop s in s64_load a o
+  | 0x2c -> let a, o = memop s in s32_load8_s a o
+  | 0x2d -> let a, o = memop s in s32_load8_u a o
+  | 0x2e -> let a, o = memop s in s32_load16_s a o
+  | 0x2f -> let a, o = memop s in s32_load16_u a o
+  | 0x30 -> let a, o = memop s in s64_load8_s a o
+  | 0x31 -> let a, o = memop s in s64_load8_u a o
+  | 0x32 -> let a, o = memop s in s64_load16_s a o
+  | 0x33 -> let a, o = memop s in s64_load16_u a o
+  | 0x34 -> let a, o = memop s in s64_load32_s a o
+  | 0x35 -> let a, o = memop s in s64_load32_u a o
+
+  | 0x36 -> let a, o = memop s in s32_store a o
+  | 0x37 -> let a, o = memop s in s64_store a o
+  | 0x3a -> let a, o = memop s in s32_store8 a o
+  | 0x3b -> let a, o = memop s in s32_store16 a o
+  | 0x3c -> let a, o = memop s in s64_store8 a o
+  | 0x3d -> let a, o = memop s in s64_store16 a o
+  | 0x3e -> let a, o = memop s in s64_store32 a o
+
 
   | 0x41 -> s32_const (at vs32 s)
   | 0x42 -> s64_const (at vs64 s)

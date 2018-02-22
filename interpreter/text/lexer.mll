@@ -84,14 +84,6 @@ let numop t i32 i64 f32 f64 s32 s64 =
   | "f64" -> f64
   | _ -> assert false
 
-let pubop t i32 i64 f32 f64 =
-  match t with
-  | "i32" -> i32
-  | "i64" -> i64
-  | "f32" -> f32
-  | "f64" -> f64
-  | _ -> assert false
-
 let memsz sz m8 m16 m32 =
   match sz with
   | "8" -> m8
@@ -162,7 +154,6 @@ let sxx = "s" ("32" | "64")
 let intxx = ixx | sxx
 let fxx = "f" ("32" | "64")
 let nxx = ixx | fxx | sxx
-let pxx = ixx | fxx
 let mixx = "i" ("8" | "16" | "32" | "64")
 let mfxx = "f" ("32" | "64")
 let sign = "s" | "u"
@@ -226,18 +217,20 @@ rule token = parse
   | "get_global" { GET_GLOBAL }
   | "set_global" { SET_GLOBAL }
 
-  | (pxx as t)".load"
+  | (nxx as t)".load"
     { LOAD (fun a o ->
-        pubop t (i32_load (opt a 2)) (i64_load (opt a 3))
-                (f32_load (opt a 2)) (f64_load (opt a 3)) o) }
-  | (pxx as t)".store"
+        numop t (i32_load (opt a 2)) (i64_load (opt a 3))
+                (f32_load (opt a 2)) (f64_load (opt a 3))
+                (s32_load (opt a 2)) (s64_load (opt a 3)) o) }
+  | (nxx as t)".store"
     { STORE (fun a o ->
-        pubop t (i32_store (opt a 2)) (i64_store (opt a 3))
-                (f32_store (opt a 2)) (f64_store (opt a 3)) o) }
-  | (ixx as t)".load"(mem_size as sz)"_"(sign as s)
-    { if t = "i32" && sz = "32" then error lexbuf "unknown operator";
+        numop t (i32_store (opt a 2)) (i64_store (opt a 3))
+                (f32_store (opt a 2)) (f64_store (opt a 3))
+                (s32_store (opt a 2)) (s64_store (opt a 3)) o) }
+  | (intxx as t)".load"(mem_size as sz)"_"(sign as s)
+    { if (t = "i32" || t = "s32") && sz = "32" then error lexbuf "unknown operator";
       LOAD (fun a o ->
-        intop t
+        secop t
           (memsz sz
             (ext s i32_load8_s i32_load8_u (opt a 0))
             (ext s i32_load16_s i32_load16_u (opt a 1))
@@ -245,11 +238,19 @@ rule token = parse
           (memsz sz
             (ext s i64_load8_s i64_load8_u (opt a 0))
             (ext s i64_load16_s i64_load16_u (opt a 1))
-            (ext s i64_load32_s i64_load32_u (opt a 2)) o)) }
-  | (ixx as t)".store"(mem_size as sz)
-    { if t = "i32" && sz = "32" then error lexbuf "unknown operator";
+            (ext s i64_load32_s i64_load32_u (opt a 2)) o)
+          (memsz sz
+            (ext s s32_load8_s s32_load8_u (opt a 0))
+            (ext s s32_load16_s s32_load16_u (opt a 1))
+            (fun _ -> unreachable) o)
+          (memsz sz
+            (ext s s64_load8_s s64_load8_u (opt a 0))
+            (ext s s64_load16_s s64_load16_u (opt a 1))
+            (ext s s64_load32_s s64_load32_u (opt a 2)) o)) }
+  | (intxx as t)".store"(mem_size as sz)
+    { if (t = "i32" || t = "s32") && sz = "32" then error lexbuf "unknown operator";
       STORE (fun a o ->
-        intop t
+        secop t
           (memsz sz
             (i32_store8 (opt a 0))
             (i32_store16 (opt a 1))
@@ -257,7 +258,15 @@ rule token = parse
           (memsz sz
             (i64_store8 (opt a 0))
             (i64_store16 (opt a 1))
-            (i64_store32 (opt a 2)) o)) }
+            (i64_store32 (opt a 2)) o)
+          (memsz sz
+            (s32_store8 (opt a 0))
+            (s32_store16 (opt a 1))
+            (fun _ -> unreachable) o)
+          (memsz sz
+            (s64_store8 (opt a 0))
+            (s64_store16 (opt a 1))
+            (s64_store32 (opt a 2)) o)) }
 
   | "offset="(nat as s) { OFFSET_EQ_NAT s }
   | "align="(nat as s) { ALIGN_EQ_NAT s }
@@ -359,6 +368,7 @@ rule token = parse
   | "global" { GLOBAL }
   | "table" { TABLE }
   | "memory" { MEMORY }
+  | "secret" { SECRET }
   | "elem" { ELEM }
   | "data" { DATA }
   | "offset" { OFFSET }

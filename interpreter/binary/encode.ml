@@ -111,14 +111,17 @@ let encode m =
     let func_type = function
       | FuncType (ins, out) -> vs7 (-0x20); vec value_type ins; vec value_type out
 
-    let limits vu {min; max} =
-      bool (max <> None); vu min; opt vu max
+    let limits vu {min; max} sec =
+      match (max, sec) with
+      | (_, Public) -> bool (max <> None); vu min; opt vu max
+      | (None, Secret) -> u8 0x02; vu min
+      | _ -> u8 0x03; vu min; opt vu max
 
     let table_type = function
-      | TableType (lim, t) -> elem_type t; limits vu32 lim
+      | TableType (lim, t) -> elem_type t; limits vu32 lim Public
 
     let memory_type = function
-      | MemoryType lim -> limits vu32 lim
+      | MemoryType (lim, sec) -> limits vu32 lim sec
 
     let mutability = function
       | Immutable -> u8 0
@@ -141,8 +144,9 @@ let encode m =
 
     let var x = vu32 x.it
 
-    let rec instr e =
-      match e.it with
+    let rec instr e = instr' e.it
+    and instr' e' = 
+      match e' with
       | Unreachable -> op 0x00
       | Nop -> op 0x01
 
@@ -366,8 +370,10 @@ let encode m =
       | Convert (F64 F64Op.ReinterpretInt) -> op 0xbf
 
 
-      | Load {ty = S32Type | S64Type; sz = _; _} -> assert false
-      | Store {ty = S32Type | S64Type; sz = _; _} -> assert false
+      | Load ({ty = S32Type; sz = _; _} as mop) -> op 0xc0; instr' (Load {mop with ty = I32Type})
+      | Load ({ty = S64Type; sz = _; _} as mop) ->  op 0xc0; instr' (Load {mop with ty = I64Type})
+      | Store ({ty = S32Type; sz = _; _} as mop) -> op 0xc0; instr' (Store {mop with ty = I32Type})
+      | Store ({ty = S64Type; sz = _; _} as mop) -> op 0xc0; instr' (Store {mop with ty = I64Type})
       | Const {it = S32 c; _} -> op 0xc0; op 0x41; vs32 c
       | Const {it = S64 c; _} -> op 0xc0; op 0x42; vs64 c
 
