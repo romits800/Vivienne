@@ -5,8 +5,18 @@
 (assert_invalid (module (memory secret 0 1) (memory secret 0 2)) "multiple memories are not allowed (yet)")
 
 (module
-    (memory 1)
-    (memory secret 1)
+    (memory $pub 1)
+    (memory $sec secret 1)
+
+    (data $pub (i32.const 0) "A")
+
+    (data $sec (i32.const 0) "B")
+
+    (func (export "sec_init") (result s32)
+        (return (s32.load (i32.const 0))))
+
+    (func (export "pub_init") (result i32)
+        (return (i32.load (i32.const 0))))
 
     (func (export "sec_write/pub_read") (result i32)
         (i32.store (i32.const 0) (i32.const 1))
@@ -18,6 +28,8 @@
         (i32.store (i32.const 0) (i32.const 2))
         (return (s32.load (i32.const 0)))))
 
+(assert_return (invoke "sec_init") (s32.const 66))
+(assert_return (invoke "pub_init") (i32.const 65))
 (assert_return (invoke "sec_write/pub_read") (i32.const 1))
 (assert_return (invoke "pub_write/sec_read") (s32.const 1))
 

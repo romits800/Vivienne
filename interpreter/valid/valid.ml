@@ -40,6 +40,7 @@ let secret (MemoryType (_,s)) = s = Secret
 let type_ (c : context) x = lookup "type" c.types x
 let func (c : context) x = lookup "function" c.funcs x
 let table (c : context) x = lookup "table" c.tables x
+let all_memory (c : context) x = lookup "memory" c.memories x
 let memory (c : context) x = lookup "memory" (List.filter public c.memories) x
 let secret_memory (c : context) x = lookup "secret_memory" (List.filter secret c.memories) x
 let global (c : context) x = lookup "global" c.globals x
@@ -428,7 +429,7 @@ let check_elem (c : context) (seg : table_segment) =
 let check_data (c : context) (seg : memory_segment) =
   let {index; offset; init} = seg.it in
   check_const c offset I32Type;
-  ignore (memory c index)
+  ignore (all_memory c index)
 
 let check_global (c : context) (glob : global) =
   let {gtype; value} = glob.it in

@@ -77,6 +77,7 @@ let lookup category list x =
 let type_ (inst : module_inst) x = lookup "type" inst.types x
 let func (inst : module_inst) x = lookup "function" inst.funcs x
 let table (inst : module_inst) x = lookup "table" inst.tables x
+let all_memory (inst : module_inst) x = lookup "memory" inst.memories x
 let memory (inst : module_inst) x = lookup "memory" (List.filter Memory.public inst.memories) x
 let secret_memory (inst : module_inst) x = lookup "secret_memory" (List.filter Memory.secret inst.memories) x
 let global (inst : module_inst) x = lookup "global" inst.globals x
@@ -411,7 +412,7 @@ let init_table (inst : module_inst) (seg : table_segment) =
 
 let init_memory (inst : module_inst) (seg : memory_segment) =
   let {index; offset = const; init} = seg.it in
-  let mem = memory inst index in
+  let mem = all_memory inst index in
   let offset' = i32 (eval_const inst const) const.at in
   let offset = I64_convert.extend_u_i32 offset' in
   let end_ = Int64.(add offset (of_int (String.length init))) in
