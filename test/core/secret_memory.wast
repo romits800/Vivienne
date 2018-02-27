@@ -1,12 +1,12 @@
-(module (memory 0 1 secret))
-(module (memory 0 1 secret) (memory 0 0))
-(module (memory 0 0) (memory 0 1 secret))
+(module (memory secret 0 1))
+(module (memory secret 0 1) (memory 0 0))
+(module (memory 0 0) (memory secret 0 1))
 
-(assert_invalid (module (memory 0 1 secret) (memory 0 2 secret)) "multiple memories are not allowed (yet)")
+(assert_invalid (module (memory secret 0 1) (memory secret 0 2)) "multiple memories are not allowed (yet)")
 
 (module
     (memory 1)
-    (memory 1 secret)
+    (memory secret 1)
 
     (func (export "sec_write/pub_read") (result i32)
         (i32.store (i32.const 0) (i32.const 1))
@@ -22,7 +22,7 @@
 (assert_return (invoke "pub_write/sec_read") (s32.const 1))
 
 (module
-    (memory 0 secret)
+    (memory secret 0)
 
     (func (export "load_at_zero") (result s32) (s32.load (i32.const 0)))
     (func (export "store_at_zero") (s32.store (i32.const 0) (s32.const 2)))
@@ -57,7 +57,7 @@
 
 
 (module
-  (memory 0 secret)
+  (memory secret 0)
   (func (export "grow") (param i32) (result i32) (grow_secret_memory (get_local 0)))
 )
 
@@ -69,7 +69,7 @@
 (assert_return (invoke "grow" (i32.const 0x10000)) (i32.const -1))
 
 (module
-  (memory 0 10 secret)
+  (memory secret 0 10)
   (func (export "grow") (param i32) (result i32) (grow_secret_memory (get_local 0)))
 )
 

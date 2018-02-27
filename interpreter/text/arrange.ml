@@ -336,8 +336,8 @@ let table off i tab =
 
 let memory off i mem =
   let {mtype = MemoryType (lim, sec)} = mem.it in
-  let sec_str = if sec = Secret then " secret" else "" in 
-  Node ("memory $" ^ nat (off + i) ^ " " ^ limits nat32 lim ^ sec_str, [])
+  let sec_str = if sec = Secret then "secret " else "" in
+  Node ("memory $" ^ nat (off + i) ^ " " ^ sec_str ^ limits nat32 lim, [])
 
 let segment head dat seg =
   let {index; offset; init} = seg.it in

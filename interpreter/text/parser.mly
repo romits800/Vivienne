@@ -233,7 +233,7 @@ table_sig :
 
 memory_sig :
   | limits { MemoryType ($1, Public) }
-  | limits SECRET{ MemoryType ($1, Secret) }
+  | SECRET limits { MemoryType ($2, Secret) }
 
 limits :
   | NAT { {min = nat32 $1 (ati 1); max = None} }
