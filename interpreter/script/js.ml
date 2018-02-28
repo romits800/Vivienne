@@ -249,7 +249,7 @@ let wrap module_name item_name wrap_action wrap_assertion at =
   let itypes, idesc, action = wrap_action at in
   let locals, assertion = wrap_assertion at in
   let item = Lib.List32.length itypes @@ at in
-  let types = (FuncType ([], []) @@ at) :: itypes in
+  let types = (FuncType (Untrusted, [], []) @@ at) :: itypes in
   let imports = [{module_name; item_name; idesc} @@ at] in
   let edesc = FuncExport item @@ at in
   let exports = [{name = Utf8.decode "run"; edesc} @@ at] in
@@ -270,7 +270,7 @@ let is_js_global_type = function
   | GlobalType (t, mut) -> is_js_value_type t && mut = Immutable
 
 let is_js_func_type = function
-  | FuncType (ins, out) -> List.for_all is_js_value_type (ins @ out)
+  | FuncType (_, ins, out) -> List.for_all is_js_value_type (ins @ out)
 
 
 (* Script conversion *)
@@ -338,7 +338,7 @@ let of_action mods act =
       "[" ^ String.concat ", " (List.map of_literal lits) ^ "])",
     (match lookup mods x_opt name act.at with
     | ExternFuncType ft when not (is_js_func_type ft) ->
-      let FuncType (_, out) = ft in
+      let FuncType (_, _, out) = ft in
       Some (of_wrapper mods x_opt name (invoke ft lits), out)
     | _ -> None
     )

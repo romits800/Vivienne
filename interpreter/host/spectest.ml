@@ -26,7 +26,7 @@ let print_value v =
   Printf.printf "%s : %s\n"
     (Values.string_of_value v) (Types.string_of_value_type (Values.type_of v))
 
-let print (FuncType (_, out)) vs =
+let print (FuncType (_,_, out)) vs =
   List.iter print_value vs;
   flush_all ();
   List.map default_value out
@@ -36,7 +36,7 @@ let lookup name t =
   match Utf8.encode name, t with
   | "print", ExternFuncType t -> ExternFunc (func print t)
   | "print", _ ->
-    let t = FuncType ([], []) in ExternFunc (func print t)
+    let t = FuncType (Untrusted, [], []) in ExternFunc (func print t)
   | "global", ExternGlobalType t -> ExternGlobal (global t)
   | "global", _ -> ExternGlobal (global (GlobalType (I32Type, Immutable)))
   | "table", _ -> ExternTable table

@@ -355,6 +355,8 @@ rule token = parse
   | "s64.classify/i64" { CONVERT s64_classify_i64 }
   | "s64.extend_u/s32" { CONVERT s64_extend_u_s32 }
   | "s64.extend_s/s32" { CONVERT s64_extend_s_s32 }
+  | "i32.declassify" { CONVERT i32_declassify }
+  | "i64.declassify" { CONVERT i64_declassify }
 
   | "current_memory" { CURRENT_MEMORY }
   | "grow_memory" { GROW_MEMORY }
@@ -377,6 +379,7 @@ rule token = parse
   | "offset" { OFFSET }
   | "import" { IMPORT }
   | "export" { EXPORT }
+  | "trusted" { TRUSTED }
 
   | "module" { MODULE }
   | "binary" { BIN }

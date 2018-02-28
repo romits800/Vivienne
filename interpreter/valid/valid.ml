@@ -16,6 +16,7 @@ let require b at s = if not b then error at s
 
 type context =
 {
+  trust : trust;
   types : func_type list;
   funcs : func_type list;
   tables : table_type list;
@@ -27,7 +28,7 @@ type context =
 }
 
 let empty_context =
-  { types = []; funcs = []; tables = []; memories = [];
+  { trust = Untrusted; types = []; funcs = []; tables = []; memories = [];
     globals = []; locals = []; results = []; labels = [] }
 
 let lookup category list x =
@@ -104,7 +105,7 @@ let type_binop = Values.type_of
 let type_testop = Values.type_of
 let type_relop = Values.type_of
 
-let type_cvtop at = function
+let type_cvtop c at = function
   | Values.I32 cvtop ->
     let open I32Op in
     (match cvtop with
@@ -112,6 +113,7 @@ let type_cvtop at = function
     | WrapI64 -> I64Type
     | TruncSF32 | TruncUF32 | ReinterpretFloat -> F32Type
     | TruncSF64 | TruncUF64 -> F64Type
+    | Declassify -> if c.trust = Trusted then S32Type else error at "declassify in untrusted func"
     ), I32Type
   | Values.I64 cvtop ->
     let open I64Op in
@@ -120,6 +122,7 @@ let type_cvtop at = function
     | WrapI64 -> error at "invalid conversion"
     | TruncSF32 | TruncUF32 -> F32Type
     | TruncSF64 | TruncUF64 | ReinterpretFloat -> F64Type
+    | Declassify-> S64Type
     ), I64Type
   | Values.S32 cvtop ->
     let open S32Op in
@@ -233,12 +236,14 @@ let rec check_instr (c : context) (e : instr) (s : infer_stack_type) : op_type =
     c.results -->... []
 
   | Call x ->
-    let FuncType (ins, out) = func c x in
+    let FuncType (tr, ins, out) = func c x in
+    require (tr = Untrusted || c.trust = Trusted) x.at "trusted call in untrusted func";
     ins --> out
 
   | CallIndirect x ->
     ignore (table c (0l @@ e.at));
-    let FuncType (ins, out) = type_ c x in
+    let FuncType (tr, ins, out) = type_ c x in
+    require (tr = Untrusted || c.trust = Trusted) x.at "trusted call in untrusted func";
     (ins @ [I32Type]) --> out
 
   | Drop ->
@@ -315,7 +320,7 @@ let rec check_instr (c : context) (e : instr) (s : infer_stack_type) : op_type =
     [t; t] --> [t]
 
   | Convert cvtop ->
-    let t1, t2 = type_cvtop e.at cvtop in
+    let t1, t2 = type_cvtop c e.at cvtop in
     [t1] --> [t2]
 
 and check_seq (c : context) (es : instr list) : infer_stack_type =
@@ -350,7 +355,7 @@ let check_value_type (t : value_type) at =
   ()
 
 let check_func_type (ft : func_type) at =
-  let FuncType (ins, out) = ft in
+  let FuncType (_, ins, out) = ft in
   List.iter (fun t -> check_value_type t at) ins;
   List.iter (fun t -> check_value_type t at) out;
   check_arity (List.length out) at
@@ -393,8 +398,9 @@ let check_type (t : type_) =
 
 let check_func (c : context) (f : func) =
   let {ftype; locals; body} = f.it in
-  let FuncType (ins, out) = type_ c ftype in
-  let c' = {c with locals = ins @ locals; results = out; labels = [out]} in
+  (* TODO check nested trust *)
+  let FuncType (tr, ins, out) = type_ c ftype in
+  let c' = {c with trust = tr; locals = ins @ locals; results = out; labels = [out]} in
   check_block c' body out f.at
 
 
@@ -441,7 +447,7 @@ let check_global (c : context) (glob : global) =
 
 let check_start (c : context) (start : var option) =
   Lib.Option.app (fun x ->
-    require (func c x = FuncType ([], [])) x.at
+    require (func c x = FuncType (Untrusted, [], [])) x.at
       "start function must not have parameters or results"
   ) start
 

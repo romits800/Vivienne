@@ -313,7 +313,7 @@ let rec step (c : config) : config =
       Exhaustion.error e.at "call stack exhausted"
 
     | Invoke func, vs ->
-      let FuncType (ins, out) = Func.type_of func in
+      let FuncType (_, ins, out) = Func.type_of func in
       let n = List.length ins in
       let args, vs' = take n vs e.at, drop n vs e.at in
       (match func with
@@ -346,7 +346,7 @@ let rec eval (c : config) : value stack =
 
 let invoke (func : func_inst) (vs : value list) : value list =
   let at = match func with Func.AstFunc (_,_, f) -> f.at | _ -> no_region in
-  let FuncType (ins, out) = Func.type_of func in
+  let FuncType (_, ins, out) = Func.type_of func in
   if List.length vs <> List.length ins then
     Crash.error at "wrong number of arguments";
   let c = config empty_module_inst (List.rev vs) [Invoke func @@ at] in

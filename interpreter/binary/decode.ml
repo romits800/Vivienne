@@ -152,12 +152,14 @@ let stack_type s =
   | _ -> [value_type s]
 
 let func_type s =
-  match vs7 s with
-  | -0x20 ->
-    let ins = vec value_type s in
-    let out = vec value_type s in
-    FuncType (ins, out)
-  | _ -> error s (pos s - 1) "invalid function type"
+  let trust = match vs7 s with
+  | -0x20 -> Untrusted
+  | -0x21 -> Trusted
+  | _ -> error s (pos s - 1) "invalid function type" in
+
+  let ins = vec value_type s in
+  let out = vec value_type s in
+  FuncType (trust, ins, out)
 
 let limits vu s =
   let has_max = bool s in
@@ -546,6 +548,8 @@ and secret s =
   | 0xa7 -> s32_wrap_s64
   | 0xac -> s64_extend_s_s32
   | 0xad -> s64_extend_u_s32
+  | 0xc3 -> i32_declassify
+  | 0xc4 -> i64_declassify
   | b -> illegal s pos b
 
 let const s =

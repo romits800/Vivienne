@@ -63,8 +63,11 @@ let decls kind ts = tab kind (atom value_type) ts
 
 let stack_type ts = decls "result" ts
 
-let func_type (FuncType (ins, out)) =
-  Node ("func", decls "param" ins @ decls "result" out)
+let trust tr =
+  if tr = Trusted then " trusted" else ""
+
+let func_type (FuncType (tr, ins, out)) =
+  Node ("func" ^ (trust tr), decls "param" ins @ decls "result" out)
 
 let struct_type = func_type
 
@@ -128,6 +131,7 @@ struct
     | TruncSF64 -> "trunc_s/f64"
     | TruncUF64 -> "trunc_u/f64"
     | ReinterpretFloat -> "reinterpret/f" ^ xx
+    | Declassify -> "declassify"
 end
 
 module SecOp =

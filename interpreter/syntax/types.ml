@@ -3,7 +3,8 @@
 type value_type = I32Type | I64Type | S32Type | S64Type | F32Type | F64Type
 type elem_type = AnyFuncType
 type stack_type = value_type list
-type func_type = FuncType of stack_type * stack_type
+type trust = Trusted | Untrusted
+type func_type = FuncType of trust * stack_type * stack_type
 
 type 'a limits = {min : 'a; max : 'a option}
 type secrecy = Public | Secret
@@ -91,7 +92,7 @@ let string_of_limits {min; max} =
 
 let string_of_secrecy sec =
   match sec with Public -> "" | Secret -> " secret"
-  
+
 let string_of_memory_type = function
   | MemoryType (lim, sec) -> string_of_limits lim ^ string_of_secrecy sec
 
@@ -105,8 +106,11 @@ let string_of_global_type = function
 let string_of_stack_type ts =
   "[" ^ String.concat " " (List.map string_of_value_type ts) ^ "]"
 
-let string_of_func_type (FuncType (ins, out)) =
-  string_of_stack_type ins ^ " -> " ^ string_of_stack_type out
+let string_of_trust t =
+  if t = Trusted then "trusted " else ""
+
+let string_of_func_type (FuncType (tr, ins, out)) =
+  string_of_trust tr ^ string_of_stack_type ins ^ " -> " ^ string_of_stack_type out
 
 let string_of_extern_type = function
   | ExternFuncType ft -> "func " ^ string_of_func_type ft

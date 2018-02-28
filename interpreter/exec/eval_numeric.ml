@@ -186,6 +186,7 @@ struct
     | ReinterpretFloat -> I32 (I32_convert.reinterpret_f32 (F32Op.of_value 1 v))
     | ExtendSI32 -> raise (TypeError (1, v, I32Type))
     | ExtendUI32 -> raise (TypeError (1, v, I32Type))
+    | Declassify -> I32 (S32Op.of_value 1 v)
 end
 
 module I64CvtOp =
@@ -202,6 +203,7 @@ struct
     | TruncUF64 -> I64 (I64_convert.trunc_u_f64 (F64Op.of_value 1 v))
     | ReinterpretFloat -> I64 (I64_convert.reinterpret_f64 (F64Op.of_value 1 v))
     | WrapI64 -> raise (TypeError (1, v, I64Type))
+    | Declassify -> I64 (S64Op.of_value 1 v)
 end
 
 module S32CvtOp =

@@ -109,7 +109,8 @@ let encode m =
           "cannot encode stack type with arity > 1 (yet)"
 
     let func_type = function
-      | FuncType (ins, out) -> vs7 (-0x20); vec value_type ins; vec value_type out
+      | FuncType (Untrusted, ins, out) -> vs7 (-0x20); vec value_type ins; vec value_type out
+      | FuncType (Trusted, ins, out) -> vs7 (-0x21); vec value_type ins; vec value_type out
 
     let limits vu {min; max} sec =
       match (max, sec) with
@@ -448,6 +449,8 @@ let encode m =
       | Convert (S64 S64Op.ClassifyI64) -> op 0xc2
       | CurrentSecretMemory -> op 0xc0; op 0x3f; u8 0x00
       | GrowSecretMemory -> op 0xc0; op 0x40; u8 0x00
+      | Convert (I32 I32Op.Declassify) -> op 0xc3
+      | Convert (I64 I64Op.Declassify) -> op 0xc4
 
     let const c =
       list instr c.it; end_ ()

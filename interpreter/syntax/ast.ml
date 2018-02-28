@@ -30,13 +30,13 @@ struct
   type relop = Eq | Ne | LtS | LtU | GtS | GtU | LeS | LeU | GeS | GeU
   type cvtop = ExtendSI32 | ExtendUI32 | WrapI64
              | TruncSF32 | TruncUF32 | TruncSF64 | TruncUF64
-             | ReinterpretFloat
+             | ReinterpretFloat | Declassify
 end
 
 module SecOp =
 struct
   type unop = Clz | Ctz | Popcnt
-  type binop = Add | Sub | Mul 
+  type binop = Add | Sub | Mul
              | And | Or | Xor | Shl | ShrS | ShrU | Rotl | Rotr
   type testop = Eqz
   type relop = Eq | Ne | LtS | LtU | GtS | GtU | LeS | LeU | GeS | GeU

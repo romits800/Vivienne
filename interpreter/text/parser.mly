@@ -139,7 +139,7 @@ let inline_type (c : context) ft at =
   | None -> anon_type c (ft @@ at) @@ at
 
 let inline_type_explicit (c : context) x ft at =
-  if ft <> FuncType ([], []) && ft <> func_type c x then
+  if ft <> FuncType (Untrusted, [], []) && ft <> func_type c x then
     error at "inline function type does not match explicit type";
   x
 
@@ -160,7 +160,7 @@ let inline_type_explicit (c : context) x ft at =
 %token ASSERT_MALFORMED ASSERT_INVALID ASSERT_SOFT_INVALID ASSERT_UNLINKABLE
 %token ASSERT_RETURN ASSERT_RETURN_CANONICAL_NAN ASSERT_RETURN_ARITHMETIC_NAN ASSERT_TRAP ASSERT_EXHAUSTION
 %token INPUT OUTPUT
-%token SECRET
+%token SECRET TRUSTED
 %token EOF
 
 %token<string> NAT
@@ -217,16 +217,23 @@ func_type :
   | LPAR FUNC func_sig RPAR { $3 }
 
 func_sig :
+  | func_sig_inner
+    { $1 }
+  | TRUSTED func_sig_inner
+    { let FuncType (_, ins, out) = $2 in
+      FuncType (Trusted, ins, out) }
+
+func_sig_inner :
   | /* empty */
-    { FuncType ([], []) }
-  | LPAR RESULT value_type_list RPAR func_sig
-    { let FuncType (ins, out) = $5 in
+    { FuncType (Untrusted, [], []) }
+  | LPAR RESULT value_type_list RPAR func_sig_inner
+    { let FuncType (_, ins, out) = $5 in
       if ins <> [] then error (at ()) "result before parameter";
-      FuncType (ins, $3 @ out) }
-  | LPAR PARAM value_type_list RPAR func_sig
-    { let FuncType (ins, out) = $5 in FuncType ($3 @ ins, out) }
-  | LPAR PARAM bind_var VALUE_TYPE RPAR func_sig  /* Sugar */
-    { let FuncType (ins, out) = $6 in FuncType ($4 :: ins, out) }
+      FuncType (Untrusted, ins, $3 @ out) }
+  | LPAR PARAM value_type_list RPAR func_sig_inner
+    { let FuncType (_, ins, out) = $5 in FuncType (Untrusted, $3 @ ins, out) }
+  | LPAR PARAM bind_var VALUE_TYPE RPAR func_sig_inner  /* Sugar */
+    { let FuncType (_, ins, out) = $6 in FuncType (Untrusted, $4 :: ins, out) }
 
 table_sig :
   | limits elem_type { TableType ($1, $2) }
@@ -337,22 +344,31 @@ call_instr :
       fun c -> let x, es = $2 c in call_indirect x @@ at1, es }
 
 call_instr_sig :
-  | type_use call_instr_params
+  | type_use call_instr_sig_inner
     { let at1 = ati 1 in
       fun c ->
       match $2 c with
-      | FuncType ([], []), es -> $1 c type_, es
+      | FuncType (Untrusted, [], []), es -> $1 c type_, es
       | ft, es -> inline_type_explicit c ($1 c type_) ft at1, es }
-  | call_instr_params
+  | call_instr_sig_inner
     { let at1 = ati 1 in
-      fun c -> let ft, es = $1 c in inline_type c ft at1, es }
+      fun c -> let ft, es = $1 c in
+      inline_type c ft at1, es }
+
+call_instr_sig_inner :
+  | TRUSTED call_instr_params
+    { fun c ->
+      let FuncType(_, ins, out), es = $2 c in
+      FuncType (Trusted, ins, out), es }
+  | call_instr_params
+    { $1 }
 
 call_instr_params :
   | LPAR PARAM value_type_list RPAR call_instr_params
     { fun c ->
-      let FuncType (ts1, ts2), es = $5 c in FuncType ($3 @ ts1, ts2), es }
+      let FuncType (tr, ts1, ts2), es = $5 c in FuncType (tr, $3 @ ts1, ts2), es }
   | call_instr_results
-    { fun c -> let ts, es = $1 c in FuncType ([], ts), es }
+    { fun c -> let ts, es = $1 c in FuncType (Untrusted, [], ts), es }
 
 call_instr_results :
   | LPAR RESULT value_type_list RPAR call_instr_results
@@ -396,22 +412,32 @@ expr1 :  /* Sugar */
       let ts, (es, es1, es2) = $3 c c' in es, if_ ts es1 es2 }
 
 call_expr_sig :
-  | type_use call_expr_params
+  | type_use call_expr_sig_inner
     { let at1 = ati 1 in
       fun c ->
       match $2 c with
-      | FuncType ([], []), es -> $1 c type_, es
-      | ft, es -> inline_type_explicit c ($1 c type_) ft at1, es }
-  | call_expr_params
+      | FuncType (Untrusted, [], []), es -> $1 c type_, es
+      | ft, es ->
+        inline_type_explicit c ($1 c type_) ft at1, es }
+  | call_expr_sig_inner
     { let at1 = ati 1 in
-      fun c -> let ft, es = $1 c in inline_type c ft at1, es }
+      fun c -> let ft, es = $1 c in
+      inline_type c ft at1, es }
+
+call_expr_sig_inner :
+  | TRUSTED call_expr_params
+    { fun c ->
+      let FuncType(_, ins, out), es = $2 c in
+      FuncType (Trusted, ins, out), es }
+  | call_expr_params
+    { $1 }
 
 call_expr_params :
   | LPAR PARAM value_type_list RPAR call_expr_params
     { fun c ->
-      let FuncType (ts1, ts2), es = $5 c in FuncType ($3 @ ts1, ts2), es }
+      let FuncType (tr, ts1, ts2), es = $5 c in FuncType (tr, $3 @ ts1, ts2), es }
   | call_expr_results
-    { fun c -> let ts, es = $1 c in FuncType ([], ts), es }
+    { fun c -> let ts, es = $1 c in FuncType (Untrusted, [], ts), es }
 
 call_expr_results :
   | LPAR RESULT value_type_list RPAR call_expr_results
@@ -478,33 +504,46 @@ func_fields :
       let fns, ims, exs = $2 c x at in fns, ims, $1 (FuncExport x) c :: exs }
 
 func_fields_import :  /* Sugar */
+  | TRUSTED func_fields_import_inner
+    { let FuncType(_, ins, out) = $2 in FuncType (Trusted, ins, out)}
+  | func_fields_import_inner
+    { $1 }
+
+func_fields_import_inner :
   | func_fields_import_result { $1 }
-  | LPAR PARAM value_type_list RPAR func_fields_import
-    { let FuncType (ins, out) = $5 in FuncType ($3 @ ins, out) }
-  | LPAR PARAM bind_var VALUE_TYPE RPAR func_fields_import  /* Sugar */
-    { let FuncType (ins, out) = $6 in FuncType ($4 :: ins, out) }
+  | LPAR PARAM value_type_list RPAR func_fields_import_inner
+    { let FuncType (tr, ins, out) = $5 in FuncType (tr, $3 @ ins, out) }
+  | LPAR PARAM bind_var VALUE_TYPE RPAR func_fields_import_inner  /* Sugar */
+    { let FuncType (tr, ins, out) = $6 in FuncType (tr, $4 :: ins, out) }
 
 func_fields_import_result :  /* Sugar */
-  | /* empty */ { FuncType ([], []) }
+  | /* empty */ { FuncType (Untrusted, [], []) }
   | LPAR RESULT value_type_list RPAR func_fields_import_result
-    { let FuncType (ins, out) = $5 in FuncType (ins, $3 @ out) }
+    { let FuncType (tr, ins, out) = $5 in FuncType (tr, ins, $3 @ out) }
 
 func_fields_body :
+  | TRUSTED func_fields_body_inner
+    { let FuncType(_, ins, out) = fst $2 in
+      FuncType (Trusted, ins, out), snd $2 }
+  | func_fields_body_inner
+    { $1 }
+
+func_fields_body_inner :
   | func_result_body { $1 }
-  | LPAR PARAM value_type_list RPAR func_fields_body
-    { let FuncType (ins, out) = fst $5 in
-      FuncType ($3 @ ins, out),
+  | LPAR PARAM value_type_list RPAR func_fields_body_inner
+    { let FuncType (tr, ins, out) = fst $5 in
+      FuncType (tr, $3 @ ins, out),
       fun c -> ignore (anon_locals c $3); snd $5 c }
-  | LPAR PARAM bind_var VALUE_TYPE RPAR func_fields_body  /* Sugar */
-    { let FuncType (ins, out) = fst $6 in
-      FuncType ($4 :: ins, out),
+  | LPAR PARAM bind_var VALUE_TYPE RPAR func_fields_body_inner  /* Sugar */
+    { let FuncType (tr,ins, out) = fst $6 in
+      FuncType (tr, $4 :: ins, out),
       fun c -> ignore (bind_local c $3); snd $6 c }
 
 func_result_body :
-  | func_body { FuncType ([], []), $1 }
+  | func_body { FuncType (Untrusted, [], []), $1 }
   | LPAR RESULT value_type_list RPAR func_result_body
-    { let FuncType (ins, out) = fst $5 in
-      FuncType (ins, $3 @ out), snd $5 }
+    { let FuncType (tr, ins, out) = fst $5 in
+      FuncType (tr, ins, $3 @ out), snd $5 }
 
 func_body :
   | instr_list
