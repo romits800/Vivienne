@@ -1,5 +1,6 @@
-# ct-wasm
+<img src="./logo.svg" width="200"/>
 
+------------
 This repository, forked from the [WebAssembly
 Spec](https://github.com/WebAssembly/spec), contains additions to the
 reference interpreter that allow for the encoding of constant-time
@@ -54,3 +55,5 @@ Trust is built into the type of a function like so:
 (func trusted (param s32) (result i32)
     (s32.declassify (get_local 0)))
 ```
+
+[logo]: ./logo.png
