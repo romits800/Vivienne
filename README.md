@@ -1,4 +1,4 @@
-<img src="./logo.svg" width="200"/>
+<img src="./logo.png"/>
 
 ------------
 This repository, forked from the [WebAssembly
@@ -55,5 +55,3 @@ Trust is built into the type of a function like so:
 (func trusted (param s32) (result i32)
     (s32.declassify (get_local 0)))
 ```
-
-[logo]: ./logo.png
