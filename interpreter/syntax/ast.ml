@@ -103,8 +103,6 @@ and instr' =
   | Store of storeop                  (* write memory at address *)
   | CurrentMemory                     (* size of linear memory *)
   | GrowMemory                        (* grow linear memory *)
-  | CurrentSecretMemory                     (* size of linear memory *)
-  | GrowSecretMemory                        (* grow linear memory *)
   | Const of literal                  (* constant *)
   | Test of testop                    (* numeric test *)
   | Compare of relop                  (* numeric comparison *)

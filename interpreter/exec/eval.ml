@@ -77,9 +77,7 @@ let lookup category list x =
 let type_ (inst : module_inst) x = lookup "type" inst.types x
 let func (inst : module_inst) x = lookup "function" inst.funcs x
 let table (inst : module_inst) x = lookup "table" inst.tables x
-let all_memory (inst : module_inst) x = lookup "memory" inst.memories x
-let memory (inst : module_inst) x = lookup "memory" (List.filter Memory.public inst.memories) x
-let secret_memory (inst : module_inst) x = lookup "secret_memory" (List.filter Memory.secret inst.memories) x
+let memory (inst : module_inst) x = lookup "memory" inst.memories x
 let global (inst : module_inst) x = lookup "global" inst.globals x
 let local (frame : frame) x = lookup "local" frame.locals x
 
@@ -195,8 +193,7 @@ let rec step (c : config) : config =
            | Global.Type -> Crash.error e.at "type mismatch at global write")
 
       | Load {offset; ty; sz; _}, I32 i :: vs' ->
-        let get_mem = if (ty = S32Type || ty = S64Type) then secret_memory else memory in
-        let mem = get_mem frame.inst (0l @@ e.at) in
+        let mem = memory frame.inst (0l @@ e.at) in
         let addr = I64_convert.extend_u_i32 i in
         (try
           let v =
@@ -207,8 +204,7 @@ let rec step (c : config) : config =
         with exn -> vs', [Trapped (memory_error e.at exn) @@ e.at])
 
       | Store {offset; ty; sz; _}, v :: I32 i :: vs' ->
-        let get_mem = if (ty = S32Type || ty = S64Type) then secret_memory else memory in
-        let mem = get_mem frame.inst (0l @@ e.at) in
+        let mem = memory frame.inst (0l @@ e.at) in
         let addr = I64_convert.extend_u_i32 i in
         (try
           (match sz with
@@ -217,18 +213,6 @@ let rec step (c : config) : config =
           );
           vs', []
         with exn -> vs', [Trapped (memory_error e.at exn) @@ e.at]);
-
-      | CurrentSecretMemory, vs ->
-        let mem = secret_memory frame.inst (0l @@ e.at) in
-        I32 (Memory.size mem) :: vs, []
-
-      | GrowSecretMemory, I32 delta :: vs' ->
-        let mem = secret_memory frame.inst (0l @@ e.at) in
-        let old_size = Memory.size mem in
-        let result =
-          try Memory.grow mem delta; old_size
-          with Memory.SizeOverflow | Memory.SizeLimit | Memory.OutOfMemory -> -1l
-        in I32 result :: vs', []
 
       | CurrentMemory, vs ->
         let mem = memory frame.inst (0l @@ e.at) in
@@ -412,7 +396,7 @@ let init_table (inst : module_inst) (seg : table_segment) =
 
 let init_memory (inst : module_inst) (seg : memory_segment) =
   let {index; offset = const; init} = seg.it in
-  let mem = all_memory inst index in
+  let mem = memory inst index in
   let offset' = i32 (eval_const inst const) const.at in
   let offset = I64_convert.extend_u_i32 offset' in
   let end_ = Int64.(add offset (of_int (String.length init))) in

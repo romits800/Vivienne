@@ -35,15 +35,10 @@ let lookup category list x =
   try Lib.List32.nth list x.it with Failure _ ->
     error x.at ("unknown " ^ category ^ " " ^ Int32.to_string x.it)
 
-let public (MemoryType (_,s)) = s = Public
-let secret (MemoryType (_,s)) = s = Secret
-
 let type_ (c : context) x = lookup "type" c.types x
 let func (c : context) x = lookup "function" c.funcs x
 let table (c : context) x = lookup "table" c.tables x
-let all_memory (c : context) x = lookup "memory" c.memories x
-let memory (c : context) x = lookup "memory" (List.filter public c.memories) x
-let secret_memory (c : context) x = lookup "secret_memory" (List.filter secret c.memories) x
+let memory (c : context) x = lookup "memory" c.memories x
 let global (c : context) x = lookup "global" c.globals x
 let local (c : context) x = lookup "local" c.locals x
 let label (c : context) x = lookup "label" c.labels x
@@ -159,9 +154,14 @@ let type_cvtop c at = function
 (* Expressions *)
 
 let check_memop (c : context) (memop : 'a memop) get_sz at =
-  if memop.ty = S32Type || memop.ty = S64Type
-  then ignore (secret_memory c (0l @@ at))
-  else ignore (memory c (0l @@ at));
+  let MemoryType (_, sec) = (memory c (0l @@ at)) in
+  let is_sec_mem = sec = Secret in
+  let is_sec_op = memop.ty = S32Type || memop.ty = S64Type in
+
+  if is_sec_op
+  then require is_sec_mem at "cannot perform secret memop on public memory"
+  else require (not is_sec_mem) at "cannot perform public memop on secret memory";
+
   let size =
     match get_sz memop.sz with
     | None -> size memop.ty
@@ -285,14 +285,6 @@ let rec check_instr (c : context) (e : instr) (s : infer_stack_type) : op_type =
 
   | GrowMemory ->
     ignore (memory c (0l @@ e.at));
-    [I32Type] --> [I32Type]
-
-  | CurrentSecretMemory ->
-    ignore (secret_memory c (0l @@ e.at));
-    [] --> [I32Type]
-
-  | GrowSecretMemory ->
-    ignore (secret_memory c (0l @@ e.at));
     [I32Type] --> [I32Type]
 
   | Const v ->
@@ -435,7 +427,7 @@ let check_elem (c : context) (seg : table_segment) =
 let check_data (c : context) (seg : memory_segment) =
   let {index; offset; init} = seg.it in
   check_const c offset I32Type;
-  ignore (all_memory c index)
+  ignore (memory c index)
 
 let check_global (c : context) (glob : global) =
   let {gtype; value} = glob.it in

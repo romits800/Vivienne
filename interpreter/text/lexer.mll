@@ -361,9 +361,6 @@ rule token = parse
   | "current_memory" { CURRENT_MEMORY }
   | "grow_memory" { GROW_MEMORY }
 
-  | "current_secret_memory" { CURRENT_SECRET_MEMORY }
-  | "grow_secret_memory" { GROW_SECRET_MEMORY }
-
   | "type" { TYPE }
   | "func" { FUNC }
   | "start" { START }
