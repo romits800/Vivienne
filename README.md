@@ -22,23 +22,20 @@ presented will ensure the constant timedness of all programs over secrets.
 These types come with all integer operations except `div` and `rem` which are
 notoriously non-CT and can leak information through partiality.
 
-### New Memory
-Each module is now allowed one `secret` memory alongside its 0 or 1 public memories.
+### New Memory Type
+Memories can be either secret or public.
+
 They are declared in text as:
 `(memory secret 0 10)`
 
 Secret memories accept and produce secret values but require public indices for stores and loads.
 
-To prepopulate a secret memory, use data segments as before but it is now important to utilize the
-memory index option on data:
-
 ```lisp
 (module
-    (memory $sec secret 1)
-    (memory $pub 1)
+    (memory secret 1)
 
-    (data $sec "Secret values")
-    (data $pub "Public values"))
+    (func $store_example
+        (s32.store (i32.const 0) (s32.const 1))))
 ```
 
 ### Declassification
