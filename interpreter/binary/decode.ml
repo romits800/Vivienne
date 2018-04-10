@@ -137,8 +137,9 @@ let value_type s =
   | -0x02 -> I64Type
   | -0x03 -> F32Type
   | -0x04 -> F64Type
-  | -0x05 -> S32Type
-  | -0x06 -> S64Type
+  (* Reserved space for SIMD opcode *)
+  | -0x06 -> S32Type
+  | -0x07 -> S64Type
   | _ -> error s (pos s - 1) "invalid value type"
 
 let elem_type s =
@@ -442,7 +443,7 @@ let rec instr s =
   | 0xbd -> i64_reinterpret_f64
   | 0xbe -> f32_reinterpret_i32
   | 0xbf -> f64_reinterpret_i64
-  | 0xc0 -> secret s
+  | 0xfb -> secret s
   | 0xc1 -> s32_classify_i32
   | 0xc2 -> s64_classify_i64
   | 0xc3 -> i32_declassify

@@ -95,8 +95,9 @@ let encode m =
       | I64Type -> vs7 (-0x02)
       | F32Type -> vs7 (-0x03)
       | F64Type -> vs7 (-0x04)
-      | S32Type -> vs7 (-0x05)
-      | S64Type -> vs7 (-0x06)
+      (* Reserved space for SIMD opcode *)
+      | S32Type -> vs7 (-0x06)
+      | S64Type -> vs7 (-0x07)
 
     let elem_type = function
       | AnyFuncType -> vs7 (-0x10)
@@ -371,76 +372,76 @@ let encode m =
       | Convert (F64 F64Op.ReinterpretInt) -> op 0xbf
 
 
-      | Load ({ty = S32Type; sz = _; _} as mop) -> op 0xc0; instr' (Load {mop with ty = I32Type})
-      | Load ({ty = S64Type; sz = _; _} as mop) ->  op 0xc0; instr' (Load {mop with ty = I64Type})
-      | Store ({ty = S32Type; sz = _; _} as mop) -> op 0xc0; instr' (Store {mop with ty = I32Type})
-      | Store ({ty = S64Type; sz = _; _} as mop) -> op 0xc0; instr' (Store {mop with ty = I64Type})
-      | Const {it = S32 c; _} -> op 0xc0; op 0x41; vs32 c
-      | Const {it = S64 c; _} -> op 0xc0; op 0x42; vs64 c
+      | Load ({ty = S32Type; sz = _; _} as mop) -> op 0xfb; instr' (Load {mop with ty = I32Type})
+      | Load ({ty = S64Type; sz = _; _} as mop) ->  op 0xfb; instr' (Load {mop with ty = I64Type})
+      | Store ({ty = S32Type; sz = _; _} as mop) -> op 0xfb; instr' (Store {mop with ty = I32Type})
+      | Store ({ty = S64Type; sz = _; _} as mop) -> op 0xfb; instr' (Store {mop with ty = I64Type})
+      | Const {it = S32 c; _} -> op 0xfb; op 0x41; vs32 c
+      | Const {it = S64 c; _} -> op 0xfb; op 0x42; vs64 c
 
-      | Test (S32 S32Op.Eqz) -> op 0xc0; op 0x45
-      | Test (S64 S64Op.Eqz) -> op 0xc0; op 0x50
+      | Test (S32 S32Op.Eqz) -> op 0xfb; op 0x45
+      | Test (S64 S64Op.Eqz) -> op 0xfb; op 0x50
 
-      | Compare (S32 S32Op.Eq) -> op 0xc0; op 0x46
-      | Compare (S32 S32Op.Ne) -> op 0xc0; op 0x47
-      | Compare (S32 S32Op.LtS) -> op 0xc0; op 0x48
-      | Compare (S32 S32Op.LtU) -> op 0xc0; op 0x49
-      | Compare (S32 S32Op.GtS) -> op 0xc0; op 0x4a
-      | Compare (S32 S32Op.GtU) -> op 0xc0; op 0x4b
-      | Compare (S32 S32Op.LeS) -> op 0xc0; op 0x4c
-      | Compare (S32 S32Op.LeU) -> op 0xc0; op 0x4d
-      | Compare (S32 S32Op.GeS) -> op 0xc0; op 0x4e
-      | Compare (S32 S32Op.GeU) -> op 0xc0; op 0x4f
+      | Compare (S32 S32Op.Eq) -> op 0xfb; op 0x46
+      | Compare (S32 S32Op.Ne) -> op 0xfb; op 0x47
+      | Compare (S32 S32Op.LtS) -> op 0xfb; op 0x48
+      | Compare (S32 S32Op.LtU) -> op 0xfb; op 0x49
+      | Compare (S32 S32Op.GtS) -> op 0xfb; op 0x4a
+      | Compare (S32 S32Op.GtU) -> op 0xfb; op 0x4b
+      | Compare (S32 S32Op.LeS) -> op 0xfb; op 0x4c
+      | Compare (S32 S32Op.LeU) -> op 0xfb; op 0x4d
+      | Compare (S32 S32Op.GeS) -> op 0xfb; op 0x4e
+      | Compare (S32 S32Op.GeU) -> op 0xfb; op 0x4f
 
-      | Compare (S64 S64Op.Eq) -> op 0xc0; op 0x51
-      | Compare (S64 S64Op.Ne) -> op 0xc0; op 0x52
-      | Compare (S64 S64Op.LtS) -> op 0xc0; op 0x53
-      | Compare (S64 S64Op.LtU) -> op 0xc0; op 0x54
-      | Compare (S64 S64Op.GtS) -> op 0xc0; op 0x55
-      | Compare (S64 S64Op.GtU) -> op 0xc0; op 0x56
-      | Compare (S64 S64Op.LeS) -> op 0xc0; op 0x57
-      | Compare (S64 S64Op.LeU) -> op 0xc0; op 0x58
-      | Compare (S64 S64Op.GeS) -> op 0xc0; op 0x59
-      | Compare (S64 S64Op.GeU) -> op 0xc0; op 0x5a
+      | Compare (S64 S64Op.Eq) -> op 0xfb; op 0x51
+      | Compare (S64 S64Op.Ne) -> op 0xfb; op 0x52
+      | Compare (S64 S64Op.LtS) -> op 0xfb; op 0x53
+      | Compare (S64 S64Op.LtU) -> op 0xfb; op 0x54
+      | Compare (S64 S64Op.GtS) -> op 0xfb; op 0x55
+      | Compare (S64 S64Op.GtU) -> op 0xfb; op 0x56
+      | Compare (S64 S64Op.LeS) -> op 0xfb; op 0x57
+      | Compare (S64 S64Op.LeU) -> op 0xfb; op 0x58
+      | Compare (S64 S64Op.GeS) -> op 0xfb; op 0x59
+      | Compare (S64 S64Op.GeU) -> op 0xfb; op 0x5a
 
-      | Unary (S32 S32Op.Clz) -> op 0xc0; op 0x67
-      | Unary (S32 S32Op.Ctz) -> op 0xc0; op 0x68
-      | Unary (S32 S32Op.Popcnt) -> op 0xc0; op 0x69
+      | Unary (S32 S32Op.Clz) -> op 0xfb; op 0x67
+      | Unary (S32 S32Op.Ctz) -> op 0xfb; op 0x68
+      | Unary (S32 S32Op.Popcnt) -> op 0xfb; op 0x69
 
-      | Unary (S64 S64Op.Clz) -> op 0xc0; op 0x79
-      | Unary (S64 S64Op.Ctz) -> op 0xc0; op 0x7a
-      | Unary (S64 S64Op.Popcnt) -> op 0xc0; op 0x7b
+      | Unary (S64 S64Op.Clz) -> op 0xfb; op 0x79
+      | Unary (S64 S64Op.Ctz) -> op 0xfb; op 0x7a
+      | Unary (S64 S64Op.Popcnt) -> op 0xfb; op 0x7b
 
-      | Binary (S32 S32Op.Add) -> op 0xc0; op 0x6a
-      | Binary (S32 S32Op.Sub) -> op 0xc0; op 0x6b
-      | Binary (S32 S32Op.Mul) -> op 0xc0; op 0x6c
-      | Binary (S32 S32Op.And) -> op 0xc0; op 0x71
-      | Binary (S32 S32Op.Or) -> op 0xc0; op 0x72
-      | Binary (S32 S32Op.Xor) -> op 0xc0; op 0x73
-      | Binary (S32 S32Op.Shl) -> op 0xc0; op 0x74
-      | Binary (S32 S32Op.ShrS) -> op 0xc0; op 0x75
-      | Binary (S32 S32Op.ShrU) -> op 0xc0; op 0x76
-      | Binary (S32 S32Op.Rotl) -> op 0xc0; op 0x77
-      | Binary (S32 S32Op.Rotr) -> op 0xc0; op 0x78
+      | Binary (S32 S32Op.Add) -> op 0xfb; op 0x6a
+      | Binary (S32 S32Op.Sub) -> op 0xfb; op 0x6b
+      | Binary (S32 S32Op.Mul) -> op 0xfb; op 0x6c
+      | Binary (S32 S32Op.And) -> op 0xfb; op 0x71
+      | Binary (S32 S32Op.Or) -> op 0xfb; op 0x72
+      | Binary (S32 S32Op.Xor) -> op 0xfb; op 0x73
+      | Binary (S32 S32Op.Shl) -> op 0xfb; op 0x74
+      | Binary (S32 S32Op.ShrS) -> op 0xfb; op 0x75
+      | Binary (S32 S32Op.ShrU) -> op 0xfb; op 0x76
+      | Binary (S32 S32Op.Rotl) -> op 0xfb; op 0x77
+      | Binary (S32 S32Op.Rotr) -> op 0xfb; op 0x78
 
-      | Binary (S64 S64Op.Add) -> op 0xc0; op 0x7c
-      | Binary (S64 S64Op.Sub) -> op 0xc0; op 0x7d
-      | Binary (S64 S64Op.Mul) -> op 0xc0; op 0x7e
-      | Binary (S64 S64Op.And) -> op 0xc0; op 0x83
-      | Binary (S64 S64Op.Or) -> op 0xc0; op 0x84
-      | Binary (S64 S64Op.Xor) -> op 0xc0; op 0x85
-      | Binary (S64 S64Op.Shl) -> op 0xc0; op 0x86
-      | Binary (S64 S64Op.ShrS) -> op 0xc0; op 0x87
-      | Binary (S64 S64Op.ShrU) -> op 0xc0; op 0x88
-      | Binary (S64 S64Op.Rotl) -> op 0xc0; op 0x89
-      | Binary (S64 S64Op.Rotr) -> op 0xc0; op 0x8a
+      | Binary (S64 S64Op.Add) -> op 0xfb; op 0x7c
+      | Binary (S64 S64Op.Sub) -> op 0xfb; op 0x7d
+      | Binary (S64 S64Op.Mul) -> op 0xfb; op 0x7e
+      | Binary (S64 S64Op.And) -> op 0xfb; op 0x83
+      | Binary (S64 S64Op.Or) -> op 0xfb; op 0x84
+      | Binary (S64 S64Op.Xor) -> op 0xfb; op 0x85
+      | Binary (S64 S64Op.Shl) -> op 0xfb; op 0x86
+      | Binary (S64 S64Op.ShrS) -> op 0xfb; op 0x87
+      | Binary (S64 S64Op.ShrU) -> op 0xfb; op 0x88
+      | Binary (S64 S64Op.Rotl) -> op 0xfb; op 0x89
+      | Binary (S64 S64Op.Rotr) -> op 0xfb; op 0x8a
 
       | Convert (S32 S32Op.ExtendSS32) -> assert false
       | Convert (S32 S32Op.ExtendUS32) -> assert false
-      | Convert (S32 S32Op.WrapS64) -> op 0xc0; op 0xa7
+      | Convert (S32 S32Op.WrapS64) -> op 0xfb; op 0xa7
 
-      | Convert (S64 S64Op.ExtendSS32) -> op 0xc0; op 0xac
-      | Convert (S64 S64Op.ExtendUS32) -> op 0xc0; op 0xad
+      | Convert (S64 S64Op.ExtendSS32) -> op 0xfb; op 0xac
+      | Convert (S64 S64Op.ExtendUS32) -> op 0xfb; op 0xad
       | Convert (S64 S64Op.WrapS64) -> assert false
 
       | Convert (S32 S32Op.ClassifyI32) -> op 0xc1 
