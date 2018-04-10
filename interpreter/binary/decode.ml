@@ -444,10 +444,6 @@ let rec instr s =
   | 0xbe -> f32_reinterpret_i32
   | 0xbf -> f64_reinterpret_i64
   | 0xfb -> secret s
-  | 0xc1 -> s32_classify_i32
-  | 0xc2 -> s64_classify_i64
-  | 0xc3 -> i32_declassify
-  | 0xc4 -> i64_declassify
 
   | b -> illegal s pos b
 
@@ -544,6 +540,10 @@ and secret s =
   | 0xa7 -> s32_wrap_s64
   | 0xac -> s64_extend_s_s32
   | 0xad -> s64_extend_u_s32
+  | 0xc0 -> s32_classify_i32
+  | 0xc1 -> s64_classify_i64
+  | 0xc2 -> i32_declassify
+  | 0xc3 -> i64_declassify
   | b -> illegal s pos b
 
 let const s =
