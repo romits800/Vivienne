@@ -208,6 +208,7 @@ rule token = parse
   | "then" { THEN }
   | "else" { ELSE }
   | "select" { SELECT }
+  | "secret_select" { SECRET_SELECT }
   | "call" { CALL }
   | "call_indirect" { CALL_INDIRECT }
 

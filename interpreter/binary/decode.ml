@@ -458,7 +458,7 @@ and instr_block' s es =
 and secret s =
   let pos = pos s in
   match op s with
-
+  | 0x1b -> secret_select
   | 0x28 -> let a, o = memop s in s32_load a o
   | 0x29 -> let a, o = memop s in s64_load a o
   | 0x2c -> let a, o = memop s in s32_load8_s a o

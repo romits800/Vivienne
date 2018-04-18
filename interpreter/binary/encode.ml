@@ -168,6 +168,7 @@ let encode m =
 
       | Drop -> op 0x1a
       | Select -> op 0x1b
+      | SecretSelect -> op 0xfb; op 0x1b
 
       | GetLocal x -> op 0x20; var x
       | SetLocal x -> op 0x21; var x

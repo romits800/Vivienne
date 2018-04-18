@@ -288,6 +288,7 @@ let rec instr e =
     | CallIndirect x -> "call_indirect", [Node ("type " ^ var x, [])]
     | Drop -> "drop", []
     | Select -> "select", []
+    | SecretSelect -> "secret_select", []
     | GetLocal x -> "get_local " ^ var x, []
     | SetLocal x -> "set_local " ^ var x, []
     | TeeLocal x -> "tee_local " ^ var x, []

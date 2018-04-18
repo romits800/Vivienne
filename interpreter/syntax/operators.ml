@@ -23,6 +23,7 @@ let br_table xs x = BrTable (xs, x)
 let return = Return
 let if_ ts es1 es2 = If (ts, es1, es2)
 let select = Select
+let secret_select = SecretSelect
 
 let call x = Call x
 let call_indirect x = CallIndirect x

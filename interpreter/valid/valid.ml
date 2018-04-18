@@ -253,6 +253,11 @@ let rec check_instr (c : context) (e : instr) (s : infer_stack_type) : op_type =
     let t = peek 1 s in
     [t; t; Some I32Type] -~> [t]
 
+  | SecretSelect ->
+    let t = peek 1 s in
+    require(t = Some S32Type || t = Some S64Type) e.at "non-secret operands to secret_select";
+    [t; t; Some S32Type] -~> [t]
+
   | GetLocal x ->
     [] --> [local c x]
 

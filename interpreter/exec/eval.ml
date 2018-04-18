@@ -173,6 +173,12 @@ let rec step (c : config) : config =
       | Select, I32 i :: v2 :: v1 :: vs' ->
         v1 :: vs', []
 
+      | SecretSelect, S32 0l :: v2 :: v1 :: vs' ->
+        v2 :: vs', []
+
+      | SecretSelect, S32 i :: v2 :: v1 :: vs' ->
+        v1 :: vs', []
+
       | GetLocal x, vs ->
         !(local frame x) :: vs, []
 

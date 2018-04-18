@@ -94,6 +94,7 @@ and instr' =
   | CallIndirect of var               (* call function through table *)
   | Drop                              (* forget a value *)
   | Select                            (* branchless conditional *)
+  | SecretSelect                      (* branchless secret conditional *)
   | GetLocal of var                   (* read local variable *)
   | SetLocal of var                   (* write local variable *)
   | TeeLocal of var                   (* write local variable and keep value *)
