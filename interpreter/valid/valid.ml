@@ -123,14 +123,14 @@ let type_cvtop c at = function
     let open S32Op in
     (match cvtop with
     | WrapS64 -> S64Type
-    | ClassifyI32 -> I32Type
-    | ClassifyI64 | ExtendUS32 | ExtendSS32 -> error at "invalid conversion"
+    | Classify -> I32Type
+    | ExtendUS32 | ExtendSS32 -> error at "invalid conversion"
     ), S32Type
   | Values.S64 cvtop ->
     let open S64Op in
     (match cvtop with
-    | WrapS64 | ClassifyI32 -> error at "invalid conversion"
-    | ClassifyI64 -> I64Type
+    | WrapS64 -> error at "invalid conversion"
+    | Classify -> I64Type
     | ExtendUS32 | ExtendSS32 -> S32Type
     ), S64Type
   | Values.F32 cvtop ->

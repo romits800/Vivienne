@@ -40,7 +40,7 @@ struct
              | And | Or | Xor | Shl | ShrS | ShrU | Rotl | Rotr
   type testop = Eqz
   type relop = Eq | Ne | LtS | LtU | GtS | GtU | LeS | LeU | GeS | GeU
-  type cvtop = WrapS64 | ClassifyI32 | ClassifyI64 | ExtendUS32 | ExtendSS32
+  type cvtop = WrapS64 | Classify | ExtendUS32 | ExtendSS32
 end
 
 module FloatOp =

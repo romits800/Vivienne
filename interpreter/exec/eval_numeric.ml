@@ -212,8 +212,8 @@ struct
 
   let cvtop op v =
     match op with
-    | ClassifyI32 -> S32 (I32Op.of_value 1 v)
-    | ClassifyI64 | ExtendSS32 | ExtendUS32 -> raise (TypeError (1, v, S32Type))
+    | Classify -> S32 (I32Op.of_value 1 v)
+    | ExtendSS32 | ExtendUS32 -> raise (TypeError (1, v, S32Type))
     | WrapS64 -> S32 (I32_convert.wrap_i64 (S64Op.of_value 1 v))
 end
 
@@ -223,10 +223,10 @@ struct
 
   let cvtop op v =
     match op with
-    | ClassifyI64 -> S64 (I64Op.of_value 1 v)
+    | Classify -> S64 (I64Op.of_value 1 v)
     | ExtendSS32 -> S64 (I64_convert.extend_s_i32 (S32Op.of_value 1 v))
     | ExtendUS32 -> S64 (I64_convert.extend_u_i32 (S32Op.of_value 1 v))
-    | WrapS64 | ClassifyI32 -> raise (TypeError (1, v, S64Type))
+    | WrapS64 -> raise (TypeError (1, v, S64Type))
 end
 
 module F32CvtOp =

@@ -173,8 +173,7 @@ struct
 
   let cvtop xx = function
     | WrapS64 -> "wrap/s64"
-    | ClassifyI32 -> "classify/i32"
-    | ClassifyI64 -> "classify/i64"
+    | Classify -> "classify"
     | ExtendUS32 -> "extend_u/s32"
     | ExtendSS32 -> "extend_s/s32"
 end

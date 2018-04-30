@@ -352,8 +352,8 @@ rule token = parse
   | "i64.reinterpret/f64" { CONVERT i64_reinterpret_f64 }
 
   | "s32.wrap/s64" { CONVERT s32_wrap_s64 }
-  | "s32.classify/i32" { CONVERT s32_classify_i32 }
-  | "s64.classify/i64" { CONVERT s64_classify_i64 }
+  | "s32.classify" { CONVERT s32_classify }
+  | "s64.classify" { CONVERT s64_classify }
   | "s64.extend_u/s32" { CONVERT s64_extend_u_s32 }
   | "s64.extend_s/s32" { CONVERT s64_extend_s_s32 }
   | "i32.declassify" { CONVERT i32_declassify }

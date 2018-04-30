@@ -540,8 +540,8 @@ and secret s =
   | 0xa7 -> s32_wrap_s64
   | 0xac -> s64_extend_s_s32
   | 0xad -> s64_extend_u_s32
-  | 0xc0 -> s32_classify_i32
-  | 0xc1 -> s64_classify_i64
+  | 0xc0 -> s32_classify
+  | 0xc1 -> s64_classify
   | 0xc2 -> i32_declassify
   | 0xc3 -> i64_declassify
   | b -> illegal s pos b

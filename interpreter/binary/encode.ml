@@ -445,10 +445,8 @@ let encode m =
       | Convert (S64 S64Op.ExtendUS32) -> op 0xfb; op 0xad
       | Convert (S64 S64Op.WrapS64) -> assert false
 
-      | Convert (S32 S32Op.ClassifyI32) -> op 0xfb; op 0xc0 
-      | Convert (S32 S32Op.ClassifyI64) -> assert false
-      | Convert (S64 S64Op.ClassifyI32) -> assert false
-      | Convert (S64 S64Op.ClassifyI64) -> op 0xfb; op 0xc1
+      | Convert (S32 S32Op.Classify) -> op 0xfb; op 0xc0 
+      | Convert (S64 S64Op.Classify) -> op 0xfb; op 0xc1
       | Convert (I32 I32Op.Declassify) -> op 0xfb; op 0xc2
       | Convert (I64 I64Op.Declassify) -> op 0xfb; op 0xc3
 

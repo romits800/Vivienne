@@ -24,11 +24,11 @@
   (func (export "f64.reinterpret_i64") (param $x i64) (result f64) (f64.reinterpret/i64 (get_local $x)))
   (func (export "i32.reinterpret_f32") (param $x f32) (result i32) (i32.reinterpret/f32 (get_local $x)))
   (func (export "i64.reinterpret_f64") (param $x f64) (result i64) (i64.reinterpret/f64 (get_local $x)))
-  (func (export "s64.classify_i64") (param $x i64) (result s64) (s64.classify/i64 (get_local $x)))
+  (func (export "s64.classify") (param $x i64) (result s64) (s64.classify (get_local $x)))
   (func (export "s64.extend_u_s32") (param $x s32) (result s64) (s64.extend_u/s32 (get_local $x)))
   (func (export "s64.extend_s_s32") (param $x s32) (result s64) (s64.extend_s/s32 (get_local $x)))
   (func (export "s32.wrap_s64") (param $x s64) (result s32) (s32.wrap/s64 (get_local $x)))
-  (func (export "s32.classify_i32") (param $x i32) (result s32) (s32.classify/i32 (get_local $x)))
+  (func (export "s32.classify") (param $x i32) (result s32) (s32.classify (get_local $x)))
 )
 
 (assert_return (invoke "i64.extend_s_i32" (i32.const 0)) (i64.const 0))
@@ -479,8 +479,8 @@
 (assert_return (invoke "s64.extend_u_s32" (s32.const 0x7fffffff)) (s64.const 0x000000007fffffff))
 (assert_return (invoke "s64.extend_u_s32" (s32.const 0x80000000)) (s64.const 0x0000000080000000))
 
-(assert_return (invoke "s64.classify_i64" (i64.const 1)) (s64.const 1))
-(assert_return (invoke "s64.classify_i64" (i64.const 0)) (s64.const 0))
+(assert_return (invoke "s64.classify" (i64.const 1)) (s64.const 1))
+(assert_return (invoke "s64.classify" (i64.const 0)) (s64.const 0))
 
 (assert_return (invoke "s32.wrap_s64" (s64.const -1)) (s32.const -1))
 (assert_return (invoke "s32.wrap_s64" (s64.const -100000)) (s32.const -100000))
@@ -495,5 +495,5 @@
 (assert_return (invoke "s32.wrap_s64" (s64.const 0x0000000100000000)) (s32.const 0x00000000))
 (assert_return (invoke "s32.wrap_s64" (s64.const 0x0000000100000001)) (s32.const 0x00000001))
 
-(assert_return (invoke "s32.classify_i32" (i32.const 1)) (s32.const 1))
-(assert_return (invoke "s32.classify_i32" (i32.const 0)) (s32.const 0))
+(assert_return (invoke "s32.classify" (i32.const 1)) (s32.const 1))
+(assert_return (invoke "s32.classify" (i32.const 0)) (s32.const 0))
