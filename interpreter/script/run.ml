@@ -299,7 +299,16 @@ let run_action act =
     let inst = lookup_instance x_opt act.at in
     (match Instance.export inst name with
     | Some (Instance.ExternFunc f) ->
-      Eval.invoke f (List.map (fun v -> v.it) vs)
+      let vals = (List.map (fun v -> v.it) vs) in
+      let val_types = List.map Values.type_of vals in
+      let func_type = Func.type_of f in
+      let Types.FuncType(_, req_types, _) = func_type in
+      if val_types <> req_types then begin
+        print_string ("Function Type:  " ^ Types.string_of_func_type func_type ^ "\n");
+        print_string ("Argument Types: " ^ Types.string_of_stack_type val_types ^ "\n");
+        Assert.error act.at "attempted to invoke function with incorrect argument types";
+      end;
+      Eval.invoke f vals
     | Some _ -> Assert.error act.at "export is not a function"
     | None -> Assert.error act.at "undefined export"
     )
@@ -464,6 +473,26 @@ let rec run_command cmd =
     quote := cmd :: !quote;
     if not !Flags.dry then begin
       run_assertion ass
+    end
+
+  | Rewrite (x_opt, name, ftype) ->
+    trace ("Rewriting function \"" ^ Ast.string_of_name name ^ "\"...");
+    let mod_ = lookup_module x_opt cmd.at in
+    let new_mod = Rewrite.rewrite mod_ name ftype in
+    if not !Flags.unchecked then begin
+      trace "Checking...";
+      Valid.check_module new_mod;
+      if !Flags.print_sig then begin
+        trace "Signature:";
+        print_module x_opt new_mod
+      end
+    end;
+    bind modules x_opt new_mod;
+    if not !Flags.dry then begin
+      trace "Initializing...";
+      let imports = Import.link new_mod in
+      let inst = Eval.init new_mod imports in
+      bind instances x_opt inst
     end
 
   | Meta cmd ->

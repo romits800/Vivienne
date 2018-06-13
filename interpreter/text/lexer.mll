@@ -386,6 +386,7 @@ rule token = parse
   | "script" { SCRIPT }
   | "register" { REGISTER }
   | "invoke" { INVOKE }
+  | "rewrite" { REWRITE }
   | "get" { GET }
   | "assert_malformed" { ASSERT_MALFORMED }
   | "assert_invalid" { ASSERT_INVALID }

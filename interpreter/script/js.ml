@@ -405,6 +405,8 @@ let of_command mods cmd =
     of_assertion' mods act "run" [] None ^ "\n"
   | Assertion ass ->
     of_assertion mods ass ^ "\n"
+  (* Maybe do something here? *)
+  | Rewrite (x_opt, name, lits) -> assert false
   | Meta _ -> assert false
 
 let of_script scr =
