@@ -29,7 +29,7 @@ and command' =
   | Register of Ast.name * var option
   | Action of action
   | Assertion of assertion
-  | Rewrite of var option * Ast.name * Types.func_type
+  | Rewrite of var option
   | Meta of meta
 
 and meta = meta' Source.phrase

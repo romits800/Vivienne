@@ -818,8 +818,8 @@ cmd :
   | action { Action $1 @@ at () }
   | assertion { Assertion $1 @@ at () }
   | script_module { Module (fst $1, snd $1) @@ at () }
-  | LPAR REWRITE module_var_opt name func_type RPAR
-    { Rewrite ($3, $4, $5) @@ at () }
+  | LPAR REWRITE module_var_opt RPAR
+    { Rewrite ($3) @@ at () }
   | LPAR REGISTER name module_var_opt RPAR { Register ($3, $4) @@ at () }
   | meta { Meta $1 @@ at () }
 

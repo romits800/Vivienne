@@ -259,7 +259,7 @@ let bind map x_opt y =
   let map' =
     match x_opt with
     | None -> !map
-    | Some x -> Map.add x.it y !map
+    | Some x -> Map.add x.it y (Map.remove x.it !map)
   in map := Map.add "" y map'
 
 let lookup category map x_opt at =
@@ -475,10 +475,9 @@ let rec run_command cmd =
       run_assertion ass
     end
 
-  | Rewrite (x_opt, name, ftype) ->
-    trace ("Rewriting function \"" ^ Ast.string_of_name name ^ "\"...");
+  | Rewrite (x_opt) ->
     let mod_ = lookup_module x_opt cmd.at in
-    let new_mod = Rewrite.rewrite mod_ name ftype in
+    let new_mod = Rewrite.rewrite mod_ in
     if not !Flags.unchecked then begin
       trace "Checking...";
       Valid.check_module new_mod;
