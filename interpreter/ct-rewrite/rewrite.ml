@@ -85,8 +85,62 @@ let secify_const (i: Ast.instr) =
     in
     Const {v with it = it'}
 
+let secify_unop op =
+    match op with
+    | I32 IntOp.Clz -> S32 SecOp.Clz
+    | I32 IntOp.Ctz -> S32 SecOp.Ctz
+    | I32 IntOp.Popcnt -> S32 SecOp.Popcnt
+    | I64 IntOp.Clz -> S64 SecOp.Clz
+    | I64 IntOp.Ctz -> S64 SecOp.Ctz
+    | I64 IntOp.Popcnt -> S64 SecOp.Popcnt
+    | _ -> op
+
+let secify_binop op =
+    match op with
+    | I32 IntOp.Add -> S32 SecOp.Add
+    | I32 IntOp.Sub -> S32 SecOp.Sub
+    | I32 IntOp.Mul -> S32 SecOp.Mul
+    | I32 IntOp.And -> S32 SecOp.And
+    | I32 IntOp.Or -> S32 SecOp.Or
+    | I32 IntOp.Xor -> S32 SecOp.Xor
+    | I32 IntOp.Shl -> S32 SecOp.Shl
+    | I32 IntOp.ShrS -> S32 SecOp.ShrS
+    | I32 IntOp.ShrU -> S32 SecOp.ShrU
+    | I32 IntOp.Rotl -> S32 SecOp.Rotl
+    | I32 IntOp.Rotr -> S32 SecOp.Rotr
+    | I64 IntOp.Add -> S64 SecOp.Add
+    | I64 IntOp.Sub -> S64 SecOp.Sub
+    | I64 IntOp.Mul -> S64 SecOp.Mul
+    | I64 IntOp.And -> S64 SecOp.And
+    | I64 IntOp.Or -> S64 SecOp.Or
+    | I64 IntOp.Xor -> S64 SecOp.Xor
+    | I64 IntOp.Shl -> S64 SecOp.Shl
+    | I64 IntOp.ShrS -> S64 SecOp.ShrS
+    | I64 IntOp.ShrU -> S64 SecOp.ShrU
+    | I64 IntOp.Rotl -> S64 SecOp.Rotl
+    | I64 IntOp.Rotr -> S64 SecOp.Rotr
+    | _ -> op
+
+(*
+let secify_op o =
+    let op_map io =
+        match io with
+        |Clz | Ctz | Popcnt
+        |Add | Sub | Mul | DivS | DivU | RemS | RemU
+         And | Or | Xor | Shl | ShrS | ShrU | Rotl | Rotr
+        | Eqz
+        | Eq | Ne | LtS | LtU | GtS | GtU | LeS | LeU | GeS | GeU
+    | ExtendSI32 | ExtendUI32 | WrapI64
+             | TruncSF32 | TruncUF32 | TruncSF64 | TruncUF64
+             | ReinterpretFloat | Declassify
+    match o with
+    | I32 IntOp.Add -> S32 SecOp.Sub
+    | _ -> o
+*)
 let secify (i: Ast.instr) =
     let it' = match i.it with
+        | Unary unop -> Unary (secify_unop unop)
+        | Binary binop -> Binary (secify_binop binop)
         | Const v -> secify_const i
         | Load memop -> Load {memop with ty = secify_value_type memop.ty}
         | Store memop -> Store {memop with ty = secify_value_type memop.ty}
@@ -109,8 +163,8 @@ let instr_reducer (i: Ast.instr) (ctx: context) =
         | [] -> Any, ctx.lstack
         | e::ls -> e, ls
     in
-    let maybe_secify = if expected = Pub then (fun x -> x) else secify in
-    let i', lstack'' = match i.it with
+    let i' = if expected = Pub then i else secify i in
+    let lstack'' = match i.it with
         | Unreachable
         | Nop
         | Block (_, _)
@@ -131,15 +185,15 @@ let instr_reducer (i: Ast.instr) (ctx: context) =
         | GetGlobal _
         | SetGlobal _
         | CurrentMemory
-        | GrowMemory
         | Test _
         | Compare _
-        | Unary _
-        | Binary _
         | Convert _ -> raise (Failure ("ugh: " ^ instr_str i))
-        | Store memop -> (maybe_secify i), Any::Pub::lstack'
-        | Load memop -> (maybe_secify i), Pub::lstack'
-        | Const _ -> maybe_secify i, lstack'
+        | Unary unop -> expected::lstack'
+        | GrowMemory -> Pub::lstack'
+        | Binary binop -> expected::expected::lstack'
+        | Store memop -> expected::Pub::lstack'
+        | Load memop -> Pub::lstack'
+        | Const _ -> lstack'
     in
     let out' = {ctx.out with body = i'::ctx.out.body} in
     {out = out'; lstack = lstack''}
