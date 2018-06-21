@@ -72,6 +72,12 @@ let secify_value_type (vt: Types.value_type) =
     | I64Type | S64Type -> S64Type
     | _ -> raise (Failure "Attempted to secify a float")
 
+let secify_testop op =
+    match op with
+    | I32 IntOp.Eqz -> S32 SecOp.Eqz
+    | I64 IntOp.Eqz -> S64 SecOp.Eqz
+    | _ -> op
+
 let secify_const (i: Ast.instr) =
     let v = match i.it with
         | Const v -> v
@@ -121,6 +127,43 @@ let secify_binop op =
     | I64 IntOp.Rotr -> S64 SecOp.Rotr
     | _ -> op
 
+let secify_relop op =
+  match op with
+    | I32 IntOp.Eq -> S32 SecOp.Eq
+    | I32 IntOp.Ne -> S32 SecOp.Ne
+    | I32 IntOp.LtS -> S32 SecOp.LtS
+    | I32 IntOp.LtU -> S32 SecOp.LtU
+    | I32 IntOp.GtS -> S32 SecOp.GtS
+    | I32 IntOp.GtU -> S32 SecOp.GtU
+    | I32 IntOp.LeS -> S32 SecOp.LeS
+    | I32 IntOp.LeU -> S32 SecOp.LeU
+    | I32 IntOp.GeS -> S32 SecOp.GeS
+    | I32 IntOp.GeU -> S32 SecOp.GeU
+    | I64 IntOp.Eq -> S64 SecOp.Eq
+    | I64 IntOp.Ne -> S64 SecOp.Ne
+    | I64 IntOp.LtS -> S64 SecOp.LtS
+    | I64 IntOp.LtU -> S64 SecOp.LtU
+    | I64 IntOp.GtS -> S64 SecOp.GtS
+    | I64 IntOp.GtU -> S64 SecOp.GtU
+    | I64 IntOp.LeS -> S64 SecOp.LeS
+    | I64 IntOp.LeU -> S64 SecOp.LeU
+    | I64 IntOp.GeS -> S64 SecOp.GeS
+    | I64 IntOp.GeU -> S64 SecOp.GeU
+    | _ -> op
+
+let secify_cvtop op =
+    match op with
+        | S64 SecOp.Classify
+        | S32 SecOp.Classify -> []
+        | I64 IntOp.ExtendSI32 -> [S64 SecOp.ExtendSS32]
+        | I64 IntOp.ExtendUI32 -> [S64 SecOp.ExtendUS32]
+        | I32 IntOp.WrapI64 -> [S32 SecOp.WrapS64]
+        | I32 x -> [I32 x; S32 SecOp.Classify]
+        | I64 x -> [I64 x; S64 SecOp.Classify]
+        | _ -> [op]
+
+
+
 (*
 let secify_op o =
     let op_map io =
@@ -139,16 +182,34 @@ let secify_op o =
 *)
 let secify (i: Ast.instr) =
     let it' = match i.it with
-        | Unary unop -> Unary (secify_unop unop)
-        | Binary binop -> Binary (secify_binop binop)
-        | Const v -> secify_const i
-        | Load memop -> Load {memop with ty = secify_value_type memop.ty}
-        | Store memop -> Store {memop with ty = secify_value_type memop.ty}
+        | Select
+        | SecretSelect -> [SecretSelect]
+
+        | BrIf _
+        | Br _
+        | BrTable _
+        | CallIndirect _
+        | CurrentMemory
+        | Return
+        | Unreachable
+        | Nop -> [i.it]
+
+        | Convert cvtop -> List.map (fun x -> Convert x) (secify_cvtop cvtop)
+        | Compare relop -> [Compare (secify_relop relop)]
+        | Test testop -> [Test (secify_testop testop)]
+        | Unary unop -> [Unary (secify_unop unop)]
+        | Binary binop -> [Binary (secify_binop binop)]
+        | Const v -> [secify_const i]
+        | Load memop -> [Load {memop with ty = secify_value_type memop.ty}]
+        | Store memop -> [Store {memop with ty = secify_value_type memop.ty}]
         | _ -> raise (Failure "Unsupported secify (probably needs to be added")
     in
-    {i with it = it'}
+    List.map (fun x -> x @@ Source.no_region) it'
 
 type expectation = Pub | Any
+let exp_str exp = match exp with
+    | Pub -> "Pub"
+    | Any -> "Any"
 
 type context = {
     out: Ast.func';
@@ -159,35 +220,48 @@ let instr_str (i: Ast.instr) =
     Sexpr.to_string 80 (Arrange.instr i)
 
 let instr_reducer (i: Ast.instr) (ctx: context) =
+    (* Printf.printf "%s -- %s\n" (instr_str i) (String.concat "::" (List.map exp_str ctx.lstack)); *)
     let expected, lstack' = match ctx.lstack with
         | [] -> Any, ctx.lstack
         | e::ls -> e, ls
     in
-    let i' = if expected = Pub then i else secify i in
+    let is' = if expected = Pub then [i] else secify i in
+    (* Printf.printf " -- %s" (String.concat "::" (List.map instr_str is')); *)
     let lstack'' = match i.it with
-        | Unreachable
-        | Nop
         | Block (_, _)
         | Loop (_, _)
         | If (_, _, _)
-        | Br _
-        | BrIf _
-        | BrTable (_, _)
-        | Return
         | Call _
-        | CallIndirect _
-        | Drop
-        | Select
-        | SecretSelect
         | GetLocal _
         | SetLocal _
         | TeeLocal _
         | GetGlobal _
-        | SetGlobal _
-        | CurrentMemory
-        | Test _
-        | Compare _
-        | Convert _ -> raise (Failure ("ugh: " ^ instr_str i))
+        | SetGlobal _ -> raise (Failure ("ugh: " ^ instr_str i))
+
+        | Convert cvtop -> (match cvtop with
+            | S32 SecOp.Classify
+            | S64 SecOp.Classify -> lstack'
+            | I64 IntOp.ExtendSI32
+            | I64 IntOp.ExtendUI32
+            | I32 IntOp.WrapI64 -> expected::lstack'
+            | _ -> Pub::lstack'
+        )
+        | Compare _ -> expected::expected::lstack'
+
+        (* TODO: These should read their context *)
+        | BrIf _ -> Pub::[]
+        | Br _ -> []
+        | BrTable (_, _) -> Pub::[]
+
+        | CurrentMemory -> lstack'
+        | CallIndirect _ -> Pub::lstack'
+        | SecretSelect
+        | Select -> expected::expected::expected::lstack'
+        | Return -> Any::[] (*maybe revisit*)
+        | Drop -> Any::expected::lstack'
+        | Unreachable -> []
+        | Nop -> lstack'
+        | Test testop -> expected::lstack'
         | Unary unop -> expected::lstack'
         | GrowMemory -> Pub::lstack'
         | Binary binop -> expected::expected::lstack'
@@ -195,7 +269,7 @@ let instr_reducer (i: Ast.instr) (ctx: context) =
         | Load memop -> Pub::lstack'
         | Const _ -> lstack'
     in
-    let out' = {ctx.out with body = i'::ctx.out.body} in
+    let out' = {ctx.out with body = is' @ ctx.out.body} in
     {out = out'; lstack = lstack''}
 
 let empty_ctx (f: Ast.func) =
