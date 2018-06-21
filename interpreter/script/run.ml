@@ -281,7 +281,15 @@ let lookup_registry module_name item_name _t =
 
 (* Running *)
 
-let rec run_definition def =
+let maybe_strip m =
+  if !Flags.strip_ct
+  then begin
+    trace "Stripping ct annotations...";
+    Strip.strip_module m
+  end
+  else m
+
+let rec run_definition' def =
   match def.it with
   | Textual m -> m
   | Encoded (name, bs) ->
@@ -290,7 +298,9 @@ let rec run_definition def =
   | Quoted (_, s) ->
     trace "Parsing quote...";
     let def' = Parse.string_to_module s in
-    run_definition def'
+    run_definition' def'
+
+let run_definition def = maybe_strip (run_definition' def)
 
 let run_action act =
   match act.it with

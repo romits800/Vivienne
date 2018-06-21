@@ -26,6 +26,7 @@ let argspec = Arg.align
     " write module to file";
   "-w", Arg.Int (fun n -> Flags.width := n),
     " configure output width (default is 80)";
+  "-p", Arg.Set Flags.strip_ct, " strip ct annotations";
   "-s", Arg.Set Flags.print_sig, " show module signatures";
   "-u", Arg.Set Flags.unchecked, " unchecked, do not perform validation";
   "-h", Arg.Clear Flags.harness, " exclude harness for JS convesion";
