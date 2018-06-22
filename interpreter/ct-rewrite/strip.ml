@@ -13,6 +13,11 @@ let register_weakened_type ti =
 
 let weakened_funcs = ref (Int32Set.empty)
 
+let warn_if_weakened_func is_import fi reg =
+  if (Int32Set.mem fi !weakened_funcs)
+  then Printf.printf ("WARNING: %s a trusted function at %s\n") (if is_import then "importing" else "exporting") (string_of_region reg)
+  else ()
+
 let register_weakened_func fi =
 (*let _ = Printf.printf "weakened func %ld" fi in*)
   (weakened_funcs := (Int32Set.add fi (!weakened_funcs)))
@@ -23,26 +28,51 @@ let register_weakened_func_if_weakened_type ti fi =
   then register_weakened_func fi
   else ()
 
+let weakened_memories = ref (Int32Set.empty)
+
+let register_weakened_memory mi =
+(*let _ = Printf.printf "weakened memory %ld" fi in*)
+  (weakened_memories := (Int32Set.add mi (!weakened_memories)))
+
+let warn_if_weakened_memory is_import mi reg =
+  if (Int32Set.mem mi !weakened_memories && !Flags.paranoid)
+  then Printf.printf ("(paranoid) WARNING: %s a secret memory at %s\n") (if is_import then "importing" else "exporting") (string_of_region reg)
+  else ()
+
 let leaked_tables = ref (Int32Set.empty)
 
 let register_leaked_table ti =
 (*let _ = Printf.printf "leaked table %ld" fi in*)
   (leaked_tables := (Int32Set.add ti (!leaked_tables)))
 
+let weakened_globals = ref (Int32Set.empty)
+
+let register_weakened_global gi =
+(*let _ = Printf.printf "weakened global %ld" fi in*)
+  (weakened_globals := (Int32Set.add gi (!weakened_globals)))
+
+let register_global_if_weakened_and_mutable b m gi =
+  if b then (match m with | Mutable -> register_weakened_global gi | _ -> () ) else ()
+
+let warn_if_weakened_global is_import gi reg =
+  if (Int32Set.mem gi !weakened_globals && !Flags.paranoid)
+  then Printf.printf ("(paranoid) WARNING: %s a secret mutable global at %s\n") (if is_import then "importing" else "exporting") (string_of_region reg)
+  else ()
+
 let warn_if_weakened_func_in_leaked_table ti fi reg =
   if (Int32Set.mem ti (!leaked_tables) && Int32Set.mem fi (!weakened_funcs))
-  then Printf.printf "WARNING: leaking a trusted function via exported table at %s\n" (string_of_region reg)
+  then Printf.printf "WARNING: leaking a trusted function via externalized table at %s\n" (string_of_region reg)
   else ()
 
 let strip_value_type t =
-  let t' = (match t with | S32Type -> I32Type | S64Type -> I64Type | x -> x) in
-  t'
+  let (b,t') = (match t with | S32Type -> (true,I32Type) | S64Type -> (true,I64Type) | x -> (false,x)) in
+  (b,t')
 
-let strip_value_types ts = List.map strip_value_type ts
+let strip_value_types ts = List.map (fun t -> snd (strip_value_type t)) ts
 
 let strip_memop mop =
   let {ty; align; offset; sz} = mop in
-  { ty = strip_value_type ty; align = align; offset = offset; sz = sz}
+  { ty = snd (strip_value_type ty); align = align; offset = offset; sz = sz}
 
 let strip_value v =
   match v with
@@ -164,35 +194,42 @@ in
 
 let strip_types ts = List.mapi strip_type ts
 
-let strip_global_type gt =
-  let gt' = (match gt with | GlobalType(t,m) -> GlobalType(strip_value_type t, m)) in
+let strip_global_type n gt =
+  let gt' = (match gt with
+             | GlobalType(t,m) -> let (b,t') = strip_value_type t in 
+                                  let _ = register_global_if_weakened_and_mutable b m (Int32.of_int n) in
+                                  GlobalType(t', m)) in
   gt'
 
-let strip_global g =
+let strip_global n g =
   let { gtype; value } = g.it in
-  { gtype = strip_global_type gtype; value = strip_const value } @@ g.at
+  { gtype = strip_global_type n gtype; value = strip_const value } @@ g.at
 
-let strip_globals gs = List.map strip_global gs
+let strip_globals gs off = List.mapi (fun n g -> strip_global (n+off) g) gs
 
 let strip_tables ts = ts
 
-let strip_memory_type mt =
-  let mt' = (match mt with | MemoryType(l,sec) -> MemoryType(l,Public)) in
+let strip_memory_type n mt =
+  let mt' = (match mt with
+             | MemoryType(l,Secret) ->
+               let _ = register_weakened_memory (Int32.of_int n) in
+               MemoryType(l,Public)
+             | MemoryType(l,Public) -> MemoryType(l,Public)) in
   mt'
 
-let strip_memory m =
+let strip_memory n m =
   let { mtype } = m.it in
-  { mtype = strip_memory_type mtype } @@ m.at
+  { mtype = strip_memory_type n mtype } @@ m.at
   
 
-let strip_memories ms = List.map strip_memory ms
+let strip_memories ms off = List.mapi (fun n m -> strip_memory (n+off) m) ms
 
 let strip_func n f =
   let { ftype; locals; body } = f.it in
   let _ = register_weakened_func_if_weakened_type ftype.it (Int32.of_int n) in
   { ftype = ftype; locals = strip_value_types locals; body = strip_instrs body } @@ f.at
 
-let strip_funcs fs = List.mapi strip_func fs
+let strip_funcs fs off = List.mapi (fun n f -> strip_func (n+off) f) fs
 
 let strip_start s = s
 
@@ -212,30 +249,41 @@ let strip_elems es = List.map strip_elem_segment es
 
 let strip_data ds = List.map strip_segment ds
 
-let strip_import_desc idesc =
-  let idesc' =
+let strip_import_desc (fn,tn,mn,gn) idesc =
+  let (fn',tn',mn',gn',idesc') =
     (match idesc.it with
-     | MemoryImport(m) -> MemoryImport(strip_memory_type m)
-     | GlobalImport(g) -> GlobalImport(strip_global_type g)
-     | x -> x) in
-  idesc' @@ idesc.at
+     | MemoryImport(m) ->
+       let m' = (strip_memory_type mn m) in
+       let _ = warn_if_weakened_memory true (Int32.of_int mn) idesc.at in
+       (fn,tn,mn+1,gn,MemoryImport(m'))
+     | GlobalImport(g) ->
+       let g' = (strip_global_type gn g) in
+       let _ = warn_if_weakened_global true (Int32.of_int gn) idesc.at in
+       (fn,tn,mn,gn+1,GlobalImport(g'))
+     | FuncImport(ft) ->  
+       let _ = (if (Int32Set.mem ft.it (!weakened_types))
+                  then register_weakened_func (Int32.of_int fn)
+                 	else Printf.printf "WARNING: importing an untrusted function at %s\n" (string_of_region idesc.at))
+       in (fn+1,tn,mn,gn,FuncImport(ft))
+     | TableImport(tt) ->
+       let _ = register_leaked_table (Int32.of_int tn) in (fn,tn+1,mn,gn,TableImport(tt))) in
+  (fn',tn',mn',gn',idesc' @@ idesc.at)
 
-let strip_import i =
+let strip_import (fn,tn,mn,gn,ims) i =
   let { module_name; item_name; idesc } = i.it in
-  { module_name = module_name; item_name = item_name; idesc = strip_import_desc idesc } @@ i.at
+  let (fn',tn',mn',gn',idesc') = strip_import_desc (fn,tn,mn,gn) idesc in
+  (fn',tn',mn',gn',ims @ [{ module_name = module_name; item_name = item_name; idesc = idesc' } @@ i.at])
 
-let strip_imports is = List.map strip_import is
+let strip_imports is =
+  let (fn,tn,mn,gn,ims) = List.fold_left strip_import (0,0,0,0,[]) is in (fn,tn,mn,gn,ims)
 
 let strip_export_desc e =
   let e' =
     (match e.it with
-     | FuncExport(fi) ->
-       let _ = (if (Int32Set.mem fi.it (!weakened_funcs))
-                then Printf.printf "WARNING: exporting a trusted function at %s\n" (string_of_region e.at)
-                else ()) in FuncExport(fi)
-     | TableExport(ti) ->
-       let _ = register_leaked_table ti.it in TableExport(ti)
-     | x -> x) in
+     | FuncExport(fi) -> let _ = warn_if_weakened_func false fi.it e.at in FuncExport(fi)
+     | TableExport(ti) -> let _ = register_leaked_table ti.it in TableExport(ti)
+     | MemoryExport(mi) -> let _ = warn_if_weakened_memory false mi.it e.at in MemoryExport(mi)
+     | GlobalExport(gi) -> let _ = warn_if_weakened_global false gi.it e.at in GlobalExport(gi)) in
   e' @@ e.at
 
 let strip_export e =
@@ -243,6 +291,8 @@ let strip_export e =
   { name = name; edesc = strip_export_desc edesc } @@ e.at
 
 let strip_exports es = List.map strip_export es
+
+let num_funcs ims = List.fold_left (fun n im -> match im.it.idesc.it with | FuncImport(_) -> n+1 | _ -> n) 0 ims
 
 let strip_module m = 
   let {
@@ -258,18 +308,21 @@ let strip_module m =
   exports;
 } = m.it in
 let weak_types = strip_types types in
-let weak_funcs = strip_funcs funcs in
+let (fn, tn, mn, gn, weak_imports) = strip_imports imports in
+let weak_funcs = strip_funcs funcs fn in
+let weak_memories = strip_memories memories mn in
+let weak_globals = strip_globals globals gn in
 let weak_exports = strip_exports exports in
 let weak_elems = strip_elems elems in
 {
 types = weak_types;
-globals = strip_globals globals;
+globals = weak_globals;
 tables = strip_tables tables;
-memories = strip_memories memories;
+memories = weak_memories;
 funcs = weak_funcs;
 start = strip_start start;
 elems = weak_elems;
 data = strip_data data;
-imports = strip_imports imports;
+imports = weak_imports;
 exports = weak_exports
 } @@ m.at

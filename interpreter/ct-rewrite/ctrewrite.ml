@@ -25,6 +25,7 @@ let argspec = Arg.align
   "-w", Arg.Int (fun n -> Flags.width := n),
     " configure output width (default is 80)";
   "-strip", Arg.Set Flags.strip_ct, " rewrite: strip ct annotations";
+  "-paranoid", Arg.Set Flags.paranoid, " assume environment is untrusted and print extra warnings";
   "-s", Arg.Set Flags.print_sig, " show pre-transform module signatures";
   "-u", Arg.Set Flags.unchecked, " unchecked, do not perform validation";
 (*  "-d", Arg.Set Flags.dry, " dry, do not run program"; *)
