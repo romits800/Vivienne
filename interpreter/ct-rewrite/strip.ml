@@ -3,6 +3,37 @@ open Source
 open Types
 open Values
 
+module Int32Set = Set.Make(Int32)
+
+let weakened_types = ref (Int32Set.empty)
+
+let register_weakened_type ti = 
+(*let _ = Printf.printf "weakened type %ld" ti in*)
+  (weakened_types := (Int32Set.add ti (!weakened_types)))
+
+let weakened_funcs = ref (Int32Set.empty)
+
+let register_weakened_func fi =
+(*let _ = Printf.printf "weakened func %ld" fi in*)
+  (weakened_funcs := (Int32Set.add fi (!weakened_funcs)))
+
+let register_weakened_func_if_weakened_type ti fi =
+(*let _ = Printf.printf "testing func type %ld" ti in*)
+  if (Int32Set.mem ti (!weakened_types))
+  then register_weakened_func fi
+  else ()
+
+let leaked_tables = ref (Int32Set.empty)
+
+let register_leaked_table ti =
+(*let _ = Printf.printf "leaked table %ld" fi in*)
+  (leaked_tables := (Int32Set.add ti (!leaked_tables)))
+
+let warn_if_weakened_func_in_leaked_table ti fi reg =
+  if (Int32Set.mem ti (!leaked_tables) && Int32Set.mem fi (!weakened_funcs))
+  then Printf.printf "WARNING: leaking a trusted function via exported table at %s\n" (string_of_region reg)
+  else ()
+
 let strip_value_type t =
   let t' = (match t with | S32Type -> I32Type | S64Type -> I64Type | x -> x) in
   t'
@@ -113,6 +144,8 @@ let rec strip_instr i =
   | Unary(unop) -> Unary(strip_unop unop)
   | Binary(binop) -> Binary(strip_binop binop)
   | Convert(cvtop) -> Lib.Option.get (Lib.Option.map (fun x -> Convert(x)) (strip_cvtop cvtop)) Nop
+  | CallIndirect(ti) ->
+    let _ = Printf.printf "WARNING: call_indirect at %s\n" (string_of_region i.at) in CallIndirect(ti)
   | x -> x
   ) in i' @@ i.at
 
@@ -120,13 +153,16 @@ and strip_instrs is = List.map strip_instr is
 
 let strip_const c = (strip_instrs c.it) @@ c.at
 
-let strip_type t =
+let strip_type n t =
   let t' =
     (match t.it with
-     | FuncType(tr,ts,ts') -> FuncType(Untrusted, strip_value_types ts, strip_value_types ts')) in
+     | FuncType(tr,ts,ts') -> 
+				let _ = (match tr with | Trusted -> register_weakened_type (Int32.of_int n) | _ -> ()) in
+				FuncType(Untrusted, strip_value_types ts, strip_value_types ts'))
+in
   t' @@ t.at
 
-let strip_types ts = List.map strip_type ts
+let strip_types ts = List.mapi strip_type ts
 
 let strip_global_type gt =
   let gt' = (match gt with | GlobalType(t,m) -> GlobalType(strip_value_type t, m)) in
@@ -151,11 +187,12 @@ let strip_memory m =
 
 let strip_memories ms = List.map strip_memory ms
 
-let strip_func f =
+let strip_func n f =
   let { ftype; locals; body } = f.it in
+  let _ = register_weakened_func_if_weakened_type ftype.it (Int32.of_int n) in
   { ftype = ftype; locals = strip_value_types locals; body = strip_instrs body } @@ f.at
 
-let strip_funcs fs = List.map strip_func fs
+let strip_funcs fs = List.mapi strip_func fs
 
 let strip_start s = s
 
@@ -163,11 +200,17 @@ let strip_segment s =
   let { index; offset; init} = s.it in
   { index = index ; offset = strip_const offset; init = init } @@ s.at
 
-let strip_segments ss = List.map strip_segment ss
+let elem_warnings reg ti fis =
+  let _ = List.map (fun fi -> warn_if_weakened_func_in_leaked_table ti.it fi.it reg) fis in
+  fis
 
-let strip_elems es = strip_segments es
+let strip_elem_segment s =
+  let { index; offset; init} = s.it in
+  { index = index ; offset = strip_const offset; init = elem_warnings s.at index init} @@ s.at
 
-let strip_data ds = strip_segments ds
+let strip_elems es = List.map strip_elem_segment es
+
+let strip_data ds = List.map strip_segment ds
 
 let strip_import_desc idesc =
   let idesc' =
@@ -183,7 +226,23 @@ let strip_import i =
 
 let strip_imports is = List.map strip_import is
 
-let strip_exports es = es
+let strip_export_desc e =
+  let e' =
+    (match e.it with
+     | FuncExport(fi) ->
+       let _ = (if (Int32Set.mem fi.it (!weakened_funcs))
+                then Printf.printf "WARNING: exporting a trusted function at %s\n" (string_of_region e.at)
+                else ()) in FuncExport(fi)
+     | TableExport(ti) ->
+       let _ = register_leaked_table ti.it in TableExport(ti)
+     | x -> x) in
+  e' @@ e.at
+
+let strip_export e =
+  let { name; edesc } = e.it in
+  { name = name; edesc = strip_export_desc edesc } @@ e.at
+
+let strip_exports es = List.map strip_export es
 
 let strip_module m = 
   let {
@@ -198,15 +257,19 @@ let strip_module m =
   imports;
   exports;
 } = m.it in
+let weak_types = strip_types types in
+let weak_funcs = strip_funcs funcs in
+let weak_exports = strip_exports exports in
+let weak_elems = strip_elems elems in
 {
-types = strip_types types;
+types = weak_types;
 globals = strip_globals globals;
 tables = strip_tables tables;
 memories = strip_memories memories;
-funcs = strip_funcs funcs;
+funcs = weak_funcs;
 start = strip_start start;
-elems = strip_elems elems;
+elems = weak_elems;
 data = strip_data data;
 imports = strip_imports imports;
-exports = strip_exports exports
+exports = weak_exports
 } @@ m.at
