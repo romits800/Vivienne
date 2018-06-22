@@ -289,7 +289,7 @@ let maybe_strip m =
   end
   else m
 
-let rec run_definition' def =
+let rec run_definition def =
   match def.it with
   | Textual m -> m
   | Encoded (name, bs) ->
@@ -298,9 +298,7 @@ let rec run_definition' def =
   | Quoted (_, s) ->
     trace "Parsing quote...";
     let def' = Parse.string_to_module s in
-    run_definition' def'
-
-let run_definition def = maybe_strip (run_definition' def)
+    run_definition def'
 
 let run_action act =
   match act.it with
@@ -454,6 +452,8 @@ let rec run_command cmd =
         print_module x_opt m
       end
     end;
+    let m = maybe_strip m in
+    (* let cmd = Module(x_opt,Textual(m) @@ def.at) @@ cmd.at in *)
     bind scripts x_opt [cmd];
     bind modules x_opt m;
     if not !Flags.dry then begin
