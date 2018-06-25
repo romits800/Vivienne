@@ -281,6 +281,14 @@ let lookup_registry module_name item_name _t =
 
 (* Running *)
 
+let maybe_strip m =
+  if !Flags.strip_ct
+  then begin
+    trace "Stripping ct annotations...";
+    Strip.strip_module m
+  end
+  else m
+
 let rec run_definition def =
   match def.it with
   | Textual m -> m
@@ -444,6 +452,8 @@ let rec run_command cmd =
         print_module x_opt m
       end
     end;
+    let m = maybe_strip m in
+    (* let cmd = Module(x_opt,Textual(m) @@ def.at) @@ cmd.at in *)
     bind scripts x_opt [cmd];
     bind modules x_opt m;
     if not !Flags.dry then begin

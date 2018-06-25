@@ -56,11 +56,17 @@ $(UNOPT):	main.d.byte
 $(OPT):		main.native
 		mv $< $@
 
-.PHONY:		main.d.byte main.native
+ctrewrite:		ctrewrite.native
+		mv $< $@
+
+.PHONY:		main.d.byte main.native ctrewrite.native
 main.d.byte:	_tags
 		$(OCB) -quiet $@
 
 main.native:	_tags
+		$(OCB) -quiet $@
+
+ctrewrite.native:	_tags
 		$(OCB) -quiet $@
 
 
