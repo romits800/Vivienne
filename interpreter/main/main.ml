@@ -24,6 +24,8 @@ let argspec = Arg.align
     " read script from file";
   "-o", Arg.String (fun file -> add_arg ("(output " ^ quote file ^ ")")),
     " write module to file";
+  "-r", Arg.String (fun file -> add_arg ("(input " ^ quote file ^ ")"); add_arg ("(rewrite)")),
+    " rewrite as ct";
   "-w", Arg.Int (fun n -> Flags.width := n),
     " configure output width (default is 80)";
   "-s", Arg.Set Flags.print_sig, " show module signatures";

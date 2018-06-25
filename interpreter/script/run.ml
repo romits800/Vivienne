@@ -478,6 +478,7 @@ let rec run_command cmd =
   | Rewrite (x_opt) ->
     let mod_ = lookup_module x_opt cmd.at in
     let new_mod = Rewrite.rewrite mod_ in
+    bind modules x_opt new_mod;
     if not !Flags.unchecked then begin
       trace "Checking...";
       Valid.check_module new_mod;
@@ -486,7 +487,6 @@ let rec run_command cmd =
         print_module x_opt new_mod
       end
     end;
-    bind modules x_opt new_mod;
     if not !Flags.dry then begin
       trace "Initializing...";
       let imports = Import.link new_mod in
