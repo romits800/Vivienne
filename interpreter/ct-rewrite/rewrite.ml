@@ -356,7 +356,15 @@ let rec pub_reducer (i: Ast.instr) (ctx: pub_context) =
             let i = Int32.to_int var.it in
             (first_n (List.nth ctx.param_counts i) (List.nth ctx.answer.locals i)) @ lstack'
         | GetLocal _ -> lstack'
-        | SetGlobal var
+        | SetGlobal var ->
+            let i = Int32.to_int var.it in
+            Printf.printf "\nCurrent f: %d\n" ctx.func_i;
+            Printf.printf "\nGlobals : %s\n" (String.concat ", " (List.map var_exp_str ctx.answer.globals));
+            Printf.printf "\nLooking for : %d\n" i; 
+            Printf.printf "\nAT: %s\n" (Source.string_of_region remove_me.at);
+            let eee = (List.nth ctx.answer.globals i) in
+            Printf.printf "%s %d set" (var_exp_str eee) i;
+            eee::expected::lstack'
         | SetLocal var ->
             let i = Int32.to_int var.it in
             Printf.printf "\nCurrent f: %d\n" ctx.func_i;

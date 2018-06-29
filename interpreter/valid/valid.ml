@@ -166,7 +166,7 @@ let check_memop (c : context) (memop : 'a memop) get_sz at =
     match get_sz memop.sz with
     | None -> size memop.ty
     | Some sz ->
-      require (memop.ty = I64Type || sz <> Memory.Mem32) at
+      require (memop.ty = I64Type || memop.ty = S64Type || sz <> Memory.Mem32) at
         "memory size too big";
       Memory.mem_size sz
   in
