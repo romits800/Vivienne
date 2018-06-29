@@ -587,7 +587,7 @@ let rec rewrite_instrs (i: Ast.instr) (m, f_i, instrs, exps, brs): (Ast.module_ 
         | t::_ -> [apply_exp (expected, t)]
         in
         let (_,_,t_is, _, _) = List.fold_right rewrite_instrs tb (m, f_i, [], [br_exp], br_exp::brs) in
-        let (_,_,f_is, _, _) = List.fold_right rewrite_instrs tb (m, f_i, [], [br_exp], br_exp::brs) in
+        let (_,_,f_is, _, _) = List.fold_right rewrite_instrs fb (m, f_i, [], [br_exp], br_exp::brs) in
         [If(v', t_is, f_is) @@ no_region]
     | _ -> if expected = Pub then [i] else secify i
     in
