@@ -18,8 +18,8 @@ JSLIB =		wast.js
 WINMAKE =	winmake.bat
 
 DIRS =		util syntax binary text valid runtime exec script host main ct-rewrite
-LIBS =		bigarray
-FLAGS = 	-cflags '-w +a-4-27-42-44-45 -warn-error +a'
+LIBS =		bigarray nums
+FLAGS = 	-cflags '-w +a-4-8-11-27-32-39-42-44-45 -warn-error +a'
 OCB =		ocamlbuild $(FLAGS) $(DIRS:%=-I %) $(LIBS:%=-libs %)
 JS =		# set to JS shell command to run JS tests
 

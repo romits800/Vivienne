@@ -364,7 +364,7 @@ let run_assertion ass =
       Valid.check_module m
     with
     | exception Valid.Invalid (_, msg) ->
-      assert_message ass.at "validation" msg re
+      if (!Flags.verified_checker) then () else assert_message ass.at "validation" msg re
     | _ -> Assert.error ass.at "expected validation error"
     )
 
