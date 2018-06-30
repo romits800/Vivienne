@@ -187,8 +187,8 @@ let strip_type n t =
   let t' =
     (match t.it with
      | FuncType(tr,ts,ts') -> 
-				let _ = (match tr with | Trusted -> register_weakened_type (Int32.of_int n) | _ -> ()) in
-				FuncType(Untrusted, strip_value_types ts, strip_value_types ts'))
+        let _ = (match tr with | Trusted -> register_weakened_type (Int32.of_int n) | _ -> ()) in
+        FuncType(Untrusted, strip_value_types ts, strip_value_types ts'))
 in
   t' @@ t.at
 
@@ -263,7 +263,7 @@ let strip_import_desc (fn,tn,mn,gn) idesc =
      | FuncImport(ft) ->  
        let _ = (if (Int32Set.mem ft.it (!weakened_types))
                   then register_weakened_func (Int32.of_int fn)
-                 	else Printf.printf "WARNING: importing an untrusted function at %s\n" (string_of_region idesc.at))
+                   else Printf.printf "WARNING: importing an untrusted function at %s\n" (string_of_region idesc.at))
        in (fn+1,tn,mn,gn,FuncImport(ft))
      | TableImport(tt) ->
        let _ = register_leaked_table (Int32.of_int tn) in (fn,tn+1,mn,gn,TableImport(tt))) in

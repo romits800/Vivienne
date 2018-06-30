@@ -24,6 +24,7 @@ let argspec = Arg.align
     " write module to file";
   "-w", Arg.Int (fun n -> Flags.width := n),
     " configure output width (default is 80)";
+  "-v", Arg.Set Flags.verified_checker, " use the verified type checker";
   "-strip", Arg.Set Flags.strip_ct, " rewrite: strip ct annotations";
   "-paranoid", Arg.Set Flags.paranoid, " assume environment is untrusted and print extra warnings";
   "-s", Arg.Set Flags.print_sig, " show pre-transform module signatures";

@@ -332,12 +332,32 @@ and check_seq (c : context) (es : instr list) : infer_stack_type =
     push outs (pop ins s e.at)
 
 and check_block (c : context) (es : instr list) (ts : stack_type) at =
-  let s = check_seq c es in
-  let s' = pop (stack ts) s at in
-  require (snd s' = []) at
-    ("type mismatch: operator requires " ^ string_of_stack_type ts ^
-     " but stack has " ^ string_of_infer_types (snd s))
-
+  if (!Flags.verified_checker)
+    then
+      let {trust; types; funcs; tables; memories; globals; locals; results; labels} = c in
+      let tab = (match tables with
+                 | [] -> None
+                 | t :: ts -> Some (Checker.Arith.zero_nat)) in
+      let mem = (match memories with
+                 | [] -> None
+                 | (MemoryType(l,msec)) :: ms -> Some (Checker.Arith.zero_nat, Ast_convert.convert_sec msec)) in
+      let cont = Checker.Wasm_Ast.T_context_ext ((Ast_convert.convert_trust trust),
+                                                (List.map Ast_convert.convert_ftype types),
+                                                (List.map Ast_convert.convert_ftype funcs),
+                                                (List.map Ast_convert.convert_tg globals),
+                                                (tab),
+                                                (mem),
+                                                (Ast_convert.convert_vltype locals),
+                                                (List.map Ast_convert.convert_vltype labels),
+                                                Some (Ast_convert.convert_vltype results), ()) in
+      let b = Checker.Wasm_Checker_Printing.typing cont (Ast_convert.convert_instrs es) (Checker.Wasm_Ast.Tf ([], (Ast_convert.convert_vltype ts))) in
+      require b at "type mismatch"
+    else
+      let s = check_seq c es in
+      let s' = pop (stack ts) s at in
+      require (snd s' = []) at
+        ("type mismatch: operator requires " ^ string_of_stack_type ts ^
+         " but stack has " ^ string_of_infer_types (snd s))
 
 (* Types *)
 

@@ -29,6 +29,7 @@ let argspec = Arg.align
   "-w", Arg.Int (fun n -> Flags.width := n),
     " configure output width (default is 80)";
 (*  "-p", Arg.Set Flags.strip_ct, " strip ct annotations"; *)
+  "-v", Arg.Set Flags.verified_checker, " use the verified type checker";
   "-s", Arg.Set Flags.print_sig, " show module signatures";
   "-u", Arg.Set Flags.unchecked, " unchecked, do not perform validation";
   "-h", Arg.Clear Flags.harness, " exclude harness for JS convesion";
