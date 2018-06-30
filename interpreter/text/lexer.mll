@@ -377,7 +377,7 @@ rule token = parse
   | "offset" { OFFSET }
   | "import" { IMPORT }
   | "export" { EXPORT }
-  | "trusted" { TRUSTED }
+  | "untrusted" { UNTRUSTED }
 
   | "module" { MODULE }
   | "binary" { BIN }

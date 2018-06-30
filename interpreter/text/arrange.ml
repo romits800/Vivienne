@@ -64,7 +64,7 @@ let decls kind ts = tab kind (atom value_type) ts
 let stack_type ts = decls "result" ts
 
 let trust tr =
-  if tr = Trusted then " trusted" else ""
+  if tr = Untrusted then " untrusted" else ""
 
 let func_type (FuncType (tr, ins, out)) =
   Node ("func" ^ (trust tr), decls "param" ins @ decls "result" out)

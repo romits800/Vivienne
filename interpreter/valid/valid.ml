@@ -444,7 +444,7 @@ let check_global (c : context) (glob : global) =
 
 let check_start (c : context) (start : var option) =
   Lib.Option.app (fun x ->
-    require (func c x = FuncType (Untrusted, [], [])) x.at
+    require (func c x = FuncType (Trusted, [], [])) x.at
       "start function must not have parameters or results"
   ) start
 

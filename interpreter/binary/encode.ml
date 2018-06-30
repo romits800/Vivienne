@@ -110,8 +110,8 @@ let encode m =
           "cannot encode stack type with arity > 1 (yet)"
 
     let func_type = function
-      | FuncType (Untrusted, ins, out) -> vs7 (-0x20); vec value_type ins; vec value_type out
-      | FuncType (Trusted, ins, out) -> vs7 (-0x21); vec value_type ins; vec value_type out
+      | FuncType (Trusted, ins, out) -> vs7 (-0x20); vec value_type ins; vec value_type out
+      | FuncType (Untrusted, ins, out) -> vs7 (-0x21); vec value_type ins; vec value_type out
 
     let limits vu {min; max} sec =
       match (max, sec) with

@@ -154,8 +154,8 @@ let stack_type s =
 
 let func_type s =
   let trust = match vs7 s with
-  | -0x20 -> Untrusted
-  | -0x21 -> Trusted
+  | -0x20 -> Trusted
+  | -0x21 -> Untrusted
   | _ -> error s (pos s - 1) "invalid function type" in
 
   let ins = vec value_type s in
