@@ -467,11 +467,11 @@ let apply_ans (ans: pub_answer) (m: Ast.module_) =
     let m' = {m with it={m.it with funcs=funcs'}} in
     let (m'', vars) =  List.fold_left (fun (m, vars) ((exps, f), ret_exp) ->
         let ftype = Ast.func_type_for m f.it.ftype in
-        let FuncType(t, params, ret) = Ast.func_type_for m f.it.ftype in
+        let FuncType(_, params, ret) = Ast.func_type_for m f.it.ftype in
         let par_exps = first_n (List.length params) exps in
         let params' = List.map apply_var_exp (List.combine par_exps params) in
         let ret' = if ret = [] then [] else [apply_var_exp (ret_exp, List.hd ret)] in
-        let ftype' = (FuncType (t, params', ret')) in
+        let ftype' = (FuncType (Untrusted, params', ret')) in
         let m', v' = if ftype = ftype' then (m, f.it.ftype) else ensure_type m ftype' in
         (m', vars @ [v'])
     ) (m', []) (List.combine (List.combine ans.locals m'.it.funcs) ans.returns) in
