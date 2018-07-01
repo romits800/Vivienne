@@ -188,7 +188,7 @@ let strip_type n t =
     (match t.it with
      | FuncType(tr,ts,ts') -> 
         let _ = (match tr with | Trusted -> register_weakened_type (Int32.of_int n) | _ -> ()) in
-        FuncType(Untrusted, strip_value_types ts, strip_value_types ts'))
+        FuncType(Trusted, strip_value_types ts, strip_value_types ts'))
 in
   t' @@ t.at
 
