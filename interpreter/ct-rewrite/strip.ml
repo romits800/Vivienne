@@ -14,8 +14,8 @@ let register_unsafe_type ti =
 let unsafe_funcs = ref (Int32Set.empty)
 
 let warn_if_unsafe_func is_import fi reg =
-  if (Int32Set.mem fi !unsafe_funcs)
-  then Printf.printf ("WARNING: %s a trusted function at %s\n") (if is_import then "importing" else "exporting") (string_of_region reg)
+  if (Int32Set.mem fi !unsafe_funcs && !Flags.paranoid)
+  then Printf.printf ("(paranoid) WARNING: %s a trusted function at %s\n") (if is_import then "importing" else "exporting") (string_of_region reg)
   else ()
 
 let register_unsafe_func fi =
@@ -60,8 +60,8 @@ let warn_if_weakened_global is_import gi reg =
   else ()
 
 let warn_if_unsafe_func_in_leaked_table ti fi reg =
-  if (Int32Set.mem ti (!leaked_tables) && Int32Set.mem fi (!unsafe_funcs))
-  then Printf.printf "WARNING: leaking a trusted function via externalized table at %s\n" (string_of_region reg)
+  if (Int32Set.mem ti (!leaked_tables) && Int32Set.mem fi (!unsafe_funcs) && !Flags.paranoid)
+  then Printf.printf "(paranoid) WARNING: leaking a trusted function via externalized table at %s\n" (string_of_region reg)
   else ()
 
 let strip_value_type t =
