@@ -5,27 +5,27 @@ open Values
 
 module Int32Set = Set.Make(Int32)
 
-let weakened_types = ref (Int32Set.empty)
+let unsafe_types = ref (Int32Set.empty)
 
-let register_weakened_type ti = 
-(*let _ = Printf.printf "weakened type %ld" ti in*)
-  (weakened_types := (Int32Set.add ti (!weakened_types)))
+let register_unsafe_type ti = 
+(*let _ = Printf.printf "unsafe type %ld" ti in*)
+  (unsafe_types := (Int32Set.add ti (!unsafe_types)))
 
-let weakened_funcs = ref (Int32Set.empty)
+let unsafe_funcs = ref (Int32Set.empty)
 
-let warn_if_weakened_func is_import fi reg =
-  if (Int32Set.mem fi !weakened_funcs)
+let warn_if_unsafe_func is_import fi reg =
+  if (Int32Set.mem fi !unsafe_funcs)
   then Printf.printf ("WARNING: %s a trusted function at %s\n") (if is_import then "importing" else "exporting") (string_of_region reg)
   else ()
 
-let register_weakened_func fi =
-(*let _ = Printf.printf "weakened func %ld" fi in*)
-  (weakened_funcs := (Int32Set.add fi (!weakened_funcs)))
+let register_unsafe_func fi =
+(*let _ = Printf.printf "unsafe func %ld" fi in*)
+  (unsafe_funcs := (Int32Set.add fi (!unsafe_funcs)))
 
-let register_weakened_func_if_weakened_type ti fi =
+let register_unsafe_func_if_unsafe_type ti fi =
 (*let _ = Printf.printf "testing func type %ld" ti in*)
-  if (Int32Set.mem ti (!weakened_types))
-  then register_weakened_func fi
+  if (Int32Set.mem ti (!unsafe_types))
+  then register_unsafe_func fi
   else ()
 
 let weakened_memories = ref (Int32Set.empty)
@@ -59,8 +59,8 @@ let warn_if_weakened_global is_import gi reg =
   then Printf.printf ("(paranoid) WARNING: %s a secret mutable global at %s\n") (if is_import then "importing" else "exporting") (string_of_region reg)
   else ()
 
-let warn_if_weakened_func_in_leaked_table ti fi reg =
-  if (Int32Set.mem ti (!leaked_tables) && Int32Set.mem fi (!weakened_funcs))
+let warn_if_unsafe_func_in_leaked_table ti fi reg =
+  if (Int32Set.mem ti (!leaked_tables) && Int32Set.mem fi (!unsafe_funcs))
   then Printf.printf "WARNING: leaking a trusted function via externalized table at %s\n" (string_of_region reg)
   else ()
 
@@ -187,7 +187,7 @@ let strip_type n t =
   let t' =
     (match t.it with
      | FuncType(tr,ts,ts') -> 
-        let _ = (match tr with | Trusted -> register_weakened_type (Int32.of_int n) | _ -> ()) in
+        let _ = (match tr with | Trusted -> register_unsafe_type (Int32.of_int n) | _ -> ()) in
         FuncType(Trusted, strip_value_types ts, strip_value_types ts'))
 in
   t' @@ t.at
@@ -226,7 +226,7 @@ let strip_memories ms off = List.mapi (fun n m -> strip_memory (n+off) m) ms
 
 let strip_func n f =
   let { ftype; locals; body } = f.it in
-  let _ = register_weakened_func_if_weakened_type ftype.it (Int32.of_int n) in
+  let _ = register_unsafe_func_if_unsafe_type ftype.it (Int32.of_int n) in
   { ftype = ftype; locals = strip_value_types locals; body = strip_instrs body } @@ f.at
 
 let strip_funcs fs off = List.mapi (fun n f -> strip_func (n+off) f) fs
@@ -238,7 +238,7 @@ let strip_segment s =
   { index = index ; offset = strip_const offset; init = init } @@ s.at
 
 let elem_warnings reg ti fis =
-  let _ = List.map (fun fi -> warn_if_weakened_func_in_leaked_table ti.it fi.it reg) fis in
+  let _ = List.map (fun fi -> warn_if_unsafe_func_in_leaked_table ti.it fi.it reg) fis in
   fis
 
 let strip_elem_segment s =
@@ -261,8 +261,8 @@ let strip_import_desc (fn,tn,mn,gn) idesc =
        let _ = warn_if_weakened_global true (Int32.of_int gn) idesc.at in
        (fn,tn,mn,gn+1,GlobalImport(g'))
      | FuncImport(ft) ->  
-       let _ = (if (Int32Set.mem ft.it (!weakened_types))
-                  then register_weakened_func (Int32.of_int fn)
+       let _ = (if (Int32Set.mem ft.it (!unsafe_types))
+                  then register_unsafe_func (Int32.of_int fn)
                    else Printf.printf "WARNING: importing an untrusted function at %s\n" (string_of_region idesc.at))
        in (fn+1,tn,mn,gn,FuncImport(ft))
      | TableImport(tt) ->
@@ -280,7 +280,7 @@ let strip_imports is =
 let strip_export_desc e =
   let e' =
     (match e.it with
-     | FuncExport(fi) -> let _ = warn_if_weakened_func false fi.it e.at in FuncExport(fi)
+     | FuncExport(fi) -> let _ = warn_if_unsafe_func false fi.it e.at in FuncExport(fi)
      | TableExport(ti) -> let _ = register_leaked_table ti.it in TableExport(ti)
      | MemoryExport(mi) -> let _ = warn_if_weakened_memory false mi.it e.at in MemoryExport(mi)
      | GlobalExport(gi) -> let _ = warn_if_weakened_global false gi.it e.at in GlobalExport(gi)) in
