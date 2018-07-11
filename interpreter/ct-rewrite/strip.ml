@@ -31,8 +31,8 @@ let secret_select_poly_64 n =
     body = [
     Const ((I64Value.to_value Int64.zero) @@ no_region) @@ no_region;
     GetLocal(2l @@ no_region) @@ no_region;
+    Test(I32 IntOp.Eqz) @@ no_region;
     Convert(I64 IntOp.ExtendUI32) @@ no_region;
-    Test(I64 IntOp.Eqz) @@ no_region;
     Binary(I64 IntOp.Sub) @@ no_region;
     GetLocal(0l @@ no_region) @@ no_region;
     GetLocal(1l @@ no_region) @@ no_region;
@@ -267,17 +267,14 @@ let strip_memories ms off = List.mapi (fun n m -> strip_memory (n+off) m) ms
 let rec my_check_instr (c : context) (e : instr) (s : infer_stack_type) =
   match e.it with
   | Block (ts, es) ->
-    check_arity (List.length ts) e.at;
     let stripped_es = my_check_block {c with labels = ts :: c.labels} es ts e.at in
     ([] --> ts, Block (strip_value_types ts, stripped_es) @@ e.at)
 
   | Loop (ts, es) ->
-    check_arity (List.length ts) e.at;
     let stripped_es = my_check_block {c with labels = [] :: c.labels} es ts e.at in
     ([] --> ts, Loop (strip_value_types ts, stripped_es) @@ e.at)
 
   | If (ts, es1, es2) ->
-    check_arity (List.length ts) e.at;
     let stripped_es1 = my_check_block {c with labels = ts :: c.labels} es1 ts e.at in
     let stripped_es2 = my_check_block {c with labels = ts :: c.labels} es2 ts e.at in
     ([I32Type] --> ts, If (strip_value_types ts, stripped_es1, stripped_es2) @@ e.at)
