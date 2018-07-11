@@ -283,7 +283,11 @@ let rec my_check_instr (c : context) (e : instr) (s : infer_stack_type) =
     let t = peek 1 s in
     let out_t = [t; t; Some S32Type] -~> [t] in
     let _ = (secret_select_poly := true) in
-    if (t = Some S64Type) then (out_t, Call(!secret_select_64_ind @@ e.at) @@ e.at) else (out_t, Call(!secret_select_32_ind @@ e.at) @@ e.at)
+    (match t with
+     |  Some S32Type -> (out_t, Call(!secret_select_32_ind @@ e.at) @@ e.at)
+     |  Some S64Type -> (out_t, Call(!secret_select_64_ind @@ e.at) @@ e.at)
+     |  _ -> let _ = Printf.printf "WARNING: polymorphic secret_select in dead code at %s\n" (string_of_region e.at) in
+             (out_t, Call(!secret_select_32_ind @@ e.at) @@ e.at))
 
   | _ ->  try (check_instr c e s, strip_instr e) with _ -> raise (Failure "Can't strip this ill-typed function.")
 
