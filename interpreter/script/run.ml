@@ -319,14 +319,35 @@ let rec run_definition def : Ast.module_ =
     let def' = Parse.string_to_module s in
     run_definition def'
 
-let run_action act : Values.value list =
+type return_stack =
+  VS of Values.value list |
+  SS of string list
+
+let return_value_list (ract : return_stack) : Values.value list =
+  match ract with
+  | VS vl -> vl
+  | SS _ -> [] (*Todo(Romy) change with error*)
+
+let run_action act : return_stack = (* Values.value list = *)
   match act.it with
   | Invoke (x_opt, name, vs) ->
     trace ("Invoking function \"" ^ Ast.string_of_name name ^ "\"...");
     let inst = lookup_instance x_opt act.at in
     (match Instance.export inst name with
     | Some (Instance.ExternFunc f) ->
-      Eval.invoke f (List.map (fun v -> v.it) vs)
+       VS (Eval.invoke f (List.map (fun v -> v.it) vs))
+    | Some _ -> Assert.error act.at "export is not a function"
+    | None -> Assert.error act.at "undefined export"
+    )
+
+  | SymbExec (x_opt, name, vs) ->
+    trace ("Running CT Symbolic Execution for function \"" ^ Ast.string_of_name name ^ "\"...");
+    let inst = lookup_instance x_opt act.at in
+    (match Instance.export inst name with
+    | Some (Instance.ExternFunc f) ->
+       let str = Symb.run f (List.map (fun v -> v.it) vs) in
+       List.iter print_endline str;
+       SS str
     | Some _ -> Assert.error act.at "export is not a function"
     | None -> Assert.error act.at "undefined export"
     )
@@ -335,7 +356,7 @@ let run_action act : Values.value list =
     trace ("Getting global \"" ^ Ast.string_of_name name ^ "\"...");
     let inst = lookup_instance x_opt act.at in
     (match Instance.export inst name with
-    | Some (Instance.ExternGlobal gl) -> [Global.load gl]
+    | Some (Instance.ExternGlobal gl) -> VS ([Global.load gl])
     | Some _ -> Assert.error act.at "export is not a global"
     | None -> Assert.error act.at "undefined export"
     )
@@ -424,20 +445,20 @@ let run_assertion ass =
 
   | AssertReturn (act, rs) ->
     trace ("Asserting return...");
-    let got_vs = run_action act in
+    let got_vs = run_action act |> return_value_list in
     let expect_rs = List.map (fun r -> r.it) rs in
     assert_result ass.at got_vs expect_rs
 
   | AssertTrap (act, re) ->
     trace ("Asserting trap...");
-    (match run_action act with
+    (match run_action act |> return_value_list with
     | exception Eval.Trap (_, msg) -> assert_message ass.at "runtime" msg re
     | _ -> Assert.error ass.at "expected runtime error"
     )
 
   | AssertExhaustion (act, re) ->
     trace ("Asserting exhaustion...");
-    (match run_action act with
+    (match run_action act |> return_value_list with
     | exception Eval.Exhaustion (_, msg) ->
       assert_message ass.at "exhaustion" msg re
     | _ -> Assert.error ass.at "expected exhaustion error"
@@ -477,8 +498,12 @@ let rec run_command cmd =
   | Action act ->
     quote := cmd :: !quote;
     if not !Flags.dry then begin
-      let vs = run_action act in
-      if vs <> [] then print_values vs
+        let vs = run_action act in
+        match vs with
+        | VS vs ->
+           if vs <> [] then print_values vs
+        | SS svs ->
+           if svs <> [] then List.iter print_endline svs
     end
 
   | Assertion ass ->

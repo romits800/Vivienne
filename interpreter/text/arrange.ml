@@ -425,10 +425,18 @@ let definition mode x_opt def =
 let access x_opt n =
   String.concat " " [var_opt x_opt; name n]
 
+
+let sec_atoms sec =
+  match sec.it with
+  | High h -> Atom h
+  | Low l -> Atom l
+
 let action mode act =
   match act.it with
   | Invoke (x_opt, name, lits) ->
     Node ("invoke" ^ access x_opt name, List.map (literal mode) lits)
+  | SymbExec (x_opt, name, secs) ->
+    Node ("symb_exec" ^ access x_opt name, List.map sec_atoms secs)
   | Get (x_opt, name) ->
     Node ("get" ^ access x_opt name, [])
 

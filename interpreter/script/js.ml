@@ -218,6 +218,10 @@ let invoke ft lits at =
   [ft @@ at], FuncImport (1l @@ at) @@ at,
   List.map (fun lit -> Const lit @@ at) lits @ [Call (0l @@ at) @@ at]
 
+(* let symbexec ft secs at =
+ *   [ft @@ at], FuncImport (1l @@ at) @@ at,
+ *   List.map (fun sec -> Const sec @@ at) secs @ [Call (0l @@ at) @@ at] *)
+
 let get t at =
   [], GlobalImport t @@ at, [GlobalGet (0l @@ at) @@ at]
 
@@ -327,6 +331,11 @@ let of_literal lit =
   | Values.F32 z -> of_float (F32.to_float z)
   | Values.F64 z -> of_float (F64.to_float z)
 
+let of_sec s =
+  match s.it with
+  | High h -> h
+  | Low l -> l
+
 let of_nan = function
   | CanonicalNan -> "nan:canonical"
   | ArithmeticNan -> "nan:arithmetic"
@@ -364,6 +373,16 @@ let of_action mods act =
       Some (of_wrapper mods x_opt name (invoke ft lits), out)
     | _ -> None
     )
+  | SymbExec (x_opt, name,secs) -> (*TODO(Romy)*)
+    "scall(" ^ of_var_opt mods x_opt ^ ", " ^ of_name name ^ ", " ^
+      "[" ^ String.concat ", " (List.map of_sec secs) ^ "])",
+    None
+    (* (match lookup mods x_opt name act.at with
+     * | ExternFuncType ft when not (is_js_func_type ft) ->
+     *   let FuncType (_, out) = ft in
+     *   Some (of_wrapper mods x_opt name (invoke ft lits), out)
+     * | _ -> None
+     * ) *)
   | Get (x_opt, name) ->
     "get(" ^ of_var_opt mods x_opt ^ ", " ^ of_name name ^ ")",
     (match lookup mods x_opt name act.at with

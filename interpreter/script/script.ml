@@ -6,8 +6,14 @@ and definition' =
   | Encoded of string * string
   | Quoted of string * string
 
+type security = security' Source.phrase
+and security' =
+  | High of string
+  | Low of string
+
 type action = action' Source.phrase
 and action' =
+  | SymbExec of var option * Ast.name * security list
   | Invoke of var option * Ast.name * Ast.literal list
   | Get of var option * Ast.name
 
@@ -29,6 +35,7 @@ and assertion' =
   | AssertReturn of action * result list
   | AssertTrap of action * string
   | AssertExhaustion of action * string
+
 
 type command = command' Source.phrase
 and command' =

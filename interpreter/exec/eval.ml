@@ -194,7 +194,7 @@ let rec step (c : config) : config =
         !(local frame x) :: vs, []
 
       | LocalSet x, v :: vs' ->
-        local frame x := v;
+         local frame x := v;
         vs', []
 
       | LocalTee x, v :: vs' ->
@@ -286,36 +286,36 @@ let rec step (c : config) : config =
       vs' @ vs, []
 
     | Label (n, es0, (vs', {it = Trapping msg; at} :: es')), vs ->
-      vs, [Trapping msg @@ at]
+       vs, [Trapping msg @@ at]
 
     | Label (n, es0, (vs', {it = Returning vs0; at} :: es')), vs ->
-      vs, [Returning vs0 @@ at]
+       vs, [Returning vs0 @@ at]
 
     | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es')), vs ->
-      take n vs0 e.at @ vs, List.map plain es0
+       take n vs0 e.at @ vs, List.map plain es0
 
     | Label (n, es0, (vs', {it = Breaking (k, vs0); at} :: es')), vs ->
-      vs, [Breaking (Int32.sub k 1l, vs0) @@ at]
+       vs, [Breaking (Int32.sub k 1l, vs0) @@ at]
 
     | Label (n, es0, code'), vs ->
-      let c' = step {c with code = code'} in
+       let c' = step {c with code = code'} in
       vs, [Label (n, es0, c'.code) @@ e.at]
 
     | Frame (n, frame', (vs', [])), vs ->
-      vs' @ vs, []
+       vs' @ vs, []
 
     | Frame (n, frame', (vs', {it = Trapping msg; at} :: es')), vs ->
-      vs, [Trapping msg @@ at]
+       vs, [Trapping msg @@ at]
 
     | Frame (n, frame', (vs', {it = Returning vs0; at} :: es')), vs ->
-      take n vs0 e.at @ vs, []
+       take n vs0 e.at @ vs, []
 
     | Frame (n, frame', code'), vs ->
-      let c' = step {frame = frame'; code = code'; budget = c.budget - 1} in
+       let c' = step {frame = frame'; code = code'; budget = c.budget - 1} in
       vs, [Frame (n, c'.frame, c'.code) @@ e.at]
 
     | Invoke func, vs when c.budget = 0 ->
-      Exhaustion.error e.at "call stack exhausted"
+       Exhaustion.error e.at "call stack exhausted"
 
     | Invoke func, vs ->
       let FuncType (ins, out) = func_type_of func in

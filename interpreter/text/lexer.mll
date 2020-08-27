@@ -136,6 +136,8 @@ let float =
 let string = '"' character* '"'
 let reserved = (letter | digit | '_' | symbol)+
 let name = '$' reserved
+let high = "h" (digit)*
+let low  = "l" (digit)*
 
 let ixx = "i" ("32" | "64")
 let fxx = "f" ("32" | "64")
@@ -350,6 +352,7 @@ rule token = parse
   | "script" { SCRIPT }
   | "register" { REGISTER }
   | "invoke" { INVOKE }
+  | "symbexec" { SYMBEXEC }
   | "get" { GET }
   | "assert_malformed" { ASSERT_MALFORMED }
   | "assert_invalid" { ASSERT_INVALID }
@@ -361,6 +364,9 @@ rule token = parse
   | "nan:arithmetic" { NAN Script.ArithmeticNan }
   | "input" { INPUT }
   | "output" { OUTPUT }
+
+  | high as s { SEC_HIGH s }
+  | low as s { SEC_LOW s }
 
   | name as s { VAR s }
 

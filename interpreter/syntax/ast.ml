@@ -66,6 +66,7 @@ type storeop = pack_size memop
 
 type var = int32 Source.phrase
 type literal = Values.value Source.phrase
+type secvar = string Source.phrase
 type name = int list
 
 type block_type = VarBlockType of var | ValBlockType of value_type option

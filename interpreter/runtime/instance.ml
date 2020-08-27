@@ -9,11 +9,21 @@ type module_inst =
   globals : global_inst list;
   exports : export_inst list;
 }
+and module_sinst =
+{
+  stypes : func_type list;
+  sfuncs : func_inst list;
+  stables : table_inst list;
+  smemories : memory_inst list;
+  sglobals : symbglobal_inst list;
+  sexports : export_inst list;
+}
 
 and func_inst = module_inst ref Func.t
 and table_inst = Table.t
 and memory_inst = Memory.t
 and global_inst = Global.t
+and symbglobal_inst = Symbglobal.t
 and export_inst = Ast.name * extern
 
 and extern =

@@ -39,6 +39,7 @@ let ati i =
 let literal f s =
   try f s with Failure _ -> error s.at "constant out of range"
 
+
 let nanop f nan =
   let open Source in
   let open Values in
@@ -174,7 +175,7 @@ let inline_type_explicit (c : context) x ft at =
 %token FUNC START TYPE PARAM RESULT LOCAL GLOBAL
 %token TABLE ELEM MEMORY DATA OFFSET IMPORT EXPORT TABLE
 %token MODULE BIN QUOTE
-%token SCRIPT REGISTER INVOKE GET
+%token SCRIPT REGISTER INVOKE SYMBEXEC GET
 %token ASSERT_MALFORMED ASSERT_INVALID ASSERT_SOFT_INVALID ASSERT_UNLINKABLE
 %token ASSERT_RETURN ASSERT_TRAP ASSERT_EXHAUSTION
 %token NAN
@@ -186,6 +187,9 @@ let inline_type_explicit (c : context) x ft at =
 %token<string> FLOAT
 %token<string> STRING
 %token<string> VAR
+%token<string> SEC_HIGH
+%token<string> SEC_LOW
+
 %token<Types.value_type> VALUE_TYPE
 %token<string Source.phrase -> Ast.instr' * Values.value> CONST
 %token<Ast.instr'> UNARY
@@ -852,6 +856,8 @@ script_module :
 action :
   | LPAR INVOKE module_var_opt name const_list RPAR
     { Invoke ($3, $4, $5) @@ at () }
+  | LPAR SYMBEXEC module_var_opt name sec_list RPAR
+    { SymbExec ($3, $4, $5) @@ at () }
   | LPAR GET module_var_opt name RPAR
     { Get ($3, $4) @@ at() }
 
@@ -891,6 +897,15 @@ const :
 const_list :
   | /* empty */ { [] }
   | const const_list { $1 :: $2 }
+
+
+sec:
+  | LPAR SEC_HIGH RPAR { (High $2) @@ at () }
+  | LPAR SEC_LOW RPAR { (Low $2) @@ at () }
+
+sec_list :
+  | /* empty */ { [] }
+  | sec sec_list { $1 :: $2 }
 
 result :
   | const { LitResult $1 @@ at () }
