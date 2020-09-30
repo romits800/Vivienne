@@ -279,6 +279,9 @@ let rec check_instr (c : context) (e : instr) (s : infer_stack_type) : op_type =
     let t = type_value v.it in
     [] --> [t]
 
+  | Sconst v ->
+     failwith "Valid: error Sconst."
+    
   | Test testop ->
     let t = type_testop testop in
     [t] --> [I32Type]

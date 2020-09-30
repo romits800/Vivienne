@@ -17,10 +17,12 @@ ZIP =		$(NAME).zip
 JSLIB =		wast.js
 WINMAKE =	winmake.bat
 
+#PACKAGE =       
+PACKAGE =       -package z3
 DIRS =		util syntax binary text valid runtime exec script host main
 LIBS =		bigarray
 FLAGS = 	-lexflags -ml -cflags '-w +a-4-27-42-44-45 -warn-error +a-3'
-OCB =		ocamlbuild $(FLAGS) $(DIRS:%=-I %) $(LIBS:%=-libs %)
+OCB =		ocamlbuild $(FLAGS) $(DIRS:%=-I %) $(LIBS:%=-libs %) ${PACKAGE}
 JS =		# set to JS shell command to run JS tests
 
 
@@ -50,6 +52,7 @@ comma =		,
 _tags:
 		echo >$@ "true: bin_annot"
 		echo >>$@ "true: debug"
+		echo >>$@ "true: package(z3)"
 		echo >>$@ "<{$(subst $(space),$(comma),$(DIRS))}/*.cmx>: for-pack($(PACK))"
 
 $(UNOPT):	main.byte
@@ -138,7 +141,7 @@ $(ZIP):		$(WINMAKE)
 		git archive --format=zip --prefix=$(NAME)/ -o $@ HEAD
 
 clean:
-		rm -rf _build/jslib $(LIB).mlpack _tags
+		rm -rf _build/jslib $(LIB).mlpack # _tags
 		$(OCB) -clean
 
 

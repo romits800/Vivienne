@@ -56,6 +56,12 @@ type testop = (I32Op.testop, I64Op.testop, F32Op.testop, F64Op.testop) Values.op
 type relop = (I32Op.relop, I64Op.relop, F32Op.relop, F64Op.relop) Values.op
 type cvtop = (I32Op.cvtop, I64Op.cvtop, F32Op.cvtop, F64Op.cvtop) Values.op
 
+(* type unop = (I32Op.unop, I64Op.unop, F32Op.unop, F64Op.unop) Values.op *)
+(* type sbinop = (I32Op.binop, I64Op.binop, F32Op.binop, F64Op.binop) Svalues.op *)
+(* type testop = (I32Op.testop, I64Op.testop, F32Op.testop, F64Op.testop) Values.op
+ * type relop = (I32Op.relop, I64Op.relop, F32Op.relop, F64Op.relop) Values.op
+ * type cvtop = (I32Op.cvtop, I64Op.cvtop, F32Op.cvtop, F64Op.cvtop) Values.op *)
+
 type 'a memop =
   {ty : value_type; align : int; offset : Memory.offset; sz : 'a option}
 type loadop = (pack_size * extension) memop
@@ -66,6 +72,7 @@ type storeop = pack_size memop
 
 type var = int32 Source.phrase
 type literal = Values.value Source.phrase
+type sliteral = Svalues.svalue Source.phrase
 type name = int list
 
 type block_type = VarBlockType of var | ValBlockType of value_type option
@@ -95,6 +102,7 @@ and instr' =
   | MemorySize                        (* size of linear memory *)
   | MemoryGrow                        (* grow linear memory *)
   | Const of literal                  (* constant *)
+  | Sconst of sliteral                (* symbolic constant *)
   | Test of testop                    (* numeric test *)
   | Compare of relop                  (* numeric comparison *)
   | Unary of unop                     (* unary numeric operator *)

@@ -1,7 +1,9 @@
 {
 open Parser
 open Operators
-
+open Soperators
+open Stypes
+   
 let convert_pos pos =
   { Source.file = pos.Lexing.pos_fname;
     Source.line = pos.Lexing.pos_lnum;
@@ -135,6 +137,8 @@ let float =
   | sign? "nan:" "0x" hexnum
 let string = '"' character* '"'
 let reserved = (letter | digit | '_' | symbol)+
+let high = "h" (digit)*
+let low  = "l" (digit)*
 let name = '$' reserved
 
 let ixx = "i" ("32" | "64")
@@ -172,6 +176,57 @@ rule token = parse
           f32_const (n @@ s.at), Values.F32 n)
         (fun s -> let n = F64.of_string s.it in
           f64_const (n @@ s.at), Values.F64 n))
+    }
+  | (nxx as t)".sconst"
+    { let open Source in
+      SCONST (numop t
+         (fun s ->
+           let n = 
+             (match s.it with
+              | High s ->
+                 let rem_head = String.sub s 1 ((String.length s) - 1) in
+                 let n = int_of_string rem_head in
+                 Si32.of_high n 
+              | Low s ->
+                 let rem_head = String.sub s 1 ((String.length s) - 1) in
+                 let n = int_of_string rem_head in
+                 Si32.of_low n 
+              | Nat s
+                | Int s
+                | Float s -> Si32.bv_of_int (Int32.to_int (I32.of_string s) ) 32
+             ) in i32_sconst (n @@ s.at), Svalues.SI32 n              
+         )
+         (fun s ->
+           let n = 
+             (match s.it with
+              | High s -> 
+                 let rem_head = String.sub s 1 ((String.length s) - 1) in
+                 let n = int_of_string rem_head in
+                 Si64.of_high n
+              | Low s -> 
+                 let rem_head = String.sub s 1 ((String.length s) - 1) in
+                 let n = int_of_string rem_head in
+                 Si64.of_low n
+              | Nat s
+                | Int s
+                | Float s -> Si64.bv_of_int (Int64.to_int (I64.of_string s) ) 64
+             ) in i64_sconst (n @@ s.at), Svalues.SI64 n              
+         )
+         (fun s ->
+           let n = 
+             (match s.it with
+              | Nat s | Int s | Float s -> F32.of_string s
+              | _ -> failwith "Not symbolic values for float suppoerted."
+             ) in f32_sconst (n @@ s.at), Svalues.SF32 n              
+         )
+         (fun s ->
+           let n = 
+             (match s.it with
+              | Nat s | Int s | Float s -> F64.of_string s
+              | _ -> failwith "Not symbolic values for float suppoerted."
+             ) in f64_sconst (n @@ s.at), Svalues.SF64 n              
+         ))
+
     }
   | "funcref" { FUNCREF }
   | "mut" { MUT }
@@ -350,6 +405,9 @@ rule token = parse
   | "script" { SCRIPT }
   | "register" { REGISTER }
   | "invoke" { INVOKE }
+
+  | "symb_exec" { SYMB_EXEC }
+  
   | "get" { GET }
   | "assert_malformed" { ASSERT_MALFORMED }
   | "assert_invalid" { ASSERT_INVALID }
@@ -362,6 +420,9 @@ rule token = parse
   | "input" { INPUT }
   | "output" { OUTPUT }
 
+  | high as s { SEC_HIGH s }
+  | low as s { SEC_LOW s }
+  
   | name as s { VAR s }
 
   | ";;"utf8_no_nl*eof { EOF }

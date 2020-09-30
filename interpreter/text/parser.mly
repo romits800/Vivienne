@@ -1,6 +1,7 @@
 %{
 open Source
 open Types
+open Stypes
 open Ast
 open Operators
 open Script
@@ -39,6 +40,9 @@ let ati i =
 let literal f s =
   try f s with Failure _ -> error s.at "constant out of range"
 
+let sliteral f s =
+  try f s with Failure _ -> error s.at "symbolic constant out of range"
+
 let nanop f nan =
   let open Source in
   let open Values in
@@ -59,6 +63,11 @@ let nat32 s at =
 let name s at =
   try Utf8.decode s with Utf8.Utf8 -> error at "malformed UTF-8 encoding"
 
+(* let sec s at =
+ *   try
+ *     let n = int_of_string s in
+ *     if n >= 0 then n else raise (Failure "")
+ *   with Failure _ -> error at "integer constant out of range" *)
 
 (* Symbolic variables *)
 
@@ -169,12 +178,12 @@ let inline_type_explicit (c : context) x ft at =
 %token CALL CALL_INDIRECT RETURN
 %token LOCAL_GET LOCAL_SET LOCAL_TEE GLOBAL_GET GLOBAL_SET
 %token LOAD STORE OFFSET_EQ_NAT ALIGN_EQ_NAT
-%token CONST UNARY BINARY TEST COMPARE CONVERT
+%token SCONST CONST UNARY BINARY TEST COMPARE CONVERT
 %token UNREACHABLE MEMORY_SIZE MEMORY_GROW
 %token FUNC START TYPE PARAM RESULT LOCAL GLOBAL
 %token TABLE ELEM MEMORY DATA OFFSET IMPORT EXPORT TABLE
 %token MODULE BIN QUOTE
-%token SCRIPT REGISTER INVOKE GET
+%token SCRIPT REGISTER INVOKE GET SYMB_EXEC
 %token ASSERT_MALFORMED ASSERT_INVALID ASSERT_SOFT_INVALID ASSERT_UNLINKABLE
 %token ASSERT_RETURN ASSERT_TRAP ASSERT_EXHAUSTION
 %token NAN
@@ -186,8 +195,11 @@ let inline_type_explicit (c : context) x ft at =
 %token<string> FLOAT
 %token<string> STRING
 %token<string> VAR
+%token<string> SEC_HIGH
+%token<string> SEC_LOW
 %token<Types.value_type> VALUE_TYPE
 %token<string Source.phrase -> Ast.instr' * Values.value> CONST
+%token<Stypes.sec_type Source.phrase -> Ast.instr' * Svalues.svalue> SCONST
 %token<Ast.instr'> UNARY
 %token<Ast.instr'> BINARY
 %token<Ast.instr'> TEST
@@ -269,6 +281,14 @@ literal :
   | INT { $1 @@ at () }
   | FLOAT { $1 @@ at () }
 
+sliteral :
+  | SEC_HIGH { High $1 @@ at () }
+  | SEC_LOW { Low  $1 @@ at () }
+  | NAT { Nat $1 @@ at () }
+  | INT { Int $1 @@ at () }
+  | FLOAT { Float $1 @@ at () }
+
+      
 var :
   | NAT { let at = at () in fun c lookup -> nat32 $1 at @@ at }
   | VAR { let at = at () in fun c lookup -> lookup c ($1 @@ at) @@ at }
@@ -850,6 +870,8 @@ script_module :
     { $3, Quoted ("quote", $5) @@ at() }
 
 action :
+  | LPAR SYMB_EXEC module_var_opt name symb_list RPAR
+    { Symb_exec ($3, $4, $5) @@ at () }
   | LPAR INVOKE module_var_opt name const_list RPAR
     { Invoke ($3, $4, $5) @@ at () }
   | LPAR GET module_var_opt name RPAR
@@ -884,6 +906,14 @@ meta :
   | LPAR INPUT script_var_opt STRING RPAR { Input ($3, $4) @@ at () }
   | LPAR OUTPUT script_var_opt STRING RPAR { Output ($3, Some $4) @@ at () }
   | LPAR OUTPUT script_var_opt RPAR { Output ($3, None) @@ at () }
+
+
+symb :
+  | LPAR SCONST sliteral RPAR { snd (sliteral $2 $3) @@ ati 3 }
+
+symb_list :
+  | /* empty */ { [] }
+  | symb symb_list { $1 :: $2 }
 
 const :
   | LPAR CONST literal RPAR { snd (literal $2 $3) @@ ati 3 }

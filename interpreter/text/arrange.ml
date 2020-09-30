@@ -260,6 +260,7 @@ let rec instr e =
     | Unary op -> unop op, []
     | Binary op -> binop op, []
     | Convert op -> cvtop op, []
+    | Sconst _ -> failwith "Arrange: Sconst should not appear here."
   in Node (head, inner)
 
 let const c =
@@ -431,6 +432,8 @@ let action mode act =
     Node ("invoke" ^ access x_opt name, List.map (literal mode) lits)
   | Get (x_opt, name) ->
     Node ("get" ^ access x_opt name, [])
+  | Symb_exec (x_opt, name, slits) ->
+     failwith "Arrange: error symb exec."
 
 let nan = function
   | CanonicalNan -> "nan:canonical"

@@ -97,7 +97,9 @@ let error at category msg =
   false
 
 let input_from get_script run =
+  trace "Input_from...";
   try
+    trace "Try...";
     let script = get_script () in
     trace "Running...";
     run script;
@@ -117,6 +119,7 @@ let input_from get_script run =
   | Abort _ -> false
 
 let input_script start name lexbuf run =
+  trace "Input_script...";
   input_from (fun _ -> Parse.parse name lexbuf start) run
 
 let input_sexpr name lexbuf run =
@@ -325,8 +328,18 @@ let run_action act : Values.value list =
     trace ("Invoking function \"" ^ Ast.string_of_name name ^ "\"...");
     let inst = lookup_instance x_opt act.at in
     (match Instance.export inst name with
+    (* | Some (Instance.ExternFunc f) -> *)
+      (* Eval.invoke f (List.map (fun v -> v.it) vs) *)
+    | Some _ -> Assert.error act.at "export is not a function"
+    | None -> Assert.error act.at "undefined export"
+    )
+  | Symb_exec (x_opt, name, vs) ->
+    trace ("Symbolically executing function \"" ^ Ast.string_of_name name ^ "\"...");
+    let inst = lookup_instance x_opt act.at in
+    (match Instance.export inst name with
     | Some (Instance.ExternFunc f) ->
-      Eval.invoke f (List.map (fun v -> v.it) vs)
+       let _ = Eval.invoke f (List.map (fun v -> v.it) vs) in
+       []
     | Some _ -> Assert.error act.at "export is not a function"
     | None -> Assert.error act.at "undefined export"
     )
@@ -335,7 +348,8 @@ let run_action act : Values.value list =
     trace ("Getting global \"" ^ Ast.string_of_name name ^ "\"...");
     let inst = lookup_instance x_opt act.at in
     (match Instance.export inst name with
-    | Some (Instance.ExternGlobal gl) -> [Global.load gl]
+     (* | Some (Instance.ExternGlobal gl) -> [Global.load gl] *)
+     | Some (Instance.ExternGlobal gl) -> Assert.error act.at "run_action: unimplemented"
     | Some _ -> Assert.error act.at "export is not a global"
     | None -> Assert.error act.at "undefined export"
     )

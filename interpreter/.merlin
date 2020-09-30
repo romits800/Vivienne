@@ -1,12 +1,27 @@
+PKG z3
+
 S binary
+S runtime
 S exec
 S host
 S main
-S runtime
 S script
 S syntax
 S text
 S util
 S valid
 
-B _build/*
+
+B _build/
+B _build/binary
+B _build/runtime
+B _build/ct-rewrite
+B _build/exec
+B _build/host
+B _build/main
+B _build/script
+B _build/syntax
+B _build/text
+B _build/util
+B _build/valid
+
