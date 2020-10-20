@@ -2,7 +2,7 @@
 open Parser
 open Operators
 open Soperators
-open Stypes
+open Types
    
 let convert_pos pos =
   { Source.file = pos.Lexing.pos_fname;
@@ -153,6 +153,10 @@ rule token = parse
   | "(" { LPAR }
   | ")" { RPAR }
 
+  | "[" { LSBR }
+  | "]" { RSBR }
+  | "," { COMMA }
+
   | nat as s { NAT s }
   | int as s { INT s }
   | float as s { FLOAT s }
@@ -184,13 +188,13 @@ rule token = parse
            let n = 
              (match s.it with
               | High s ->
-                 let rem_head = String.sub s 1 ((String.length s) - 1) in
-                 let n = int_of_string rem_head in
-                 Si32.of_high n 
+                 (* let rem_head = String.sub s 1 ((String.length s) - 1) in *)
+                 (* let n = int_of_string rem_head in *)
+                 Si32.of_high () 
               | Low s ->
-                 let rem_head = String.sub s 1 ((String.length s) - 1) in
-                 let n = int_of_string rem_head in
-                 Si32.of_low n 
+                 (* let rem_head = String.sub s 1 ((String.length s) - 1) in *)
+                 (* let n = int_of_string rem_head in *)
+                 Si32.of_low ()
               | Nat s
                 | Int s
                 | Float s -> Si32.bv_of_int (Int32.to_int (I32.of_string s) ) 32
@@ -200,13 +204,13 @@ rule token = parse
            let n = 
              (match s.it with
               | High s -> 
-                 let rem_head = String.sub s 1 ((String.length s) - 1) in
-                 let n = int_of_string rem_head in
-                 Si64.of_high n
+                 (* let rem_head = String.sub s 1 ((String.length s) - 1) in *)
+                 (* let n = int_of_string rem_head in *)
+                 Si64.of_high ()
               | Low s -> 
-                 let rem_head = String.sub s 1 ((String.length s) - 1) in
-                 let n = int_of_string rem_head in
-                 Si64.of_low n
+                 (* let rem_head = String.sub s 1 ((String.length s) - 1) in *)
+                 (* let n = int_of_string rem_head in *)
+                 Si64.of_low ()
               | Nat s
                 | Int s
                 | Float s -> Si64.bv_of_int (Int64.to_int (I64.of_string s) ) 64
@@ -394,6 +398,7 @@ rule token = parse
   | "memory" { MEMORY }
   | "elem" { ELEM }
   | "data" { DATA }
+  | "secret" { SECRET }
   | "offset" { OFFSET }
   | "import" { IMPORT }
   | "export" { EXPORT }

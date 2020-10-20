@@ -9,17 +9,61 @@ type 'a limits = {min : 'a; max : 'a option}
 type mutability = Immutable | Mutable
 type table_type = TableType of Int32.t limits * elem_type
 type memory_type = MemoryType of Int32.t limits
+(* type memory_type = MemoryType of Int32.t limits *)
+(* Symbolic types *)
+
+type svalue_type = SI32Type | SI64Type | SF32Type | SF64Type
+type smemory_type = SmemoryType of Int32.t limits
+
 type global_type = GlobalType of value_type * mutability
 type extern_type =
   | ExternFuncType of func_type
   | ExternTableType of table_type
   | ExternMemoryType of memory_type
+  | ExternSmemoryType of smemory_type
   | ExternGlobalType of global_type
 
 type pack_size = Pack8 | Pack16 | Pack32
 type extension = SX | ZX
 
 
+
+(* Symbolic types *)
+
+type sec_type =   High of string | Low of string
+                | Nat of string | Int of string | Float of string 
+
+
+let value_to_svalue_type = function
+  | I32Type -> SI32Type
+  | I64Type -> SI64Type
+  | F32Type -> SF32Type
+  | F64Type -> SF64Type
+(* Attributes *)
+
+let ssize = function
+  | SI32Type | SF32Type -> 4
+  | SI64Type | SF64Type -> 8
+
+(* String conversion *)
+
+let string_of_svalue_type = function
+  | SI32Type -> "si32"
+  | SI64Type -> "si64"
+  | SF32Type -> "sf32"
+  | SF64Type -> "sf64"
+
+let string_of_svalue_types = function
+  | [t] -> string_of_svalue_type t
+  | ts -> "[" ^ String.concat " " (List.map string_of_svalue_type ts) ^ "]"
+
+
+let string_of_sstack_type ts =
+  "[" ^ String.concat " " (List.map string_of_svalue_type ts) ^ "]"
+
+
+(* HERE *)
+                    
 (* Attributes *)
 
 let size = function
@@ -70,6 +114,8 @@ let tables =
   Lib.List.map_filter (function ExternTableType t -> Some t | _ -> None)
 let memories =
   Lib.List.map_filter (function ExternMemoryType t -> Some t | _ -> None)
+let smemories =
+  Lib.List.map_filter (function ExternSmemoryType t -> Some t | _ -> None)
 let globals =
   Lib.List.map_filter (function ExternGlobalType t -> Some t | _ -> None)
 
@@ -93,8 +139,12 @@ let string_of_limits {min; max} =
   I32.to_string_u min ^
   (match max with None -> "" | Some n -> " " ^ I32.to_string_u n)
 
+
 let string_of_memory_type = function
   | MemoryType lim -> string_of_limits lim
+
+let string_of_smemory_type = function
+  | SmemoryType lim -> string_of_limits lim
 
 let string_of_table_type = function
   | TableType (lim, t) -> string_of_limits lim ^ " " ^ string_of_elem_type t
@@ -113,4 +163,5 @@ let string_of_extern_type = function
   | ExternFuncType ft -> "func " ^ string_of_func_type ft
   | ExternTableType tt -> "table " ^ string_of_table_type tt
   | ExternMemoryType mt -> "memory " ^ string_of_memory_type mt
+  | ExternSmemoryType mt -> "smemory " ^ string_of_smemory_type mt
   | ExternGlobalType gt -> "global " ^ string_of_global_type gt

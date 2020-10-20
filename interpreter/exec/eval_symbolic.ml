@@ -1,4 +1,4 @@
-open Stypes
+open Types
 open Svalues
 (* open Values *)
 
@@ -38,8 +38,8 @@ struct
       | DivU -> IXX.div_u
       | RemS -> IXX.rem_s
       | RemU -> IXX.rem_u
-      | And -> IXX.and_
-      | Or -> IXX.or_
+      | And -> IXX.band
+      | Or -> IXX.bor
       | Xor -> IXX.xor
       | Shl -> IXX.shl
       | ShrU -> IXX.shr_u
@@ -66,6 +66,7 @@ struct
       | GeS -> IXX.ge_s
       | GeU -> IXX.ge_u
     in fun v1 v2 -> to_value (f (of_value 1 v1) (of_value 2 v2))
+
 end
 
 module SI32Op = IntOp (Si32) (Svalues.SI32Value)
@@ -210,3 +211,44 @@ let eval_binop = op SI32Op.binop SI64Op.binop SF32Op.binop SF64Op.binop
 let eval_testop = op SI32Op.testop SI64Op.testop SF32Op.testop SF64Op.testop
 let eval_relop = op SI32Op.relop SI64Op.relop SF32Op.relop SF64Op.relop
 let eval_cvtop = op I32CvtOp.cvtop I64CvtOp.cvtop F32CvtOp.cvtop F64CvtOp.cvtop
+
+
+
+
+let eval_load ty ad i =
+  match ty,ad with 
+  | I32Type, SI32 a -> SI32 (Si32.load a i)
+  | I64Type, SI32 a -> SI64 (Si64.load a i)
+  | _ -> failwith "Floats not implemented."
+
+
+let eval_store ty ad sv i =
+  match ty,ad,sv with 
+  | I32Type, SI32 a, SI32 v -> SI32 (Si32.store a v i)
+  | I64Type, SI32 a, SI64 v -> SI64 (Si64.store a v i)
+  | _ -> failwith "Floats not implemented."
+
+
+let create_new_hstore a =
+  let value = Si32.of_high() in
+  let index = Si32.bv_of_int a 32 in
+  let st = SI32 (Si32.store index value 0) in
+  st
+
+let create_new_lstore a =
+  let value = Si32.of_low() in
+  let index = Si32.bv_of_int a 32 in
+  let st = SI32 (Si32.store index value 0) in
+  st
+
+    (* match ty,ad,sv with 
+   * | I32Type, SI32 a, SI32 v -> SI32 (Si32.store a v i)
+   * | I64Type, SI32 a, SI64 v -> SI64 (Si64.store a v i)
+   * | _ -> failwith "Floats not implemented." *)
+
+
+(* let calc_address ty sv i =
+ *   match ty with 
+ *   | I32Type -> SI32 (Si32.load sv i)
+ *   | I64Type -> SI64 (Si64.load sv i)
+ *   | _ -> failwith "Floats not implemented." *)

@@ -31,6 +31,8 @@ sig
   val nth : 'a list -> int32 -> 'a (* raises Failure *)
   val take : int32 -> 'a list -> 'a list (* raises Failure *)
   val drop : int32 -> 'a list -> 'a list (* raises Failure *)
+  val replace : int32 -> 'a -> 'a list -> 'a list
+  val insert : 'a -> 'a list -> 'a list
 end
 
 module Array32 :

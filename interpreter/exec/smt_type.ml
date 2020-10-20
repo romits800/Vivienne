@@ -4,7 +4,7 @@ type identifier =
 type func =
   | Id of string
 
-  | Eq | And | Or
+  | Eq  | And | Or 
   | Ite | Not
 
   | Implies
@@ -16,7 +16,7 @@ type func =
   | BvURem | BvSRem | BvSMod | BvDiv
   | BvShl | BvLShr | BvAShr
                    
-  | BvOr | BvAnd | BvNand | BvNor | BvXNor
+  | BvOr | BvAnd | BvNand | BvNor | BvXNor | BvXor
   | BvNeg | BvNot
   | BvUle | BvUlt
   | BvSle | BvSlt 
@@ -35,6 +35,11 @@ type term =
   | Float of float
   | BitVec of int * int (* bool + number of bits *)
   | Const of identifier
+  | Multi of term list * identifier * int (* term list, high/low, number_of_elements *)
+  (* index in memory and index of memory - because we cannot have the memory here*)
+  | Load of term * int
+  | Store of term * term * int (* address, value, memory *) 
+  (* | Load of Smemory.t * term (\* memory, index *\) *)
   | App of func * term list
   | Let of string * term * term
 
@@ -43,23 +48,67 @@ type check_sat_result =
   | Unsat
   | Unknown
 
+let curr_num = ref 0
+
+let new_const () =
+  curr_num := !curr_num + 1;
+  !curr_num
+
 (* val int_sort : sort
  * 
  * val bool_sort : sort
  * 
  * val array_sort : sort -> sort -> sort *)
 
-let zero = Int 0
+let zero = BitVec (0, 1)
 let one = Int 1
          
 let int_to_intterm i = Int i
 let int_to_bvterm i n = BitVec (i,n)
 let float_to_term f = Float f
 
-let high_to_term i = Const (High i)
-let low_to_term i = Const (Low i)
-                   
+  
+let rec is_high =
+  function
+  | Const (High _)
+    | Multi(_, High _, _) -> true
+  | App (f, t::ts) -> is_high_all ts
+  | Let (str, t1, t2) -> is_high t1 || is_high t2
+  | _ -> false
 
+and is_high_all = function
+  | h::hs ->
+     if is_high h then true else is_high_all hs
+  | [] -> false
+
+
+        
+let is_low l =
+  not (is_high l)
+
+let is_int = function
+  | Int _
+    | BitVec _ -> true
+  | _ -> false
+
+let get_high () =
+  let newc = new_const() in
+  High newc
+
+let get_low () =
+  let newc = new_const() in
+  Low newc
+                    
+let high_to_term () =
+  Const (get_high())
+  
+let low_to_term () =
+  Const (get_low())
+                   
+let list_to_term ts =
+  let id = if is_high_all ts then get_high () else get_low () in
+  Multi(ts, id, List.length ts)
+  
 let term_to_int i =
   match i with
   | Int i -> i
@@ -76,6 +125,8 @@ let bool_to_term b =  if b then BitVec (1, 1) else BitVec (0, 1)
    *   | t, App(Eq, ts) -> App(Eq, t::ts)
    * | _, _-> App(Eq, [t1;t2]) *)
 
+let load t i = Load(t, i)
+let store t vt i = Store(t, vt, i) 
 
 let and_ t1 t2 =
   match t1, t2 with
@@ -136,22 +187,22 @@ let gte t1 t2 = App(Gte, [t1;t2])
 
 let bv i nb = BitVec(i, nb)
 
-let bvadd t1 t2 =
-    match t1, t2 with
-    | App (BvAdd, ts1), App (BvAdd, ts2) -> App (BvAdd, ts1 @ ts2)
-    | App (BvAdd, ts), t
-      | t, App (BvAdd, ts) -> App (BvAdd, t::ts)
-    | _, _-> App (BvAdd, [t1;t2])
+let bvadd t1 t2 = App (BvAdd, [t1; t2])
+    (* match t1, t2 with
+     * | App (BvAdd, ts1), App (BvAdd, ts2) -> App (BvAdd, ts1 @ ts2)
+     * | App (BvAdd, ts), t
+     *   | t, App (BvAdd, ts) -> App (BvAdd, t::ts)
+     * | _, _-> App (BvAdd, [t1;t2]) *)
 
 
 let bvsub t1 t2 = App (BvSub, [t1;t2])
 
-let bvmul t1 t2 =
-    match t1, t2 with
-    | App (BvMul, ts1), App (BvMul, ts2) -> App (BvMul, ts1 @ ts2)
-    | App (BvMul, ts), t
-      | t, App (BvMul, ts) -> App (BvMul, t::ts)
-    | _, _-> App (BvMul, [t1;t2])
+let bvmul t1 t2 = App (BvMul, [t1;t2])
+    (* match t1, t2 with
+     * | App (BvMul, ts1), App (BvMul, ts2) -> App (BvMul, ts1 @ ts2)
+     * | App (BvMul, ts), t
+     *   | t, App (BvMul, ts) -> App (BvMul, t::ts)
+     * | _, _-> App (BvMul, [t1;t2]) *)
 
 
 let bvurem t1 t2 = App (BvURem, [t1;t2])
@@ -171,6 +222,7 @@ let bvand t1 t2 = App (BvAnd, [t1;t2])
 let bvnand t1 t2 = App (BvNand, [t1;t2])
 let bvnor t1 t2 = App (BvNor, [t1;t2])
 let bvxnor t1 t2 = App (BvXNor, [t1;t2])
+let bvxor t1 t2 = App (BvXor, [t1;t2])
 let bvneg t1 = App (BvNeg, [t1])
 let bvnot t1 = App (BvNot, [t1])
                 
@@ -221,6 +273,7 @@ let func_to_string func =
   | BvOr -> "BvOr"
   | BvAnd -> "BvAnd"
   | BvNand -> "BvNand"
+  | BvXor -> "BvXor"
   | BvNor -> "BvNor"
   | BvXNor -> "BvXNor"
   | BvNeg  -> "BvNeg"
@@ -237,6 +290,8 @@ let func_to_string func =
            
 let rec term_to_string t =
   match t with
+  | Load (i, index) -> "Mem[" ^ term_to_string i ^ "]"
+  | Store (i, v, index) -> "Mem[" ^ term_to_string i ^ "] = " ^ term_to_string v
   | String s -> s
   | Int i -> string_of_int i
   | Float f ->  string_of_float f
@@ -245,3 +300,6 @@ let rec term_to_string t =
   | App (f, ts) -> func_to_string f ^ " (" ^
                      List.fold_left (fun acc -> fun t -> acc ^ term_to_string t ^ ",") "" ts ^ ")" 
   | Let (st, t1, t2) -> "let " ^ st ^ "=" ^ term_to_string t1 ^ "in" ^ term_to_string t2
+  | Multi (ts, id, n) ->
+     let terms = List.fold_left (fun acc -> fun t -> acc ^ term_to_string t ^ ",") "" ts in
+     "Multi( " ^ terms ^ "," ^ identifier_to_string id ^ "," ^ string_of_int n ^ ")"

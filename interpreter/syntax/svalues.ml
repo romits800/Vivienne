@@ -1,4 +1,4 @@
-open Stypes
+open Types
 
 
 (* Values and operators *)

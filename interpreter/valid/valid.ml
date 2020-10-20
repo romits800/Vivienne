@@ -20,6 +20,7 @@ type context =
   funcs : func_type list;
   tables : table_type list;
   memories : memory_type list;
+  smemories : smemory_type list;
   globals : global_type list;
   locals : value_type list;
   results : value_type list;
@@ -28,6 +29,7 @@ type context =
 
 let empty_context =
   { types = []; funcs = []; tables = []; memories = [];
+    smemories = [];
     globals = []; locals = []; results = []; labels = [] }
 
 let lookup category list x =
@@ -440,6 +442,9 @@ let check_import (im : import) (c : context) : context =
   | MemoryImport mt ->
     check_memory_type mt idesc.at;
     {c with memories = mt :: c.memories}
+  | SmemoryImport mt ->
+    (* check_memory_type mt idesc.at; *)
+    {c with smemories = mt :: c.smemories}
   | GlobalImport gt ->
     check_global_type gt idesc.at;
     {c with globals = gt :: c.globals}
@@ -452,6 +457,7 @@ let check_export (c : context) (set : NameSet.t) (ex : export) : NameSet.t =
   | FuncExport x -> ignore (func c x)
   | TableExport x -> ignore (table c x)
   | MemoryExport x -> ignore (memory c x)
+  | SmemoryExport x -> failwith "valid.ml: Not implemented"
   | GlobalExport x -> ignore (global c x)
   );
   require (not (NameSet.mem name set)) ex.at "duplicate export name";
@@ -459,8 +465,9 @@ let check_export (c : context) (set : NameSet.t) (ex : export) : NameSet.t =
 
 let check_module (m : module_) =
   let
-    { types; imports; tables; memories; globals; funcs; start; elems; data;
-      exports } = m.it
+    { types; imports; tables; memories; smemories;
+      globals; funcs; start; 
+      elems; data; exports; secrets } = m.it
   in
   let c0 =
     List.fold_right check_import imports

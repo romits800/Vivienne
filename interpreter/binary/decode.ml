@@ -1,5 +1,6 @@
 (* Decoding stream *)
-
+open Source
+   
 type stream =
 {
   name : string;
@@ -15,12 +16,12 @@ let len s = String.length s.bytes
 let pos s = !(s.pos)
 let eos s = (pos s = len s)
 
-let check n s = if pos s + n > len s then raise EOS
+let check n s =   if pos s + n > len s then raise EOS
 let skip n s = if n < 0 then raise EOS else check n s; s.pos := !(s.pos) + n
 
 let read s = Char.code (s.bytes.[!(s.pos)])
 let peek s = if eos s then None else Some (read s)
-let get s = check 1 s; let b = read s in skip 1 s; b
+let get s =  check 1 s; let b = read s in skip 1 s; b
 let get_string n s = let i = pos s in skip n s; String.sub s.bytes i n
 
 
@@ -38,8 +39,7 @@ let region s left right =
 let error s pos msg = raise (Code (region s pos pos, msg))
 let require b s pos msg = if not b then error s pos msg
 
-let guard f s =
-  try f s with EOS -> error s (len s) "unexpected end of section or function"
+let guard f s = try f s with EOS -> error s (len s) "unexpected end of section or function"
 
 let get = guard get
 let get_string n = guard (get_string n)
@@ -167,7 +167,12 @@ let table_type s =
 
 let memory_type s =
   let lim = limits vu32 s in
+  (MemoryType lim, SmemoryType lim)
+
+let memory_type_m s =
+  let lim = limits vu32 s in
   MemoryType lim
+
 
 let mutability s =
   match u8 s with
@@ -517,7 +522,7 @@ let import_desc s =
   match u8 s with
   | 0x00 -> FuncImport (at var s)
   | 0x01 -> TableImport (table_type s)
-  | 0x02 -> MemoryImport (memory_type s)
+  | 0x02 -> MemoryImport (memory_type_m s)
   | 0x03 -> GlobalImport (global_type s)
   | _ -> error s (pos s - 1) "malformed import kind"
 
@@ -550,11 +555,12 @@ let table_section s =
 (* Memory section *)
 
 let memory s =
-  let mtype = memory_type s in
-  {mtype}
+  let mtype,smtype = memory_type s in
+  ({mtype}, {smtype})
 
 let memory_section s =
   section `MemorySection (vec (at memory)) [] s
+
 
 
 (* Global section *)
@@ -655,6 +661,10 @@ let custom_section s =
 
 let rec iterate f s = if f s then iterate f s
 
+let map_mem ms =
+  let m,s = ms.it in
+  (m @@ ms.at, s @@ ms.at)
+  
 let module_ s =
   let magic = u32 s in
   require (magic = 0x6d736100l) s 0 "magic header not detected";
@@ -669,7 +679,7 @@ let module_ s =
   iterate custom_section s;
   let tables = table_section s in
   iterate custom_section s;
-  let memories = memory_section s in
+  let memories, smemories = memory_section s |> List.map map_mem |> List.split in  
   iterate custom_section s;
   let globals = global_section s in
   iterate custom_section s;
@@ -689,7 +699,8 @@ let module_ s =
   let funcs =
     List.map2 Source.(fun t f -> {f.it with ftype = t} @@ f.at)
       func_types func_bodies
-  in {types; tables; memories; globals; funcs; imports; exports; elems; data; start}
+  in {types; tables; memories; smemories;
+      globals; funcs; imports; exports; elems; data; start; secrets = []}
 
 
-let decode name bs = at module_ (stream name bs)
+let decode name bs =  at module_ (stream name bs)

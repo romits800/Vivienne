@@ -25,6 +25,14 @@ exception Exhaustion = Exhaustion.Error
  *   | Memory.Type -> Crash.error at "type mismatch at memory access"
  *   | exn -> raise exn *)
 
+(*TODO(Romy): implement *)
+(* let smemory_error at = function *)
+  (* | Memory.Bounds -> "out of bounds memory access"
+   * | Memory.SizeOverflow -> "memory size overflow"
+   * | Memory.SizeLimit -> "memory size limit reached"
+   * | Memory.Type -> Crash.error at "type mismatch at memory access" *)
+  (* | exn -> raise exn *)
+
 let numeric_error at = function
   | Numeric_error.IntegerOverflow -> "integer overflow"
   | Numeric_error.IntegerDivideByZero -> "integer divide by zero"
@@ -65,10 +73,16 @@ type config =
   code : code;
   budget : int;  (* to model stack overflow *)
   pc : pc;  (* to model path condition *)
+  msecrets : secret_type list 
+  (* secret_reg : (int32 * int32) list *)
 }
+and
+secret_type = I32.t * I32.t
 
 let frame inst locals = {inst; locals}
-let config inst vs es = {frame = frame inst []; code = vs, es; budget = 300; pc = PCTrue}
+let config inst vs es sr =
+  {frame = frame inst []; code = vs, es; budget = 300;
+   pc = PCTrue; msecrets = sr}
 
 let plain e = Plain e.it @@ e.at
 
@@ -80,8 +94,24 @@ let type_ (inst : module_inst) x = lookup "type" inst.types x
 let func (inst : module_inst) x = lookup "function" inst.funcs x
 let table (inst : module_inst) x = lookup "table" inst.tables x
 let memory (inst : module_inst) x = lookup "memory" inst.memories x
+let smemory (inst : module_inst) x = lookup "smemory" inst.smemories x
+let smemlen (inst : module_inst) =  inst.smemlen
 let global (inst : module_inst) x = lookup "global" inst.globals x
 let local (frame : frame) x = lookup "local" frame.locals x
+
+let update_smemory (inst : module_inst) (mem : Instance.smemory_inst)
+      (x : int32 Source.phrase)  = 
+  try
+    {inst with smemories = Lib.List32.replace x.it mem inst.smemories}
+  with Failure _ ->
+    Crash.error x.at ("undefined smemory " ^ Int32.to_string x.it)
+
+let insert_smemory (inst : module_inst) (mem : Instance.smemory_inst)  = 
+  try
+    {inst with smemories = Lib.List32.insert mem inst.smemories;
+               smemlen = inst.smemlen + 1 }
+  with Failure _ ->
+    failwith "insert memory"
 
 (* let elem inst x i at =
  *   match Table.load (table inst x) i with
@@ -129,8 +159,37 @@ let split_condition (sv : svalue) (pc : pc): pc * pc =
     | SF32 vf32 -> PCAnd( SF32 ( F32.neg vf32), pc)
     | SF64 vf64 -> PCAnd( SF64 ( F64.neg vf64), pc)
   in
-  (pc', pc'')
-  
+  (pc'', pc')
+
+let split_msec (sv : svalue) (msec : (I32.t * I32.t) list ) (pc : pc) : pc * pc =  
+  (* let pc' = PCAnd (sv, pc) in
+   * let pc'' = *)
+  let rec within_hrange sv msec =
+    match msec with
+    | [] -> Si32.eq Si32.zero Si32.zero
+    | (lo, hi)::[] ->
+       let hrange = Si32.le_u sv (Si32.of_int32 hi) in
+       let lrange = Si32.ge_u sv (Si32.of_int32 lo) in
+       Si32.and_ hrange lrange
+       (* PCAnd(sv, pc) *)
+    | (lo, hi)::msecs ->
+       let hrange = Si32.le_u sv (Si32.of_int32 hi) in
+       let lrange = Si32.ge_u sv (Si32.of_int32 lo) in
+       let hl = Si32.and_ hrange lrange in
+       Si32.or_ hl (within_hrange sv msecs)
+ 
+  in
+    match sv with
+    | SI32 vi32 ->
+       let hrange = within_hrange vi32 msec in
+       let lrange = Si32.not_ hrange in
+       (PCAnd (SI32 hrange, pc), PCAnd (SI32 lrange, pc))
+    | _ -> failwith "Address should be 32bit integer"
+
+
+(* in *)
+  (* (pc', pc'') *)
+
 let select_condition v0 v1 v2 = (* (v0: svalue  v1: svalue): svalue = *)
   match v0, v1, v2 with
   (* v0 :: v2 :: v1 :: vs' -> *)
@@ -146,11 +205,12 @@ let select_condition v0 v1 v2 = (* (v0: svalue  v1: svalue): svalue = *)
 (*
  * Conventions:
  *   e  : instr
- *   v  : value
+ *   v  : svalue
  *   es : instr list
- *   vs : value stack
+ *   vs : svalue stack
  *   c : config
  *)
+(*TODO(Romy): Implement debug flag etc*)
 
 let rec step (c : config) : config list =
   let {frame; code = vs, es; pc; _} = c in
@@ -159,292 +219,431 @@ let rec step (c : config) : config list =
   let res =
     match e.it, vs with
     | Plain e', vs ->
-       print_endline "plain";
-      (match e', vs with
-       | Unreachable, vs ->
-          let vs', es' = vs, [Trapping "unreachable executed" @@ e.at] in
-          [{c with code = vs', es' @ List.tl es}]
-       | Nop, vs ->
-          print_endline "nop";
-          let vs', es' = vs, [] in
-          [{c with code = vs', es' @ List.tl es}]
-       | Block (bt, es'), vs ->
-          print_endline "block";
-          let FuncType (ts1, ts2) = block_type frame.inst bt in
-          let n1 = Lib.List32.length ts1 in
-          let n2 = Lib.List32.length ts2 in
-          let args, vs' = take n1 vs e.at, drop n1 vs e.at in
-          let vs', es' = vs', [Label (n2, [], (args, List.map plain es')) @@ e.at] in
-          [{c with code = vs', es' @ List.tl es}]
-      | Loop (bt, es'), vs ->
-        let FuncType (ts1, ts2) = block_type frame.inst bt in
-        let n1 = Lib.List32.length ts1 in
-        let args, vs' = take n1 vs e.at, drop n1 vs e.at in
-        let vs', es' = vs', [Label (n1, [e' @@ e.at], (args, List.map plain es')) @@ e.at] in
-        [{c with code = vs', es' @ List.tl es}]
+       (match e', vs with
+        | Unreachable, vs ->
+           let vs', es' = vs, [Trapping "unreachable executed" @@ e.at] in
+           [{c with code = vs', es' @ List.tl es}]
+        | Nop, vs ->
+           (* print_endline "nop"; *)
+           let vs', es' = vs, [] in
+           [{c with code = vs', es' @ List.tl es}]
+        | Block (bt, es'), vs ->
+           (* print_endline "block"; *)
+           let FuncType (ts1, ts2) = block_type frame.inst bt in
+           let n1 = Lib.List32.length ts1 in
+           let n2 = Lib.List32.length ts2 in
+           let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+           let vs', es' = vs', [Label (n2, [], (args, List.map plain es')) @@ e.at] in
+           [{c with code = vs', es' @ List.tl es}]
+        | Loop (bt, es'), vs ->
+           let FuncType (ts1, ts2) = block_type frame.inst bt in
+           let n1 = Lib.List32.length ts1 in
+           let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+           let vs', es' = vs', [Label (n1, [e' @@ e.at], (args, List.map plain es')) @@ e.at] in
+           [{c with code = vs', es' @ List.tl es}]
 
-      | If (bt, es1, es2), v :: vs' ->
-         print_endline "if";
-         let pc', pc'' = split_condition v pc in
-         let vs', es' = vs', [Plain (Block (bt, es2)) @@ e.at] in (* False *)
-         let vs'', es'' = vs', [Plain (Block (bt, es1)) @@ e.at] in (* True *)
-         (* "Printing pc" |> print_endline;
-          * print_pc pc' |> print_endline;
-          * print_pc pc'' |> print_endline; *)
-         Z3_solver.solve_z3 pc';
-         Z3_solver.solve_z3 pc'';
-         [{c with code = vs', es' @ List.tl es; pc = pc'};
-          {c with code = vs'', es'' @ List.tl es; pc = pc''}]
-      (*TODO(Romy): Implement br/brif*)
-      | Br x, vs ->
-         print_endline "br";
-         let vs', es' = [], [Breaking (x.it, vs) @@ e.at] in
-         [{c with code = vs', es' @ List.tl es}]
-              
-      | BrIf x, v :: vs' ->
-         print_endline "br_if";
-         let pc', pc'' = split_condition v pc in
-         let vs', es' = vs', [] in
-         let vs'', es'' = vs', [Plain (Br x) @@ e.at] in
-         [{c with code = vs', es' @ List.tl es; pc = pc'};
-          {c with code = vs'', es'' @ List.tl es; pc = pc''}]
-      
-      (* | BrTable (xs, x), I32 i :: vs' when I32.ge_u i (Lib.List32.length xs) ->
-       *   vs', [Plain (Br x) @@ e.at]
-       * 
-       * | BrTable (xs, x), I32 i :: vs' ->
-       *   vs', [Plain (Br (Lib.List32.nth xs i)) @@ e.at] *)
+        | If (bt, es1, es2), v :: vs' ->
+           (* print_endline "if"; *)
+           let pc', pc'' = split_condition v pc in
+           let vs'', es'' = vs', [Plain (Block (bt, es1)) @@ e.at] in (* True *)
+           let vs', es' = vs', [Plain (Block (bt, es2)) @@ e.at] in (* False *)
+           (* Check sat of if *)
 
-      | Return, vs ->
-         print_endline "return";
-         let vs', es' = [], [Returning vs @@ e.at] in
-         [{c with code = vs', es' @ List.tl es}]
+           let mem = (frame.inst.smemories, smemlen frame.inst) in 
 
-      | Call x, vs ->
-         print_endline "call";
-         let vs', es' = vs, [Invoke (func frame.inst x) @@ e.at] in
-         [{c with code = vs', es' @ List.tl es}]
+           let res = if Z3_solver.is_sat pc' mem then
+                       [{c with code = vs', es' @ List.tl es; pc = pc'}]
+                     else [] in
+           let res = if Z3_solver.is_sat pc'' mem then
+                       {c with code = vs'', es'' @ List.tl es; pc = pc''}::res
+                     else res in
+           
+           (* Must be unsat *)
+           if Z3_solver.is_ct_unsat pc v mem then res
+           else failwith "If: Constant-time failure"
 
-      (* | CallIndirect x, I32 i :: vs ->
-       *   let func = func_elem frame.inst (0l @@ e.at) i e.at in
-       *   if type_ frame.inst x <> Func.type_of func then
-       *     vs, [Trapping "indirect call type mismatch" @@ e.at]
-       *   else
-       *     vs, [Invoke func @@ e.at] *)
+        | Br x, vs ->
+           (* print_endline "br"; *)
+           let vs', es' = [], [Breaking (x.it, vs) @@ e.at] in
+           [{c with code = vs', es' @ List.tl es}]
+           
+        | BrIf x, v :: vs' ->
+           (* print_endline "br_if"; *)
+           let pc', pc'' = split_condition v pc in
+           let vs'', es'' = vs', [Plain (Br x) @@ e.at] in
+           let vs', es' = vs', [] in
+           
+           let mem = (frame.inst.smemories, smemlen frame.inst) in
+           
+           let res = if Z3_solver.is_sat pc' mem then
+                       [{c with code = vs', es' @ List.tl es; pc = pc'}]
+                     else [] in
+           let res = if Z3_solver.is_sat pc'' mem then
+                       {c with code = vs'', es'' @ List.tl es; pc = pc''}::res
+                     else res in
+           
+           (* Must be unsat *)
+           (* print_endline "before unsat";
+            * Pc_type.print_pc pc' |> print_endline; *)
 
-      | Drop, v :: vs' ->
-         print_endline "drop";
-         let vs', es' = vs', [] in
-         [{c with code = vs', es' @ List.tl es}]
-         
-      (* TODO(Romy): Add path condition, ite *)
-      | Select, v0 :: v2 :: v1 :: vs' ->
-         print_endline "select";
-         let vselect = select_condition v0 v1 v2 in
-         (* let pc' = PCAnd(cond, pc) in *)
-         let vs', es' = vselect :: vs', [] in
-         [{c with code = vs', es' @ List.tl es }]
-        
-      (* | Select, I32 0l :: v2 :: v1 :: vs' ->
-       *   v2 :: vs', []
-       * 
-       * | Select, I32 i :: v2 :: v1 :: vs' ->
-       *   v1 :: vs', [] *)
-      
-      | LocalGet x, vs ->
-         print_endline "localget";
-         let vs', es' = !(local frame x) :: vs, [] in
-         [{c with code = vs', es' @ List.tl es}]
-      | LocalSet x, v :: vs' ->
-         print_endline "localset";
-         local frame x := v;
-         let vs', es' = vs', [] in
-         [{c with code = vs', es' @ List.tl es}]
+           if Z3_solver.is_ct_unsat pc v mem then res
+           else failwith "BrIf: Constant-time failure"
+           
+        (* | BrTable (xs, x), I32 i :: vs' when I32.ge_u i (Lib.List32.length xs) ->
+         *   vs', [Plain (Br x) @@ e.at]
+         * 
+         * | BrTable (xs, x), I32 i :: vs' ->
+         *   vs', [Plain (Br (Lib.List32.nth xs i)) @@ e.at] *)
 
-      | LocalTee x, v :: vs' ->
-         print_endline "localtee";
-         local frame x := v;
-         let vs', es' = v :: vs', [] in
-         [{c with code = vs', es' @ List.tl es}]
+        | Return, vs ->
+           (* print_endline "return"; *)
+           let vs', es' = [], [Returning vs @@ e.at] in
+           [{c with code = vs', es' @ List.tl es}]
 
-      (* | GlobalGet x, vs ->
-       *   Global.load (global frame.inst x) :: vs, [] *)
+        | Call x, vs ->
+           (* print_endline "call"; *)
+           let vs', es' = vs, [Invoke (func frame.inst x) @@ e.at] in
+           [{c with code = vs', es' @ List.tl es}]
 
-      (* | GlobalSet x, v :: vs' ->
-       *   (try Global.store (global frame.inst x) v; vs', []
-       *   with Global.NotMutable -> Crash.error e.at "write to immutable global"
-       *      | Global.Type -> Crash.error e.at "type mismatch at global write") *)
+        (* | CallIndirect x, I32 i :: vs ->
+         *   let func = func_elem frame.inst (0l @@ e.at) i e.at in
+         *   if type_ frame.inst x <> Func.type_of func then
+         *     vs, [Trapping "indirect call type mismatch" @@ e.at]
+         *   else
+         *     vs, [Invoke func @@ e.at] *)
 
-      (* | Load {offset; ty; sz; _}, I32 i :: vs' ->
-       *   let mem = memory frame.inst (0l @@ e.at) in
-       *   let addr = I64_convert.extend_i32_u i in
-       *   (try
-       *     let v =
-       *       match sz with
-       *       | None -> Memory.load_value mem addr offset ty
-       *       | Some (sz, ext) -> Memory.load_packed sz ext mem addr offset ty
-       *     in v :: vs', []
-       *   with exn -> vs', [Trapping (memory_error e.at exn) @@ e.at]) *)
+        | Drop, v :: vs' ->
+           (* print_endline "drop"; *)
+           let vs', es' = vs', [] in
+           [{c with code = vs', es' @ List.tl es}]
+           
+        | Select, v0 :: v2 :: v1 :: vs' ->
+           (* print_endline "select"; *)
+           let vselect = select_condition v0 v1 v2 in
+           (* let pc' = PCAnd(cond, pc) in *)
+           let vs', es' = vselect :: vs', [] in
+           [{c with code = vs', es' @ List.tl es }]
+           
+        | LocalGet x, vs ->
+           (* print_endline "localget"; *)
+           (* Pc_type.print_pc pc |> print_endline; *)
+           let vs', es' = !(local frame x) :: vs, [] in
+           [{c with code = vs', es' @ List.tl es}]
 
-      (* | Store {offset; sz; _}, v :: I32 i :: vs' ->
-       *   let mem = memory frame.inst (0l @@ e.at) in
-       *   let addr = I64_convert.extend_i32_u i in
-       *   (try
-       *     (match sz with
-       *     | None -> Memory.store_value mem addr offset v
-       *     | Some sz -> Memory.store_packed sz mem addr offset v
-       *     );
-       *     vs', []
-       *   with exn -> vs', [Trapping (memory_error e.at exn) @@ e.at]); *)
+        | LocalSet x, v :: vs' ->
+           (* print_endline "localset"; *)
+           local frame x := v;
+           let vs', es' = vs', [] in
+           [{c with code = vs', es' @ List.tl es}]
 
-      (* | MemorySize, vs ->
-       *   let mem = memory frame.inst (0l @@ e.at) in
-       *   I32 (Memory.size mem) :: vs, []
-       * 
-       * | MemoryGrow, I32 delta :: vs' ->
-       *   let mem = memory frame.inst (0l @@ e.at) in
-       *   let old_size = Memory.size mem in
-       *   let result =
-       *     try Memory.grow mem delta; old_size
-       *     with Memory.SizeOverflow | Memory.SizeLimit | Memory.OutOfMemory -> -1l
-       *   in I32 result :: vs', [] *)
+        | LocalTee x, v :: vs' ->
+           (* print_endline "localtee"; *)
+           local frame x := v;
+           let vs', es' = v :: vs', [] in
+           [{c with code = vs', es' @ List.tl es}]
 
-      (*TODO(Romy): Implement Const*)
-      | Const v, vs ->
-         print_endline "const";
-         let va = 
-           match v.it with
-           | Values.I32 i ->
-              let ii = Int32.to_int i in
-              SI32 (Si32.bv_of_int ii 32)
-           | Values.I64 i ->
-              let ii = Int64.to_int i in
-              SI64 (Si64.bv_of_int ii 64)
-           | Values.F32 i -> SF32 i
-           | Values.F64 i -> SF64 i
-         in
-         let vs', es' = va :: vs, [] in
-         [{c with code = vs', es' @ List.tl es}]
-                 
-         (* | Const v, vs ->
-          *    v.it :: vs, [] *)
+        (* | GlobalGet x, vs ->
+         *   Global.load (global frame.inst x) :: vs, [] *)
 
-      | Test testop, v :: vs' ->
-         print_endline "testop";
-         let vs', es' =
-           (try (Eval_symbolic.eval_testop testop v) :: vs', []
-            with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
-         [{c with code = vs', es' @ List.tl es}]
-      
-      | Compare relop, v2 :: v1 :: vs' ->
-         print_endline "relop";
-         let vs', es' =
-           (try (Eval_symbolic.eval_relop relop v1 v2) :: vs', []
-            with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
-         [{c with code = vs', es' @ List.tl es}]
-      | Unary unop, v :: vs' ->
-         print_endline "unop";
-         let vs', es' = 
-           (try Eval_symbolic.eval_unop unop v :: vs', []
-            with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
-         [{c with code = vs', es' @ List.tl es}]
-      | Binary binop, v2 :: v1 :: vs' ->
-         print_endline "binop";
-         let vs', es' = 
-           (try
-              let nv = Eval_symbolic.eval_binop binop v1 v2 in
-              "Printing binop" |> print_endline;
-              Pc_type.svalue_to_string nv |> print_endline;
-              nv :: vs', []
-            with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
-         [{c with code = vs', es' @ List.tl es}]
-      (* | Convert cvtop, v :: vs' ->
-       *   (try Eval_numeric.eval_cvtop cvtop v :: vs', []
-       *   with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) *)
+        (* | GlobalSet x, v :: vs' ->
+         *   (try Global.store (global frame.inst x) v; vs', []
+         *   with Global.NotMutable -> Crash.error e.at "write to immutable global"
+         *      | Global.Type -> Crash.error e.at "type mismatch at global write") *)
 
-      | _ ->
-        let s1 = Svalues.string_of_values (List.rev vs) in
-        let s2 = Stypes.string_of_value_types (List.map Svalues.type_of (List.rev vs)) in
-        Crash.error e.at
-          ("missing or ill-typed operand on stack (" ^ s1 ^ " : " ^ s2 ^ ")")
-      )
+        | Load {offset; ty; sz; _}, si :: vs' ->
+           (* print_endline "load"; *)
+           (* List.length frame.inst.smemories |> string_of_int |> print_endline;
+            * List.length frame.inst.memories |> string_of_int |> print_endline; *)
+           (* let _ = memory frame.inst (0l @@ e.at) in (\*  *\) *)
+           let mem = smemory frame.inst (0l @@ e.at) in
+           (* TODO(Romy): find a better way to do this *)
+           let mem = Smemory.init_secrets mem c.msecrets in
+           
+           let frame = {frame with
+                         inst = update_smemory frame.inst mem (0l @@ e.at)} in
+           (* print_endline "Load";
+            * List.iter (fun m -> print_endline (string_of_int (List.length (Smemory.get_secrets m)))) frame.inst.smemories; *)
+           let addr =
+             (match si with
+              | SI32 v -> v
+              | _ -> failwith "Error: Address should be 32-bit integer"
+             ) in (* I64_convert.extend_i32_u i in *)
+           let offset = Int32.to_int offset in        
+           let mem = (frame.inst.smemories, smemlen frame.inst) in
+           if (Z3_solver.is_v_ct_unsat pc si mem) then
+             (
+             let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
+             (* let final_addr = Eval_symbolic.address ty addr offset in (\*  *\) *)
+             let msec = c.msecrets in
+             let pc', pc'' = split_msec final_addr msec pc in
+             (* The loaded value consists of the (symbolic) index and the memory
+                   index *)
+             let nv = Eval_symbolic.eval_load ty final_addr (smemlen frame.inst) in
+             let vs', es' =  nv :: vs', [] in 
+             let res = if Z3_solver.is_sat pc' mem then(
+                       [{c with code = vs', es' @ List.tl es;
+                                  frame = frame;
+                                  (* frame = ... ;*)
+                                  pc = pc'}])
+                       else []
+             in
+             let res = if Z3_solver.is_sat pc'' mem then
+                         (* low values *)
+                         {c with code = vs', es' @ List.tl es;
+                                 (* frame = ... ;*)
+                                 frame = frame;
+                                 pc = pc''}:: res
+                       else res in
+             res)
+           else failwith "The index does not satisfy CT."
+       (* ) *)
+           
+        | Store {offset; ty; sz; _}, sv :: si :: vs' ->
+           (* print_endline "store"; *)
+           (* Pc_type.print_pc pc |> print_endline; *)
+           let mem = smemory frame.inst (0l @@ e.at) in
+           (* TODO(Romy): find a better way to do this *)
+           let mem = Smemory.init_secrets mem c.msecrets in
+           let frame = {frame with
+                         inst = update_smemory frame.inst mem (0l @@ e.at)} in
+           let addr =
+             (match si with
+              | SI32 v -> v
+              | _ -> failwith "Error: Address should be 32-bit integer"
+             ) in (* I64_convert.extend_i32_u i in *)
+           let offset = Int32.to_int offset in
+           (* if Si32.is_int addr then
+            *   (\* The address is a value *\)
+            *   let addr = Si32.to_int_u addr in
+            *   let vs', es', mem' =
+            *     (try
+            *        let mem' =
+            *          match sz with
+            *          | None -> Smemory.store_value mem addr offset sv 
+            *          | Some sz -> failwith "Not packed sz supported for  now."
+            *                                (\* Memory.load_packed sz ext mem addr offset ty *\)
+            *        in  vs', [], mem'
+            *      with exn -> vs', [Trapping (smemory_error e.at exn) @@ e.at], mem)
+            *   in
+            *   [{c with code = vs', es' @ List.tl es;
+            *            frame = {frame with
+            *                      inst = update_smemory frame.inst mem' (0l @@ e.at)}}]
+            * else *)
+             (* check if we satisfy CT  for the index *)
+           let mems = (frame.inst.smemories, smemlen frame.inst) in
+           if (Z3_solver.is_v_ct_unsat pc si mems) then
+             let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
+             let msec = c.msecrets in
+             let pc', pc'' = split_msec final_addr msec pc in
+             let nv = Eval_symbolic.eval_store ty final_addr sv (smemlen frame.inst) in
+             let mem' = Smemory.store_sind_value mem nv in
+             let vs', es' = vs', [] in
+             (* Update memory with a store *)
+             let nframe = {frame with inst = insert_smemory frame.inst mem'} in
+             (* Path1: we store the value in secret memory *)
+             (* print_endline "before is_sat1"; *)
+             let res = if Z3_solver.is_sat pc' mems then (
+                         (* print_endline "in is_sat1"; *)
+                         [{c with code = vs', es' @ List.tl es;
+                                  frame = nframe; 
+                                  pc = pc'}])
+                       else []
+             in
+             (* Path2: we store the value in non secret memory *)
+             (* print_endline "before is_sat"; *)
+             let res = if Z3_solver.is_sat pc'' mems then
+                         (* low values *)
+                         (
+                           (* print_endline "in is_sat2"; *)
+                           if Z3_solver.is_v_ct_unsat pc'' sv mems then
+                             {c with code = vs', es' @ List.tl es;
+                                     frame = nframe;
+                                     pc = pc''}:: res
+                           else failwith "Trying to write high values in low memory")
+                       else res in
+             res
+           else failwith "The index does not satisfy CT."
+
+        (* | Load {offset; ty; sz; _}, I32 i :: vs' ->
+         *   let mem = memory frame.inst (0l @@ e.at) in
+         *   let addr = I64_convert.extend_i32_u i in
+         *   (try
+         *     let v =
+         *       match sz with
+         *       | None -> Memory.load_value mem addr offset ty
+         *       | Some (sz, ext) -> Memory.load_packed sz ext mem addr offset ty
+         *     in v :: vs', []
+         *   with exn -> vs', [Trapping (memory_error e.at exn) @@ e.at]) *)
+
+        (* | Store {offset; sz; _}, v :: I32 i :: vs' ->
+         *   let mem = memory frame.inst (0l @@ e.at) in
+         *   let addr = I64_convert.extend_i32_u i in
+         *   (try
+         *     (match sz with
+         *     | None -> Memory.store_value mem addr offset v
+         *     | Some sz -> Memory.store_packed sz mem addr offset v
+         *     );
+         *     vs', []
+         *   with exn -> vs', [Trapping (memory_error e.at exn) @@ e.at]); *)
+
+        (* | MemorySize, vs ->
+         *   let mem = memory frame.inst (0l @@ e.at) in
+         *   I32 (Memory.size mem) :: vs, []
+         * 
+         * | MemoryGrow, I32 delta :: vs' ->
+         *   let mem = memory frame.inst (0l @@ e.at) in
+         *   let old_size = Memory.size mem in
+         *   let result =
+         *     try Memory.grow mem delta; old_size
+         *     with Memory.SizeOverflow | Memory.SizeLimit | Memory.OutOfMemory -> -1l
+         *   in I32 result :: vs', [] *)
+
+        (*TODO(Romy): Implement Const*)
+        | Const v, vs ->
+           (* print_endline "const"; *)
+           let va = 
+             match v.it with
+             | Values.I32 i ->
+                let ii = Int32.to_int i in
+                SI32 (Si32.bv_of_int ii 32)
+             | Values.I64 i ->
+                let ii = Int64.to_int i in
+                SI64 (Si64.bv_of_int ii 64)
+             | Values.F32 i -> SF32 i
+             | Values.F64 i -> SF64 i
+           in
+           let vs', es' = va :: vs, [] in
+           [{c with code = vs', es' @ List.tl es}]
+           
+        (* | Const v, vs ->
+         *    v.it :: vs, [] *)
+
+        | Test testop, v :: vs' ->
+           (* print_endline "testop"; *)
+           let vs', es' =
+             (try (Eval_symbolic.eval_testop testop v) :: vs', []
+              with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
+           [{c with code = vs', es' @ List.tl es}]
+           
+        | Compare relop, v2 :: v1 :: vs' ->
+           (* print_endline "relop"; *)
+           let vs', es' =
+             (try (Eval_symbolic.eval_relop relop v1 v2) :: vs', []
+              with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
+           [{c with code = vs', es' @ List.tl es}]
+        | Unary unop, v :: vs' ->
+           (* print_endline "unop"; *)
+           let vs', es' = 
+             (try Eval_symbolic.eval_unop unop v :: vs', []
+              with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
+           [{c with code = vs', es' @ List.tl es}]
+        | Binary binop, v2 :: v1 :: vs' ->
+           (* print_endline "binop"; *)
+           let vs', es' = 
+             (try
+                let nv = Eval_symbolic.eval_binop binop v1 v2 in
+                (* "Printing binop" |> print_endline; *)
+                (* Pc_type.svalue_to_string nv |> print_endline; *)
+                nv :: vs', []
+              with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
+           [{c with code = vs', es' @ List.tl es}]
+        (* | Convert cvtop, v :: vs' ->
+         *   (try Eval_numeric.eval_cvtop cvtop v :: vs', []
+         *   with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) *)
+
+        | _ ->
+           let s1 = Svalues.string_of_values (List.rev vs) in
+           let s2 = Types.string_of_svalue_types (List.map Svalues.type_of (List.rev vs)) in
+           Crash.error e.at
+             ("missing or ill-typed operand on stack (" ^ s1 ^ " : " ^ s2 ^ ")")
+       )
 
     | Trapping msg, vs ->
-      assert false
+       assert false
 
     | Returning vs', vs ->
-      Crash.error e.at "undefined frame"
+       Crash.error e.at "undefined frame"
 
     | Breaking (k, vs'), vs ->
-      Crash.error e.at "undefined label"
+       Crash.error e.at "undefined label"
 
     | Label (n, es0, (vs', [])), vs ->
-      let vs', es' = vs' @ vs, [] in
-      [{c with code = vs', es' @ List.tl es}]
+       (* print_endline "lab"; *)
+       let vs', es' = vs' @ vs, [] in
+       [{c with code = vs', es' @ List.tl es}]
     | Label (n, es0, (vs', {it = Trapping msg; at} :: es')), vs ->
+       (* print_endline "lab2"; *)
        let vs', es' = vs, [Trapping msg @@ at] in
        [{c with code = vs', es' @ List.tl es}]
 
     | Label (n, es0, (vs', {it = Returning vs0; at} :: es')), vs ->
+       (* print_endline "lab3"; *)
        let vs', es' = vs, [Returning vs0 @@ at] in
        [{c with code = vs', es' @ List.tl es}]
 
     | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es')), vs ->
+       (* print_endline "lab4"; *)
        let vs', es' = take n vs0 e.at @ vs, List.map plain es0 in
        [{c with code = vs', es' @ List.tl es}]
 
     | Label (n, es0, (vs', {it = Breaking (k, vs0); at} :: es')), vs ->
+       (* print_endline "lab5"; *)
        let vs', es' = vs, [Breaking (Int32.sub k 1l, vs0) @@ at] in
        [{c with code = vs', es' @ List.tl es}]
 
     | Label (n, es0, code'), vs ->
+       (* print_endline "lab6"; *)
        let c' = step {c with code = code'} in
-       (* TODO(Romy) fix for the whole list *)
-       (* let c' = List.hd c' in *)
-       (* let vs', es' =  vs, [Label (n, es0, c'.code) @@ e.at] in *)
-       (* [{c with code = vs', es' @ List.tl es}] *)
-       List.map (fun ci -> {c with code = vs, [Label (n, es0, ci.code) @@ e.at] @ List.tl es}) c'
+       (* print_endline "lab6_after_Step"; *)
+       List.map (fun ci -> {ci with code = vs, [Label (n, es0, ci.code) @@ e.at] @ List.tl es}) c'
+
     | Frame (n, frame', (vs', [])), vs ->
+       (* print_endline "frame1"; *)
        let vs', es' = vs' @ vs, [] in
        [{c with code = vs', es' @ List.tl es}]
 
     | Frame (n, frame', (vs', {it = Trapping msg; at} :: es')), vs ->
+       (* print_endline "frame2"; *)
        let vs', es' = vs, [Trapping msg @@ at] in
        [{c with code = vs', es' @ List.tl es}]
 
     | Frame (n, frame', (vs', {it = Returning vs0; at} :: es')), vs ->
+       (* print_endline "frame3"; *)
        let vs', es' = take n vs0 e.at @ vs, [] in
        [{c with code = vs', es' @ List.tl es}]
 
     | Frame (n, frame', code'), vs ->
+       (* print_endline "frame4"; *)
+       (* Pc_type.print_pc c.pc |> print_endline; *)
        let c' = step {c with frame = frame'; code = code'; budget = c.budget - 1} in
-       (* TODO(Romy) fix for the whole list *)
-       (* let c' = List.hd c' in *)
-       (* let vs', es' = vs, [Frame (n, c'.frame, c'.code) @@ e.at] in
-       * [{c with code = vs', es' @ List.tl es}] *)
-       List.map (fun ci -> {c with code = vs, [Frame (n, ci.frame, ci.code) @@ e.at] @ List.tl es}) c'
+       (* print_endline "frame4_after_Step"; *)
+       List.map (fun ci -> {ci with code = vs, [Frame (n, ci.frame, ci.code) @@ e.at] @ List.tl es}) c'
+
     | Invoke func, vs when c.budget = 0 ->
-      Exhaustion.error e.at "call stack exhausted"
+       Exhaustion.error e.at "call stack exhausted"
 
     | Invoke func, vs ->
-      let FuncType (ins, out) = func_type_of func in
-      let n1, n2 = Lib.List32.length ins, Lib.List32.length out in
-      let args, vs' = take n1 vs e.at, drop n1 vs e.at in
-      (match func with
-       | Func.AstFunc (t, inst', f) ->
-          let rest = List.map value_to_svalue f.it.locals in
-          let locals' = List.rev args @ List.map Svalues.default_value rest in
-          let frame' = {inst = !inst'; locals = List.map ref locals'} in
-          let instr' = [Label (n2, [], ([], List.map plain f.it.body)) @@ f.at] in
-          let vs', es' = vs', [Frame (n2, frame', ([], instr')) @@ e.at] in
-          [{c with code = vs', es' @ List.tl es}]
+       let FuncType (ins, out) = func_type_of func in
+       let n1, n2 = Lib.List32.length ins, Lib.List32.length out in
+       let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+       (match func with
+        | Func.AstFunc (t, inst', f) ->
+           let rest = List.map value_to_svalue f.it.locals in
+           let locals' = List.rev args @ List.map Svalues.default_value rest in
+           let frame' = {inst = !inst'; locals = List.map ref locals'} in
+           let instr' = [Label (n2, [], ([], List.map plain f.it.body)) @@ f.at] in
+           let vs', es' = vs', [Frame (n2, frame', ([], instr')) @@ e.at] in
+           [{c with code = vs', es' @ List.tl es}]
 
-      (* | Func.HostFunc (t, f) ->
-       *   (try List.rev (f (List.rev args)) @ vs', []
-       *   with Crash (_, msg) -> Crash.error e.at msg) *)
-      | _ -> Crash.error e.at "Func.Hostfunc not implemented yet."
-      )
+        (* | Func.HostFunc (t, f) ->
+         *   (try List.rev (f (List.rev args)) @ vs', []
+         *   with Crash (_, msg) -> Crash.error e.at msg) *)
+        | _ -> Crash.error e.at "Func.Hostfunc not implemented yet."
+       )
   in
+  (* print_endline "end of step";
+   * List.length res |> string_of_int |> print_endline;
+   * List.iter (fun c -> Pc_type.print_pc c.pc |> print_endline;) res; *)
   res
 
 (* Eval BFS *)
@@ -454,10 +653,7 @@ let filter_step (c: config) : config list option =
   | vs, {it = Trapping msg; at } :: _ ->
      Trap.error at msg
   | vs, es ->
-     print_endline "filter_step";
      let st = step c in
-     print_endline "filter_step_end";
-     List.length st |> string_of_int |> print_endline;
      Some st
 
 let filter_done (c: config) : pc option = 
@@ -485,7 +681,7 @@ let filter_map f cs =
   filter_map_i f cs [] |> List.rev
      
 let rec eval_bfs (cs : config list) : pc list =
-  print_endline "BFS";
+  (* print_endline "BFS"; *)
   let spaths = filter_map filter_done cs in
   let css = filter_map filter_step cs in
   spaths @ (List.fold_left (@) [] css |> eval_bfs)
@@ -494,17 +690,19 @@ let rec eval_bfs (cs : config list) : pc list =
 (* Eval DFS *)
 let eval_dfs (cs : config list) : pc list =
   let rec eval_dfs_i (cs : config list) (acc : pc list) =
+    (* print_endline "eval_dfs_i"; *)
     match cs with
     | c::cs' ->
        (match c.code with
         | vs, [] ->
-           print_pc c.pc |> print_endline;
-           "Printing pc" |> print_endline;
+           (* print_pc c.pc |> print_endline; *)
+           (* "Printing pc"  |> print_endline; *)
            eval_dfs_i cs' (c.pc::acc)
         | vs, {it = Trapping msg; at} :: _ -> Trap.error at msg
-        | vs, es ->
+        | vs, es -> (
            let ncs = step c in
            eval_dfs_i (ncs @ cs') acc
+        )
        )
       
     | [] -> List.rev acc
@@ -536,10 +734,22 @@ let invoke (func : func_inst) (vs : svalue list) : pc list =
   (* let FuncType (ins, out) = Func.type_of func in
    * if List.map Svalues.type_of vs <> ins then
    *   Crash.error at "wrong number or types of arguments"; *)
-  let c = config empty_module_inst (List.rev vs) [Invoke func @@ at] in
+  let c = config empty_module_inst (List.rev vs) [Invoke func @@ at] [] in
   try List.rev (eval c) with Stack_overflow ->
     Exhaustion.error at "call stack exhausted"
 
+(* Todo(Romy): fix the check *)
+let symb_invoke (func : func_inst) (vs : svalue list)
+      (sr : (I32.t * I32.t) list) : pc list =
+  let at = match func with Func.AstFunc (_,_, f) -> f.at | _ -> no_region in
+  (* let FuncType (ins, out) = Func.type_of func in
+   * if List.map Svalues.type_of vs <> ins then
+   *   Crash.error at "wrong number or types of arguments"; *)
+  let c = config empty_module_inst (List.rev vs) [Invoke func @@ at] sr in
+  try List.rev (eval c) with Stack_overflow ->
+    Exhaustion.error at "call stack exhausted"
+
+                             
 (*TODO(Romy): Check this one *)
 (* let eval_const (inst : module_inst) (const : const) : svalue =
  *   let c = config inst [] (List.map plain const.it) in
@@ -567,6 +777,11 @@ let create_memory (inst : module_inst) (mem : memory) : memory_inst =
   let {mtype} = mem.it in
   Memory.alloc mtype
 
+let create_smemory (inst : module_inst) (mem : smemory) : smemory_inst =
+  let {smtype} = mem.it in
+  Smemory.alloc smtype
+
+
 (* let create_global (inst : module_inst) (glob : global) : global_inst =
  *   let {gtype; value} = glob.it in
  *   let v = eval_const inst value in
@@ -579,6 +794,7 @@ let create_export (inst : module_inst) (ex : export) : export_inst =
     | FuncExport x -> ExternFunc (func inst x)
     | TableExport x -> ExternTable (table inst x)
     | MemoryExport x -> ExternMemory (memory inst x)
+    | SmemoryExport x -> ExternSmemory (smemory inst x)
     | GlobalExport x -> ExternGlobal (global inst x)
   in name, ext
 
@@ -619,12 +835,14 @@ let add_import (m : module_) (ext : extern) (im : import) (inst : module_inst)
   | ExternFunc func -> {inst with funcs = func :: inst.funcs}
   | ExternTable tab -> {inst with tables = tab :: inst.tables}
   | ExternMemory mem -> {inst with memories = mem :: inst.memories}
+  | ExternSmemory smem -> {inst with smemories = smem :: inst.smemories;
+                                     smemlen = inst.smemlen + 1}
   | ExternGlobal glob -> {inst with globals = glob :: inst.globals}
 
 let init (m : module_) (exts : extern list) : module_inst =
   let
-    { imports; tables; memories; globals; funcs; types;
-      exports; elems; data; start
+    { imports; tables; memories; smemories; globals; funcs; types;
+      exports; elems; data; start; secrets
     } = m.it
   in
   if List.length exts <> List.length imports then
@@ -639,9 +857,14 @@ let init (m : module_) (exts : extern list) : module_inst =
       funcs = inst0.funcs @ fs;
       tables = inst0.tables @ List.map (create_table inst0) tables;
       memories = inst0.memories @ List.map (create_memory inst0) memories;
-      globals = inst0.globals (* @ List.map (create_global inst0) globals; *)
+      smemories = inst0.smemories @ List.map (create_smemory inst0) smemories;
+      globals = inst0.globals;
+      (* msecrets = inst0.msecrets @ List.map (create_secrets inst0) secrets; *)
+                  (* @ List.map (create_global inst0) globals; *)
     }
   in
+  (* print_endline "INIT";
+   * List.length inst1.smemories |> string_of_int |> print_endline ; *)
   let inst = {inst1 with exports = List.map (create_export inst1) exports} in
   List.iter (init_func inst) fs;
   (* let init_elems = List.map (init_table inst) elems in

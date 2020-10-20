@@ -4,7 +4,7 @@ type identifier =
 type func =
   | Id of string
 
-  | Eq | And | Or
+  | Eq  | And | Or 
   | Ite | Not
 
   | Implies
@@ -16,13 +16,12 @@ type func =
   | BvURem | BvSRem | BvSMod | BvDiv
   | BvShl | BvLShr | BvAShr
                    
-  | BvOr | BvAnd | BvNand | BvNor | BvXNor
+  | BvOr | BvAnd | BvNand | BvNor | BvXNor | BvXor
   | BvNeg | BvNot
   | BvUle | BvUlt
   | BvSle | BvSlt 
   | BvUge | BvUgt
   | BvSge | BvSgt
-
 
 type sort = 
   | Sort of identifier
@@ -35,6 +34,9 @@ type term =
   | Float of float
   | BitVec of int * int (* bool + number of bits *)
   | Const of identifier
+  | Multi of term list * identifier * int (* term list, high/low, number_of_elements *)
+  | Load of  term * int (* index, memory *)
+  | Store of  term * term * int (* index, value, memory *)
   | App of func * term list
   | Let of string * term * term
 
@@ -44,6 +46,8 @@ type check_sat_result =
   | Unknown
 
 
+(* let curr_num = ref 0 *)
+             
 (* val int_sort : sort
  * val bool_sort : sort
  * val array_sort : sort -> sort -> sort *)
@@ -53,13 +57,24 @@ val one: term
 val int_to_intterm : int -> term
 val int_to_bvterm : int -> int -> term
 val float_to_term : float -> term
-val high_to_term : int -> term
-val low_to_term : int -> term
+val get_high : unit -> identifier
+val get_low : unit -> identifier
+
+val is_low : term -> bool
+val is_high : term -> bool
+val is_int : term -> bool
+
+val high_to_term : unit -> term
+val low_to_term : unit -> term
 
 val term_to_int : term -> int
 val bool_to_term : bool -> term
+
+val list_to_term : term list -> term
 (* val const : identifier -> term *)
 val equals : term -> term -> term
+val load : term -> int -> term
+val store : term -> term -> int -> term 
 val and_ : term -> term -> term
 val or_ : term -> term -> term
 val not_ : term -> term
@@ -87,6 +102,7 @@ val bvlshr : term -> term -> term
 val bvashr : term -> term -> term
 val bvor : term -> term -> term
 val bvand : term -> term -> term
+val bvxor : term -> term -> term
 val bvnand : term -> term -> term
 val bvnor : term -> term -> term
 val bvxnor : term -> term -> term

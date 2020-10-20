@@ -144,6 +144,12 @@ and memory' =
   mtype : memory_type;
 }
 
+type smemory = smemory' Source.phrase
+and smemory' =
+{
+  smtype : smemory_type;
+}
+
 type 'data segment = 'data segment' Source.phrase
 and 'data segment' =
 {
@@ -152,6 +158,14 @@ and 'data segment' =
   init : 'data;
 }
 
+type secret = secret' Source.phrase
+and secret' =
+{
+  index : var;
+  range : const * const;
+}
+
+  
 type table_segment = var list segment
 type memory_segment = string segment
 
@@ -165,6 +179,7 @@ and export_desc' =
   | FuncExport of var
   | TableExport of var
   | MemoryExport of var
+  | SmemoryExport of var
   | GlobalExport of var
 
 type export = export' Source.phrase
@@ -179,6 +194,7 @@ and import_desc' =
   | FuncImport of var
   | TableImport of table_type
   | MemoryImport of memory_type
+  | SmemoryImport of smemory_type
   | GlobalImport of global_type
 
 type import = import' Source.phrase
@@ -196,10 +212,12 @@ and module_' =
   globals : global list;
   tables : table list;
   memories : memory list;
+  smemories : smemory list;
   funcs : func list;
   start : var option;
   elems : var list segment list;
   data : string segment list;
+  secrets : secret list;
   imports : import list;
   exports : export list;
 }
@@ -213,10 +231,12 @@ let empty_module =
   globals = [];
   tables = [];
   memories = [];
+  smemories = [];
   funcs = [];
   start = None;
   elems  = [];
   data = [];
+  secrets = [];
   imports = [];
   exports = [];
 }
@@ -232,6 +252,7 @@ let import_type (m : module_) (im : import) : extern_type =
   | FuncImport x -> ExternFuncType (func_type_for m x)
   | TableImport t -> ExternTableType t
   | MemoryImport t -> ExternMemoryType t
+  | SmemoryImport t -> ExternSmemoryType t
   | GlobalImport t -> ExternGlobalType t
 
 let export_type (m : module_) (ex : export) : extern_type =
@@ -247,8 +268,13 @@ let export_type (m : module_) (ex : export) : extern_type =
     let tts = tables its @ List.map (fun t -> t.it.ttype) m.it.tables in
     ExternTableType (nth tts x.it)
   | MemoryExport x ->
-    let mts = memories its @ List.map (fun m -> m.it.mtype) m.it.memories in
-    ExternMemoryType (nth mts x.it)
+     let mts' = List.map (fun m -> m.it.mtype) m.it.memories in 
+     let mts = memories its @ mts' in
+     ExternMemoryType (nth mts x.it)
+  | SmemoryExport x ->
+     let mts' = List.map (fun m -> m.it.smtype) m.it.smemories in 
+     let mts = smemories its @ mts' in
+     ExternSmemoryType (nth mts x.it)
   | GlobalExport x ->
     let gts = globals its @ List.map (fun g -> g.it.gtype) m.it.globals in
     ExternGlobalType (nth gts x.it)

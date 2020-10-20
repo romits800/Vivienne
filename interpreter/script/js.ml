@@ -372,7 +372,7 @@ let of_action mods act =
       Some (of_wrapper mods x_opt name (get gt), [t])
     | _ -> None
     )
-  | Symb_exec (x_opt, name, slits) ->
+  | Symb_exec (x_opt, name, slits, _) ->
      failwith "Arrange: error symb exec."
 
 

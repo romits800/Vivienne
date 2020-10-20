@@ -29,13 +29,23 @@ sig
   val int_to_intterm : int -> term
   val int_to_bvterm : int -> int -> term
   val float_to_term : float -> term
-  val high_to_term : int -> term
-  val low_to_term : int -> term
+  val high_to_term : unit -> term
+  val low_to_term : unit -> term
 
+  val is_high : term -> bool
+  val is_low : term -> bool
+  val is_int : term -> bool
+    
   val term_to_int : term -> int
   val bool_to_term : bool -> term
+
+  val list_to_term : term list  -> term
   (* val const : string -> term *)
   val equals : term -> term -> term
+
+  val load : term -> int -> term
+  val store : term -> term -> int -> term
+    
   val and_ : term -> term -> term
   val or_ : term -> term -> term
   val not_ : term -> term
@@ -65,6 +75,7 @@ sig
   val bvashr : term -> term -> term
   val bvor : term -> term -> term
   val bvand : term -> term -> term
+  val bvxor : term -> term -> term
   val bvnand : term -> term -> term
   val bvnor : term -> term -> term
   val bvxnor : term -> term -> term
@@ -94,16 +105,20 @@ sig
 
   val zero : t
   val one : t
-
+    
+  val load : t -> int -> t
+  val store : t -> t -> int -> t
   val add : t -> t -> t
   val sub : t -> t -> t
   val mul : t -> t -> t
-  val div_s : t -> t -> t (* raises IntegerDivideByZero, IntegerOverflow *)
-  val div_u : t -> t -> t (* raises IntegerDivideByZero *)
-  val rem_s : t -> t -> t (* raises IntegerDivideByZero *)
-  val rem_u : t -> t -> t (* raises IntegerDivideByZero *)
+  val div_s : t -> t -> t 
+  val div_u : t -> t -> t 
+  val rem_s : t -> t -> t 
+  val rem_u : t -> t -> t 
   val and_ : t -> t -> t
   val or_ : t -> t -> t
+  val band : t -> t -> t
+  val bor : t -> t -> t
   val not_ : t -> t 
   val xor : t -> t -> t
   val shl : t -> t -> t
@@ -132,14 +147,19 @@ sig
   val int_of_int : int -> t
   val bv_of_int : int -> int -> t
   val of_float : float -> t
-  val of_high : int -> t
-  val of_low : int -> t
+  val of_high : unit -> t
+  val of_low : unit -> t
+  val is_low : t -> bool
+  val is_high : t -> bool
+  val is_int : t -> bool
 
   val of_int_s : int -> t
   val of_int_u : int -> t
+  val of_int32 : int32 -> t
   val of_string_s : string -> t
   val of_string_u : string -> t
   val of_string : string -> t
+  val of_list : t list -> t
   val to_int_s : t -> int
   val to_int_u : t -> int
   val to_string_s : t -> string
@@ -184,6 +204,9 @@ struct
    * let ten = Rep.bv 10 Rep.size *)
 
   (* add, sub, and mul are sign-agnostic and do not trap on overflow. *)
+  let load = Rep.load
+  let store = Rep.store
+           
   let add = Rep.bvadd
   let sub = Rep.bvsub
   let mul = Rep.bvmul
@@ -212,10 +235,11 @@ struct
 
   let and_ = Rep.and_
   let or_ = Rep.or_
+  let band = Rep.bvand
+  let bor = Rep.bvor
+
   let not_ = Rep.not_
-           
-  let xor x y =
-    Rep.or_ (Rep.and_ x (Rep.not_ y)) (Rep.and_ (Rep.not_ x) y)
+  let xor = Rep.bvxor
 
   (*TODO(ROMY): Check this?*)
   (* WebAssembly's shifts mask the shift count according to the bitwidth. *)
@@ -306,16 +330,24 @@ struct
   let of_float = Rep.float_to_term
   let of_high = Rep.high_to_term
   let of_low = Rep.low_to_term
+
+  let is_high = Rep.is_high
+  let is_low = Rep.is_low
+  let is_int = Rep.is_int
+              
              
   let of_int_s i = Rep.int_to_bvterm i Rep.size
   let of_int_u i = Rep.int_to_bvterm i Rep.size
+  let of_int32 i = Rep.int_to_bvterm (I32.to_int_s i) Rep.size
   (*TODO(Romy) *)(* Unimplemented *)
   let of_string_s str = Rep.zero
   let of_string_u str = Rep.zero
   let of_string  str = Rep.zero
+  let of_list = Rep.list_to_term
   let to_int_s  t  = Rep.term_to_int t
   let to_int_u  t  = Rep.term_to_int t
   let to_string_s  t = Rep.term_to_string t
+                     
   let to_string_u t = ""
   let to_hex_string t = ""
 

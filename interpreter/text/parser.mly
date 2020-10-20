@@ -1,7 +1,7 @@
 %{
 open Source
 open Types
-open Stypes
+(* open Types *)
 open Ast
 open Operators
 open Script
@@ -81,12 +81,14 @@ let empty_types () = {space = empty (); list = []}
 
 type context =
   { types : types; tables : space; memories : space;
+    smemories : space;
     funcs : space; locals : space; globals : space;
     labels : int32 VarMap.t; deferred_locals : (unit -> unit) list ref
   }
 
 let empty_context () =
   { types = empty_types (); tables = empty (); memories = empty ();
+    smemories = empty ();
     funcs = empty (); locals = empty (); globals = empty ();
     labels = VarMap.empty; deferred_locals = ref []
   }
@@ -116,7 +118,7 @@ let func_type (c : context) x =
   try (Lib.List32.nth c.types.list x.it).it
   with Failure _ -> error x.at ("unknown type " ^ Int32.to_string x.it)
 
-
+ 
 let anon category space n =
   let i = space.count in
   space.count <- Int32.add i n;
@@ -139,6 +141,7 @@ let bind_local (c : context) x = force_locals c; bind "local" c.locals x
 let bind_global (c : context) x = bind "global" c.globals x
 let bind_table (c : context) x = bind "table" c.tables x
 let bind_memory (c : context) x = bind "memory" c.memories x
+let bind_smemory (c : context) x = bind "smemory" c.smemories x
 let bind_label (c : context) x =
   {c with labels = VarMap.add x.it 0l (VarMap.map (Int32.add 1l) c.labels)}
 
@@ -153,6 +156,7 @@ let anon_locals (c : context) lazy_ts =
 let anon_global (c : context) = anon "global" c.globals 1l
 let anon_table (c : context) = anon "table" c.tables 1l
 let anon_memory (c : context) = anon "memory" c.memories 1l
+let anon_smemory (c : context) = anon "smemory" c.smemories 1l
 let anon_label (c : context) =
   {c with labels = VarMap.map (Int32.add 1l) c.labels}
 
@@ -174,6 +178,7 @@ let inline_type_explicit (c : context) x ft at =
 %}
 
 %token NAT INT FLOAT STRING VAR VALUE_TYPE FUNCREF MUT LPAR RPAR
+%token LSBR RSBR COMMA
 %token NOP DROP BLOCK END IF THEN ELSE SELECT LOOP BR BR_IF BR_TABLE
 %token CALL CALL_INDIRECT RETURN
 %token LOCAL_GET LOCAL_SET LOCAL_TEE GLOBAL_GET GLOBAL_SET
@@ -181,7 +186,7 @@ let inline_type_explicit (c : context) x ft at =
 %token SCONST CONST UNARY BINARY TEST COMPARE CONVERT
 %token UNREACHABLE MEMORY_SIZE MEMORY_GROW
 %token FUNC START TYPE PARAM RESULT LOCAL GLOBAL
-%token TABLE ELEM MEMORY DATA OFFSET IMPORT EXPORT TABLE
+%token TABLE ELEM MEMORY DATA OFFSET IMPORT EXPORT TABLE SECRET
 %token MODULE BIN QUOTE
 %token SCRIPT REGISTER INVOKE GET SYMB_EXEC
 %token ASSERT_MALFORMED ASSERT_INVALID ASSERT_SOFT_INVALID ASSERT_UNLINKABLE
@@ -199,7 +204,7 @@ let inline_type_explicit (c : context) x ft at =
 %token<string> SEC_LOW
 %token<Types.value_type> VALUE_TYPE
 %token<string Source.phrase -> Ast.instr' * Values.value> CONST
-%token<Stypes.sec_type Source.phrase -> Ast.instr' * Svalues.svalue> SCONST
+%token<Types.sec_type Source.phrase -> Ast.instr' * Svalues.svalue> SCONST
 %token<Ast.instr'> UNARY
 %token<Ast.instr'> BINARY
 %token<Ast.instr'> TEST
@@ -678,27 +683,42 @@ data :
     { let at = at () in
       fun c -> {index = 0l @@ at; offset = $3 c; init = $4} @@ at }
 
+
+/* TODO(Romy): for now we bind to 0 */
+/*fun c -> let x = $3 c anon_smemory bind_smemory @@ at in   */
+
+secret :
+  | LPAR SECRET offset offset RPAR
+    { let at = at () in
+      fun c -> {range = ($3 c, $4 c); index = 0l @@ at } @@ at }
+
+      
 memory :
   | LPAR MEMORY bind_var_opt memory_fields RPAR
     { let at = at () in
       fun c -> let x = $3 c anon_memory bind_memory @@ at in
-      fun () -> $4 c x at }
+               let sx = $3 c anon_smemory bind_smemory @@ at in
+               fun () -> $4 c x sx at }
 
+/* TODO(Romy): remove memory_type rule from every where */
+/* TODO(Romy): fix for Smemories */
 memory_fields :
-  | memory_type
-    { fun c x at -> [{mtype = $1} @@ at], [], [], [] }
+  | limits
+    { fun c x sx at -> [{mtype = MemoryType $1} @@ at],
+                       [{smtype = SmemoryType $1} @@ at], [], [], [] }
   | inline_import memory_type  /* Sugar */
-    { fun c x at ->
-      [], [],
+    { fun c x sx at ->
+      [], [], [],
       [{ module_name = fst $1; item_name = snd $1;
-         idesc = MemoryImport $2 @@ at } @@ at], [] }
+         idesc = MemoryImport $2 @@ at } @@ at;], [] }
   | inline_export memory_fields  /* Sugar */
-    { fun c x at -> let mems, data, ims, exs = $2 c x at in
-      mems, data, ims, $1 (MemoryExport x) c :: exs }
+    { fun c x sx at -> let mems, smems, data, ims, exs = $2 c x sx at in
+      mems, smems, data, ims, $1 (MemoryExport x) c :: exs }
   | LPAR DATA string_list RPAR  /* Sugar */
-    { fun c x at ->
+    { fun c x sx at ->
       let size = Int32.(div (add (of_int (String.length $3)) 65535l) 65536l) in
       [{mtype = MemoryType {min = size; max = Some size}} @@ at],
+      [{smtype = SmemoryType {min = size; max = Some size}} @@ at],
       [{index = x;
         offset = [i32_const (0l @@ at) @@ at] @@ at; init = $3} @@ at],
       [], [] }
@@ -806,11 +826,12 @@ module_fields1 :
         imports = ims @ m.imports; exports = exs @ m.exports } }
   | memory module_fields
     { fun c -> let mmf = $1 c in let mf = $2 c in
-      fun () -> let mems, data, ims, exs = mmf () in let m = mf () in
+      fun () -> let mems, smems, data, ims, exs = mmf () in let m = mf () in
       if mems <> [] && m.imports <> [] then
         error (List.hd m.imports).at "import after memory definition";
-      { m with memories = mems @ m.memories; data = data @ m.data;
-        imports = ims @ m.imports; exports = exs @ m.exports } }
+      { m with memories = mems @ m.memories; smemories = smems @ m.smemories;
+               data = data @ m.data; imports = ims @ m.imports;
+               exports = exs @ m.exports } }
   | func module_fields
     { fun c -> let ff = $1 c in let mf = $2 c in
       fun () -> let funcs, ims, exs = ff () in let m = mf () in
@@ -840,6 +861,11 @@ module_fields1 :
     { fun c -> let mf = $2 c in
       fun () -> let m = mf () in
       {m with exports = $1 c :: m.exports} }
+  | secret module_fields
+    { fun c -> let mf = $2 c in
+      fun () -> let m = mf () in
+      {m with secrets = $1 c :: m.secrets} }
+
 
 module_var_opt :
   | /* empty */ { None }
@@ -870,13 +896,13 @@ script_module :
     { $3, Quoted ("quote", $5) @@ at() }
 
 action :
-  | LPAR SYMB_EXEC module_var_opt name symb_list RPAR
-    { Symb_exec ($3, $4, $5) @@ at () }
+  | LPAR SYMB_EXEC module_var_opt name symb_list SECRET secret_ranges RPAR
+    { Symb_exec ($3, $4, $5, $7) @@ at () }
   | LPAR INVOKE module_var_opt name const_list RPAR
     { Invoke ($3, $4, $5) @@ at () }
   | LPAR GET module_var_opt name RPAR
-    { Get ($3, $4) @@ at() }
-
+      { Get ($3, $4) @@ at() }
+    
 assertion :
   | LPAR ASSERT_MALFORMED script_module STRING RPAR
     { AssertMalformed (snd $3, $4) @@ at () }
@@ -914,6 +940,14 @@ symb :
 symb_list :
   | /* empty */ { [] }
   | symb symb_list { $1 :: $2 }
+
+secret_range:
+  | LPAR NAT NAT RPAR { (nat32 $2 (at ()), nat32 $3 (at ())) }
+
+secret_ranges :
+  | { [] }
+  | secret_range secret_ranges { $1::$2 }
+                
 
 const :
   | LPAR CONST literal RPAR { snd (literal $2 $3) @@ ati 3 }

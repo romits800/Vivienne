@@ -298,6 +298,10 @@ let memory off i mem =
   let {mtype = MemoryType lim} = mem.it in
   Node ("memory $" ^ nat (off + i) ^ " " ^ limits nat32 lim, [])
 
+let smemory off i mem =
+  let {smtype = SmemoryType lim} = mem.it in
+  Node ("smemory $" ^ nat (off + i) ^ " " ^ limits nat32 lim, [])
+
 let segment head dat seg =
   let {index; offset; init} = seg.it in
   Node (head, atom var index :: Node ("offset", const offset) :: dat init)
@@ -322,6 +326,8 @@ let import_desc fx tx mx gx d =
     incr tx; table 0 (!tx - 1) ({ttype = t} @@ d.at)
   | MemoryImport t ->
     incr mx; memory 0 (!mx - 1) ({mtype = t} @@ d.at)
+  | SmemoryImport t ->
+    incr mx; smemory 0 (!mx - 1) ({smtype = t} @@ d.at)
   | GlobalImport t ->
     incr gx; Node ("global $" ^ nat (!gx - 1), [global_type t])
 
@@ -336,6 +342,7 @@ let export_desc d =
   | FuncExport x -> Node ("func", [atom var x])
   | TableExport x -> Node ("table", [atom var x])
   | MemoryExport x -> Node ("memory", [atom var x])
+  | SmemoryExport x -> Node ("smemory", [atom var x])
   | GlobalExport x -> Node ("global", [atom var x])
 
 let export ex =
@@ -432,7 +439,7 @@ let action mode act =
     Node ("invoke" ^ access x_opt name, List.map (literal mode) lits)
   | Get (x_opt, name) ->
     Node ("get" ^ access x_opt name, [])
-  | Symb_exec (x_opt, name, slits) ->
+  | Symb_exec (x_opt, name, slits, _) ->
      failwith "Arrange: error symb exec."
 
 let nan = function

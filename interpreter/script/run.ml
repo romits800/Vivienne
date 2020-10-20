@@ -216,6 +216,7 @@ let print_import m im =
     | ExternFuncType t -> "func", string_of_func_type t
     | ExternTableType t -> "table", string_of_table_type t
     | ExternMemoryType t -> "memory", string_of_memory_type t
+    | ExternSmemoryType t -> "smemory", string_of_smemory_type t
     | ExternGlobalType t -> "global", string_of_global_type t
   in
   Printf.printf "  import %s \"%s\" \"%s\" : %s\n"
@@ -229,6 +230,7 @@ let print_export m ex =
     | ExternFuncType t -> "func", string_of_func_type t
     | ExternTableType t -> "table", string_of_table_type t
     | ExternMemoryType t -> "memory", string_of_memory_type t
+    | ExternSmemoryType t -> "smemory", string_of_smemory_type t
     | ExternGlobalType t -> "global", string_of_global_type t
   in
   Printf.printf "  export %s \"%s\" : %s\n"
@@ -333,12 +335,12 @@ let run_action act : Values.value list =
     | Some _ -> Assert.error act.at "export is not a function"
     | None -> Assert.error act.at "undefined export"
     )
-  | Symb_exec (x_opt, name, vs) ->
+  | Symb_exec (x_opt, name, vs, sranges) ->
     trace ("Symbolically executing function \"" ^ Ast.string_of_name name ^ "\"...");
     let inst = lookup_instance x_opt act.at in
     (match Instance.export inst name with
-    | Some (Instance.ExternFunc f) ->
-       let _ = Eval.invoke f (List.map (fun v -> v.it) vs) in
+     | Some (Instance.ExternFunc f) ->
+       let _ = Eval.symb_invoke f (List.map (fun v -> v.it) vs) sranges in
        []
     | Some _ -> Assert.error act.at "export is not a function"
     | None -> Assert.error act.at "undefined export"

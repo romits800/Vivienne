@@ -113,6 +113,9 @@ let encode m =
     let memory_type = function
       | MemoryType lim -> limits vu32 lim
 
+    let smemory_type = function
+      | SmemoryType lim -> limits vu32 lim
+
     let mutability = function
       | Immutable -> u8 0
       | Mutable -> u8 1
@@ -404,6 +407,7 @@ let encode m =
       | FuncImport x -> u8 0x00; var x
       | TableImport t -> u8 0x01; table_type t
       | MemoryImport t -> u8 0x02; memory_type t
+      | SmemoryImport t -> u8 0x02; smemory_type t
       | GlobalImport t -> u8 0x03; global_type t
 
     let import im =
@@ -450,6 +454,8 @@ let encode m =
       | TableExport x -> u8 1; var x
       | MemoryExport x -> u8 2; var x
       | GlobalExport x -> u8 3; var x
+      (* TODO(Romy) Not implemented *)
+      | SmemoryExport x -> u8 4; var x
 
     let export ex =
       let {name = n; edesc} = ex.it in
