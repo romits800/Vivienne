@@ -457,6 +457,13 @@ let run_assertion ass =
       assert_message ass.at "exhaustion" msg re
     | _ -> Assert.error ass.at "expected exhaustion error"
     )
+  | AssertFailure (act, re) ->
+    trace ("Asserting failure...");
+    (match run_action act with
+    | exception Failure (msg) ->
+      assert_message ass.at "failure" msg re
+    | _ -> Assert.error ass.at "expected failure error"
+    )
 
 let rec run_command cmd =
   match cmd.it with

@@ -191,7 +191,7 @@ let inline_type_explicit (c : context) x ft at =
 %token MODULE BIN QUOTE
 %token SCRIPT REGISTER INVOKE GET SYMB_EXEC
 %token ASSERT_MALFORMED ASSERT_INVALID ASSERT_SOFT_INVALID ASSERT_UNLINKABLE
-%token ASSERT_RETURN ASSERT_TRAP ASSERT_EXHAUSTION
+%token ASSERT_RETURN ASSERT_TRAP ASSERT_EXHAUSTION ASSERT_FAILURE
 %token NAN
 %token INPUT OUTPUT
 %token EOF
@@ -956,6 +956,7 @@ assertion :
   | LPAR ASSERT_RETURN action result_list RPAR { AssertReturn ($3, $4) @@ at () }
   | LPAR ASSERT_TRAP action STRING RPAR { AssertTrap ($3, $4) @@ at () }
   | LPAR ASSERT_EXHAUSTION action STRING RPAR { AssertExhaustion ($3, $4) @@ at () }
+  | LPAR ASSERT_FAILURE action STRING RPAR { AssertFailure ($3, $4) @@ at () }
 
 cmd :
   | action { Action $1 @@ at () }

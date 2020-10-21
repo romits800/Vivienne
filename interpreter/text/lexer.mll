@@ -421,6 +421,7 @@ rule token = parse
   | "assert_return" { ASSERT_RETURN }
   | "assert_trap" { ASSERT_TRAP }
   | "assert_exhaustion" { ASSERT_EXHAUSTION }
+  | "assert_failure" { ASSERT_FAILURE }
   | "nan:canonical" { NAN Script.CanonicalNan }
   | "nan:arithmetic" { NAN Script.ArithmeticNan }
   | "input" { INPUT }

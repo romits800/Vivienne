@@ -405,6 +405,21 @@ let literal mode lit =
     let f = if mode = `Binary then F64.to_hex_string else F64.to_string in
     Node ("f64.const " ^ f z, [])
 
+let sliteral mode lit =
+  match lit.it with
+  | Svalues.SI32 i ->
+    let f = if mode = `Binary then Si32.to_hex_string else Si32.to_string_s in
+    Node ("si32.const " ^ f i, [])
+  | Svalues.SI64 i ->
+    let f = if mode = `Binary then Si64.to_hex_string else Si64.to_string_s in
+    Node ("si64.const " ^ f i, [])
+  | Svalues.SF32 z ->
+    let f = if mode = `Binary then F32.to_hex_string else F32.to_string in
+    Node ("sf32.const " ^ f z, [])
+  | Svalues.SF64 z ->
+    let f = if mode = `Binary then F64.to_hex_string else F64.to_string in
+    Node ("sf64.const " ^ f z, [])
+
 let definition mode x_opt def =
   try
     match mode with
@@ -440,7 +455,8 @@ let action mode act =
   | Get (x_opt, name) ->
     Node ("get" ^ access x_opt name, [])
   | Symb_exec (x_opt, name, slits) ->
-     failwith "Arrange: error symb exec."
+     Node ("symb_invoke" ^ access x_opt name, List.map (sliteral mode) slits)
+
 
 let nan = function
   | CanonicalNan -> "nan:canonical"
@@ -474,7 +490,9 @@ let assertion mode ass =
   | AssertTrap (act, re) ->
     [Node ("assert_trap", [action mode act; Atom (string re)])]
   | AssertExhaustion (act, re) ->
-    [Node ("assert_exhaustion", [action mode act; Atom (string re)])]
+     [Node ("assert_exhaustion", [action mode act; Atom (string re)])]
+  | AssertFailure (act, re) ->
+     [Node ("assert_failure", [action mode act; Atom (string re)])]
 
 let command mode cmd =
   match cmd.it with
