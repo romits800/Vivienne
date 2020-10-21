@@ -834,7 +834,7 @@ let init_smemory (secret : bool) (inst : module_inst) (sec : security) =
   let lo = i32 (eval_const inst const_lo) const_lo.at in
   let hi = i32 (eval_const inst const_hi) const_hi.at in
   let lo,hi = Int32.to_int lo, Int32.to_int hi in
-  let hi_list = (List.init (hi-lo+ 1) (fun x-> x + lo)) in
+  let hi_list = List.init ((hi-lo+1)/4) (fun x-> 4*x + lo) in
   let stores =
     match secret with
     | true -> List.map Eval_symbolic.create_new_hstore hi_list
