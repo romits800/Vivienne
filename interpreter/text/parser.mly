@@ -110,6 +110,7 @@ let local (c : context) x = force_locals c; lookup "local" c.locals x
 let global (c : context) x = lookup "global" c.globals x
 let table (c : context) x = lookup "table" c.tables x
 let memory (c : context) x = lookup "memory" c.memories x
+let smemory (c : context) x = lookup "smemory" c.smemories x
 let label (c : context) x =
   try VarMap.find x.it c.labels
   with Not_found -> error x.at ("unknown label " ^ x.it)
@@ -186,7 +187,7 @@ let inline_type_explicit (c : context) x ft at =
 %token SCONST CONST UNARY BINARY TEST COMPARE CONVERT
 %token UNREACHABLE MEMORY_SIZE MEMORY_GROW
 %token FUNC START TYPE PARAM RESULT LOCAL GLOBAL
-%token TABLE ELEM MEMORY DATA OFFSET IMPORT EXPORT TABLE SECRET
+%token TABLE ELEM MEMORY DATA OFFSET IMPORT EXPORT TABLE SECRET PUBLIC
 %token MODULE BIN QUOTE
 %token SCRIPT REGISTER INVOKE GET SYMB_EXEC
 %token ASSERT_MALFORMED ASSERT_INVALID ASSERT_SOFT_INVALID ASSERT_UNLINKABLE
@@ -684,13 +685,27 @@ data :
       fun c -> {index = 0l @@ at; offset = $3 c; init = $4} @@ at }
 
 
-/* TODO(Romy): for now we bind to 0 */
-/*fun c -> let x = $3 c anon_smemory bind_smemory @@ at in   */
-
 secret :
+  | LPAR SECRET var offset offset RPAR
+    { let at = at () in
+      fun c ->
+        let sx = $3 c smemory in
+        {range = ($4 c, $5 c); index = sx } @@ at }
   | LPAR SECRET offset offset RPAR
     { let at = at () in
-      fun c -> {range = ($3 c, $4 c); index = 0l @@ at } @@ at }
+      fun c ->
+        {range = ($3 c, $4 c); index = 0l @@ at } @@ at }
+
+public :
+  | LPAR PUBLIC var offset offset RPAR
+    { let at = at () in
+      fun c ->
+        let sx = $3 c smemory in
+        {range = ($4 c, $5 c); index = sx } @@ at }
+  | LPAR PUBLIC offset offset RPAR
+    { let at = at () in
+      fun c ->
+        {range = ($3 c, $4 c); index = 0l @@ at } @@ at }
 
       
 memory :
@@ -708,12 +723,18 @@ memory_fields :
                        [{smtype = SmemoryType $1} @@ at], [], [], [] }
   | inline_import memory_type  /* Sugar */
     { fun c x sx at ->
+      let sm = { module_name = fst $1; item_name = snd $1;
+                 idesc = SmemoryImport (Types.memory_to_smemory_type $2) @@ at } @@ at in
+      let m = { module_name = fst $1; item_name = snd $1;
+                idesc = MemoryImport $2 @@ at } @@ at in 
       [], [], [],
-      [{ module_name = fst $1; item_name = snd $1;
-         idesc = MemoryImport $2 @@ at } @@ at;], [] }
+      [sm;m], [] }
   | inline_export memory_fields  /* Sugar */
-    { fun c x sx at -> let mems, smems, data, ims, exs = $2 c x sx at in
-      mems, smems, data, ims, $1 (MemoryExport x) c :: exs }
+    { fun c x sx at ->
+      let mems, smems, data, ims, exs = $2 c x sx at in
+      let sme = $1 (SmemoryExport sx) c in
+      let sme = { sme.it with name = 95::sme.it.name } @@ sme.at in
+      mems, smems, data, ims, sme :: $1 (MemoryExport x) c :: exs }
   | LPAR DATA string_list RPAR  /* Sugar */
     { fun c x sx at ->
       let size = Int32.(div (add (of_int (String.length $3)) 65535l) 65536l) in
@@ -755,9 +776,10 @@ import_desc :
   | LPAR TABLE bind_var_opt table_type RPAR
     { fun c -> ignore ($3 c anon_table bind_table);
       fun () -> TableImport $4 }
-  | LPAR MEMORY bind_var_opt memory_type RPAR
+  | LPAR MEMORY bind_var_opt memory_type RPAR 
     { fun c -> ignore ($3 c anon_memory bind_memory);
-      fun () -> MemoryImport $4 }
+               ignore ($3 c anon_smemory bind_smemory);
+               fun () -> MemoryImport $4 }
   | LPAR GLOBAL bind_var_opt global_type RPAR
     { fun c -> ignore ($3 c anon_global bind_global);
       fun () -> GlobalImport $4 }
@@ -765,8 +787,9 @@ import_desc :
 import :
   | LPAR IMPORT name name import_desc RPAR
     { let at = at () and at5 = ati 5 in
-      fun c -> let df = $5 c in
-      fun () -> {module_name = $3; item_name = $4; idesc = df () @@ at5} @@ at }
+      fun c ->
+        let df = $5 c in
+        fun () -> {module_name = $3; item_name = $4; idesc = df () @@ at5} @@ at }
 
 inline_import :
   | LPAR IMPORT name name RPAR { $3, $4 }
@@ -854,9 +877,23 @@ module_fields1 :
       | Some _ -> error x.at "multiple start sections"
       | None -> {m with start = Some x} }
   | import module_fields
-    { fun c -> let imf = $1 c in let mf = $2 c in
-      fun () -> let im = imf () in let m = mf () in
-      {m with imports = im :: m.imports} }
+    { fun c ->
+      let imf = $1 c in
+      let mf = $2 c in
+      fun () ->
+        let im = imf () in
+        let m = mf () in
+        let im2 = 
+         match im.it.idesc.it with
+         | MemoryImport lim ->
+            let lim' = Types.memory_to_smemory_type lim in
+            (* string_of_int (List.hd im.it.item_name) |>  print_endline; *)
+            let newim = {im.it with item_name = 95::im.it.item_name;
+                                    idesc = SmemoryImport lim' @@ im.it.idesc.at} in
+            [ newim @@ im.at]
+         | _ -> []
+        in
+        {m with imports = im2 @ [im] @ m.imports} }
   | export module_fields
     { fun c -> let mf = $2 c in
       fun () -> let m = mf () in
@@ -865,6 +902,10 @@ module_fields1 :
     { fun c -> let mf = $2 c in
       fun () -> let m = mf () in
       {m with secrets = $1 c :: m.secrets} }
+  | public module_fields
+    { fun c -> let mf = $2 c in
+      fun () -> let m = mf () in
+      {m with public = $1 c :: m.public} }
 
 
 module_var_opt :
@@ -896,8 +937,8 @@ script_module :
     { $3, Quoted ("quote", $5) @@ at() }
 
 action :
-  | LPAR SYMB_EXEC module_var_opt name symb_list SECRET secret_ranges RPAR
-    { Symb_exec ($3, $4, $5, $7) @@ at () }
+  | LPAR SYMB_EXEC module_var_opt name symb_list RPAR
+    { Symb_exec ($3, $4, $5) @@ at () }
   | LPAR INVOKE module_var_opt name const_list RPAR
     { Invoke ($3, $4, $5) @@ at () }
   | LPAR GET module_var_opt name RPAR
@@ -941,13 +982,6 @@ symb_list :
   | /* empty */ { [] }
   | symb symb_list { $1 :: $2 }
 
-secret_range:
-  | LPAR NAT NAT RPAR { (nat32 $2 (at ()), nat32 $3 (at ())) }
-
-secret_ranges :
-  | { [] }
-  | secret_range secret_ranges { $1::$2 }
-                
 
 const :
   | LPAR CONST literal RPAR { snd (literal $2 $3) @@ ati 3 }

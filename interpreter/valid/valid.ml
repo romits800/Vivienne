@@ -40,6 +40,7 @@ let type_ (c : context) x = lookup "type" c.types x
 let func (c : context) x = lookup "function" c.funcs x
 let table (c : context) x = lookup "table" c.tables x
 let memory (c : context) x = lookup "memory" c.memories x
+let smemory (c : context) x = lookup "smemory" c.smemories x
 let global (c : context) x = lookup "global" c.globals x
 let local (c : context) x = lookup "local" c.locals x
 let label (c : context) x = lookup "label" c.labels x
@@ -457,7 +458,7 @@ let check_export (c : context) (set : NameSet.t) (ex : export) : NameSet.t =
   | FuncExport x -> ignore (func c x)
   | TableExport x -> ignore (table c x)
   | MemoryExport x -> ignore (memory c x)
-  | SmemoryExport x -> failwith "valid.ml: Not implemented"
+  | SmemoryExport x -> ignore (smemory c x)
   | GlobalExport x -> ignore (global c x)
   );
   require (not (NameSet.mem name set)) ex.at "duplicate export name";
@@ -467,7 +468,7 @@ let check_module (m : module_) =
   let
     { types; imports; tables; memories; smemories;
       globals; funcs; start; 
-      elems; data; exports; secrets } = m.it
+      elems; data; exports; secrets; public } = m.it
   in
   let c0 =
     List.fold_right check_import imports
@@ -478,6 +479,7 @@ let check_module (m : module_) =
       funcs = c0.funcs @ List.map (fun f -> type_ c0 f.it.ftype) funcs;
       tables = c0.tables @ List.map (fun tab -> tab.it.ttype) tables;
       memories = c0.memories @ List.map (fun mem -> mem.it.mtype) memories;
+      smemories = c0.smemories @ List.map (fun mem -> mem.it.smtype) smemories;
     }
   in
   let c =

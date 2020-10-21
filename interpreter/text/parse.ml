@@ -6,7 +6,6 @@ type 'a start =
 exception Syntax = Script.Syntax
 
 let parse' name lexbuf start =
-  print_endline "Parse'";
   lexbuf.Lexing.lex_curr_p <-
     {lexbuf.Lexing.lex_curr_p with Lexing.pos_fname = name};
   try start Lexer.token lexbuf

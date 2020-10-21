@@ -1,7 +1,6 @@
 open Script
 open Source
 
-
 (* Errors & Tracing *)
 
 module Abort = Error.Make ()
@@ -295,7 +294,7 @@ let bind map x_opt y =
   in map := Map.add "" y map'
 
 let lookup category map x_opt at =
-  let key = match x_opt with None -> "" | Some x -> x.it in
+  let key = match x_opt with None -> "" | Some x ->  x.it in
   try Map.find key !map with Not_found ->
     IO.error at
       (if key = "" then "no " ^ category ^ " defined"
@@ -335,12 +334,12 @@ let run_action act : Values.value list =
     | Some _ -> Assert.error act.at "export is not a function"
     | None -> Assert.error act.at "undefined export"
     )
-  | Symb_exec (x_opt, name, vs, sranges) ->
+  | Symb_exec (x_opt, name, vs) ->
     trace ("Symbolically executing function \"" ^ Ast.string_of_name name ^ "\"...");
     let inst = lookup_instance x_opt act.at in
     (match Instance.export inst name with
      | Some (Instance.ExternFunc f) ->
-       let _ = Eval.symb_invoke f (List.map (fun v -> v.it) vs) sranges in
+       let _ = Eval.symb_invoke f (List.map (fun v -> v.it) vs) in
        []
     | Some _ -> Assert.error act.at "export is not a function"
     | None -> Assert.error act.at "undefined export"

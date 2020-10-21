@@ -158,8 +158,8 @@ and 'data segment' =
   init : 'data;
 }
 
-type secret = secret' Source.phrase
-and secret' =
+type security = sec' Source.phrase
+and sec' =
 {
   index : var;
   range : const * const;
@@ -217,7 +217,8 @@ and module_' =
   start : var option;
   elems : var list segment list;
   data : string segment list;
-  secrets : secret list;
+  secrets : security list;
+  public  : security list;
   imports : import list;
   exports : export list;
 }
@@ -237,6 +238,7 @@ let empty_module =
   elems  = [];
   data = [];
   secrets = [];
+  public = [];
   imports = [];
   exports = [];
 }

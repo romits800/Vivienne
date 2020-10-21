@@ -700,7 +700,8 @@ let module_ s =
     List.map2 Source.(fun t f -> {f.it with ftype = t} @@ f.at)
       func_types func_bodies
   in {types; tables; memories; smemories;
-      globals; funcs; imports; exports; elems; data; start; secrets = []}
+      globals; funcs; imports; exports; elems; data; start;
+      secrets = []; public = []}
 
 
 let decode name bs =  at module_ (stream name bs)

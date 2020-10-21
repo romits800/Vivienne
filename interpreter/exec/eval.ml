@@ -77,12 +77,12 @@ type config =
   (* secret_reg : (int32 * int32) list *)
 }
 and
-secret_type = I32.t * I32.t
+secret_type = int * int
 
 let frame inst locals = {inst; locals}
-let config inst vs es sr =
+let config inst vs es =
   {frame = frame inst []; code = vs, es; budget = 300;
-   pc = PCTrue; msecrets = sr}
+   pc = PCTrue; msecrets = inst.secrets}
 
 let plain e = Plain e.it @@ e.at
 
@@ -161,20 +161,20 @@ let split_condition (sv : svalue) (pc : pc): pc * pc =
   in
   (pc'', pc')
 
-let split_msec (sv : svalue) (msec : (I32.t * I32.t) list ) (pc : pc) : pc * pc =  
+let split_msec (sv : svalue) (msec : (int * int) list ) (pc : pc) : pc * pc =  
   (* let pc' = PCAnd (sv, pc) in
    * let pc'' = *)
   let rec within_hrange sv msec =
     match msec with
     | [] -> Si32.eq Si32.zero Si32.zero
     | (lo, hi)::[] ->
-       let hrange = Si32.le_u sv (Si32.of_int32 hi) in
-       let lrange = Si32.ge_u sv (Si32.of_int32 lo) in
+       let hrange = Si32.le_u sv (Si32.of_int_s hi) in
+       let lrange = Si32.ge_u sv (Si32.of_int_s lo) in
        Si32.and_ hrange lrange
        (* PCAnd(sv, pc) *)
     | (lo, hi)::msecs ->
-       let hrange = Si32.le_u sv (Si32.of_int32 hi) in
-       let lrange = Si32.ge_u sv (Si32.of_int32 lo) in
+       let hrange = Si32.le_u sv (Si32.of_int_s hi) in
+       let lrange = Si32.ge_u sv (Si32.of_int_s lo) in
        let hl = Si32.and_ hrange lrange in
        Si32.or_ hl (within_hrange sv msecs)
  
@@ -351,13 +351,9 @@ let rec step (c : config) : config list =
          *      | Global.Type -> Crash.error e.at "type mismatch at global write") *)
 
         | Load {offset; ty; sz; _}, si :: vs' ->
-           (* print_endline "load"; *)
-           (* List.length frame.inst.smemories |> string_of_int |> print_endline;
-            * List.length frame.inst.memories |> string_of_int |> print_endline; *)
-           (* let _ = memory frame.inst (0l @@ e.at) in (\*  *\) *)
            let mem = smemory frame.inst (0l @@ e.at) in
-           (* TODO(Romy): find a better way to do this *)
-           let mem = Smemory.init_secrets mem c.msecrets in
+
+           (* let mem = Smemory.init_secrets mem c.msecrets in *)
            
            let frame = {frame with
                          inst = update_smemory frame.inst mem (0l @@ e.at)} in
@@ -403,7 +399,7 @@ let rec step (c : config) : config list =
            (* Pc_type.print_pc pc |> print_endline; *)
            let mem = smemory frame.inst (0l @@ e.at) in
            (* TODO(Romy): find a better way to do this *)
-           let mem = Smemory.init_secrets mem c.msecrets in
+           (* let mem = Smemory.init_secrets mem c.msecrets in *)
            let frame = {frame with
                          inst = update_smemory frame.inst mem (0l @@ e.at)} in
            let addr =
@@ -594,7 +590,6 @@ let rec step (c : config) : config list =
     | Label (n, es0, code'), vs ->
        (* print_endline "lab6"; *)
        let c' = step {c with code = code'} in
-       (* print_endline "lab6_after_Step"; *)
        List.map (fun ci -> {ci with code = vs, [Label (n, es0, ci.code) @@ e.at] @ List.tl es}) c'
 
     | Frame (n, frame', (vs', [])), vs ->
@@ -614,24 +609,23 @@ let rec step (c : config) : config list =
 
     | Frame (n, frame', code'), vs ->
        (* print_endline "frame4"; *)
-       (* Pc_type.print_pc c.pc |> print_endline; *)
        let c' = step {c with frame = frame'; code = code'; budget = c.budget - 1} in
-       (* print_endline "frame4_after_Step"; *)
        List.map (fun ci -> {ci with code = vs, [Frame (n, ci.frame, ci.code) @@ e.at] @ List.tl es}) c'
 
     | Invoke func, vs when c.budget = 0 ->
        Exhaustion.error e.at "call stack exhausted"
 
     | Invoke func, vs ->
+       (* print_endline "inv2"; *)
        let FuncType (ins, out) = func_type_of func in
        let n1, n2 = Lib.List32.length ins, Lib.List32.length out in
        let args, vs' = take n1 vs e.at, drop n1 vs e.at in
        (match func with
         | Func.AstFunc (t, inst', f) ->
-           let rest = List.map value_to_svalue f.it.locals in
+           let rest = List.map value_to_svalue_type f.it.locals in
            let locals' = List.rev args @ List.map Svalues.default_value rest in
            let frame' = {inst = !inst'; locals = List.map ref locals'} in
-           let instr' = [Label (n2, [], ([], List.map plain f.it.body)) @@ f.at] in
+           let instr' = [Label (n2, [], ([], List.map plain f.it.body)) @@ f.at] in 
            let vs', es' = vs', [Frame (n2, frame', ([], instr')) @@ e.at] in
            [{c with code = vs', es' @ List.tl es}]
 
@@ -734,34 +728,42 @@ let invoke (func : func_inst) (vs : svalue list) : pc list =
   (* let FuncType (ins, out) = Func.type_of func in
    * if List.map Svalues.type_of vs <> ins then
    *   Crash.error at "wrong number or types of arguments"; *)
-  let c = config empty_module_inst (List.rev vs) [Invoke func @@ at] [] in
+  let c = config empty_module_inst (List.rev vs) [Invoke func @@ at] in
   try List.rev (eval c) with Stack_overflow ->
     Exhaustion.error at "call stack exhausted"
 
 (* Todo(Romy): fix the check *)
-let symb_invoke (func : func_inst) (vs : svalue list)
-      (sr : (I32.t * I32.t) list) : pc list =
+let symb_invoke (func : func_inst) (vs : svalue list): pc list =
   let at = match func with Func.AstFunc (_,_, f) -> f.at | _ -> no_region in
   (* let FuncType (ins, out) = Func.type_of func in
    * if List.map Svalues.type_of vs <> ins then
    *   Crash.error at "wrong number or types of arguments"; *)
-  let c = config empty_module_inst (List.rev vs) [Invoke func @@ at] sr in
+  let c = config empty_module_inst (List.rev vs) [Invoke func @@ at] in
   try List.rev (eval c) with Stack_overflow ->
     Exhaustion.error at "call stack exhausted"
 
                              
 (*TODO(Romy): Check this one *)
-(* let eval_const (inst : module_inst) (const : const) : svalue =
- *   let c = config inst [] (List.map plain const.it) in
- *   match eval c with
- *   | [v] -> v
- *   | vs -> Crash.error const.at "wrong number of results on stack" *)
+let eval_const (inst : module_inst) (const : const) : svalue =
+  (* let c = config inst [] (List.map plain const.it) in *) 
+  match const.it with
+  | [v] ->
+     (match v.it with
+      | Const v -> value_to_svalue v.it
+      | _ -> Crash.error const.at "Evaluation on constants not implemented, yet."
+     )
+  | _ -> Crash.error const.at "wrong number of results on stack"
+
+(* let c = config inst [] (List.map plain const.it) in *)
+  (* match eval c with
+   * | [v] -> v
+   * | vs -> Crash.error const.at "wrong number of results on stack" *)
 
 
-(* let i32 (v : svalue) at =
- *   match v with
- *   | SI32 i -> Int32.of_int (Si32.to_int_s i)
- *   | _ -> Crash.error at "type error: i32 value expected" *)
+let i32 (v : svalue) at =
+  match v with
+  | SI32 i -> Int32.of_int (Si32.to_int_s i)
+  | _ -> Crash.error at "type error: i32 value expected"
 
 
 (* Modules *)
@@ -804,27 +806,58 @@ let init_func (inst : module_inst) (func : func_inst) =
   | Func.AstFunc (_, inst_ref, _) -> inst_ref := inst
   | _ -> assert false
 
-(* let init_table (inst : module_inst) (seg : table_segment) =
- *   let {index; offset = const; init} = seg.it in
- *   let tab = table inst index in
- *   let offset = i32 (eval_const inst const) const.at in
- *   let end_ = Int32.(add offset (of_int (List.length init))) in
- *   let bound = Table.size tab in
- *   if I32.lt_u bound end_ || I32.lt_u end_ offset then
- *     Link.error seg.at "elements segment does not fit table";
- *   fun () ->
- *     Table.blit tab offset (List.map (fun x -> FuncElem (func inst x)) init)
- * 
- * let init_memory (inst : module_inst) (seg : memory_segment) =
- *   let {index; offset = const; init} = seg.it in
- *   let mem = memory inst index in
- *   let offset' = i32 (eval_const inst const) const.at in
- *   let offset = I64_convert.extend_i32_u offset' in
- *   let end_ = Int64.(add offset (of_int (String.length init))) in
- *   let bound = Memory.bound mem in
- *   if I64.lt_u bound end_ || I64.lt_u end_ offset then
- *     Link.error seg.at "data segment does not fit memory";
- *   fun () -> Memory.store_bytes mem offset init *)
+let init_table (inst : module_inst) (seg : table_segment) =
+  let {index; offset = const; init} = seg.it in
+  let tab = table inst index in
+  let offset = i32 (eval_const inst const) const.at in
+  let end_ = Int32.(add offset (of_int (List.length init))) in
+  let bound = Table.size tab in
+  if I32.lt_u bound end_ || I32.lt_u end_ offset then
+    Link.error seg.at "elements segment does not fit table";
+  fun () ->
+    Table.blit tab offset (List.map (fun x -> FuncElem (func inst x)) init)
+
+let init_memory (inst : module_inst) (seg : memory_segment) =
+  let {index; offset = const; init} = seg.it in
+  let mem = memory inst index in
+  let offset' = i32 (eval_const inst const) const.at in
+  let offset = I64_convert.extend_i32_u offset' in
+  let end_ = Int64.(add offset (of_int (String.length init))) in
+  let bound = Memory.bound mem in
+  if I64.lt_u bound end_ || I64.lt_u end_ offset then
+    Link.error seg.at "data segment does not fit memory";
+  fun () -> Memory.store_bytes mem offset init
+
+let init_smemory (secret : bool) (inst : module_inst) (sec : security) = 
+  let {index; range = (const_lo,const_hi)} = sec.it in
+  let smem = smemory inst index in
+  let lo = i32 (eval_const inst const_lo) const_lo.at in
+  let hi = i32 (eval_const inst const_hi) const_hi.at in
+  let lo,hi = Int32.to_int lo, Int32.to_int hi in
+  let hi_list = (List.init (hi-lo+ 1) (fun x-> x + lo)) in
+  let stores =
+    match secret with
+    | true -> List.map Eval_symbolic.create_new_hstore hi_list
+    | false -> List.map Eval_symbolic.create_new_lstore hi_list
+  in
+
+  let inst' =
+    match secret with
+    | true -> { inst with secrets = (lo,hi)::inst.secrets }
+    | false -> { inst with public = (lo,hi)::inst.public }
+  in
+
+  let mem = List.fold_left Smemory.store_sind_value smem stores in  
+  update_smemory inst' mem  (0l @@ sec.at)
+  
+  (* let offset' = i32 (eval_const inst const) const.at in *)
+  (* let offset = I64_convert.extend_i32_u offset' in *)
+  (* let end_ = Int64.(add offset (of_int (String.length init))) in *)
+  (* let bound = Memory.bound mem in *)
+  
+  (* if I64.lt_u bound end_ || I64.lt_u end_ offset then
+   *   Link.error seg.at "data segment does not fit memory"; *)
+  
 
 
 let add_import (m : module_) (ext : extern) (im : import) (inst : module_inst)
@@ -836,21 +869,24 @@ let add_import (m : module_) (ext : extern) (im : import) (inst : module_inst)
   | ExternTable tab -> {inst with tables = tab :: inst.tables}
   | ExternMemory mem -> {inst with memories = mem :: inst.memories}
   | ExternSmemory smem -> {inst with smemories = smem :: inst.smemories;
-                                     smemlen = inst.smemlen + 1}
+                                     smemlen = 1 + inst.smemlen }
   | ExternGlobal glob -> {inst with globals = glob :: inst.globals}
 
 let init (m : module_) (exts : extern list) : module_inst =
   let
     { imports; tables; memories; smemories; globals; funcs; types;
-      exports; elems; data; start; secrets
+      exports; elems; data; start; secrets; public
     } = m.it
   in
+
   if List.length exts <> List.length imports then
     Link.error m.at "wrong number of imports provided for initialisation";
   let inst0 =
     { (List.fold_right2 (add_import m) exts imports empty_module_inst) with
       types = List.map (fun type_ -> type_.it) types }
   in
+
+
   let fs = List.map (create_func inst0) funcs in
   let inst1 =
     { inst0 with
@@ -858,18 +894,21 @@ let init (m : module_) (exts : extern list) : module_inst =
       tables = inst0.tables @ List.map (create_table inst0) tables;
       memories = inst0.memories @ List.map (create_memory inst0) memories;
       smemories = inst0.smemories @ List.map (create_smemory inst0) smemories;
+      smemlen = List.length  (inst0.smemories) + List.length(smemories);
       globals = inst0.globals;
       (* msecrets = inst0.msecrets @ List.map (create_secrets inst0) secrets; *)
                   (* @ List.map (create_global inst0) globals; *)
     }
   in
-  (* print_endline "INIT";
-   * List.length inst1.smemories |> string_of_int |> print_endline ; *)
+  let inst1 = List.fold_left (init_smemory true) inst1 secrets in
+  let inst1 = List.fold_left (init_smemory false) inst1 public in
   let inst = {inst1 with exports = List.map (create_export inst1) exports} in
   List.iter (init_func inst) fs;
-  (* let init_elems = List.map (init_table inst) elems in
-   * let init_datas = List.map (init_memory inst) data in
-   * List.iter (fun f -> f ()) init_elems;
-   * List.iter (fun f -> f ()) init_datas; *)
+  
+  let init_elems = List.map (init_table inst) elems in
+  let init_datas = List.map (init_memory inst) data in
+
+  List.iter (fun f -> f ()) init_elems;
+  List.iter (fun f -> f ()) init_datas;
   Lib.Option.app (fun x -> ignore (invoke (func inst x) [])) start;
   inst

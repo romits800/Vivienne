@@ -94,6 +94,9 @@ let match_table_type (TableType (lim1, et1)) (TableType (lim2, et2)) =
 let match_memory_type (MemoryType lim1) (MemoryType lim2) =
   match_limits lim1 lim2
 
+let match_smemory_type (SmemoryType lim1) (SmemoryType lim2) =
+  match_limits lim1 lim2
+
 let match_global_type gt1 gt2 =
   gt1 = gt2
 
@@ -102,6 +105,7 @@ let match_extern_type et1 et2 =
   | ExternFuncType ft1, ExternFuncType ft2 -> match_func_type ft1 ft2
   | ExternTableType tt1, ExternTableType tt2 -> match_table_type tt1 tt2
   | ExternMemoryType mt1, ExternMemoryType mt2 -> match_memory_type mt1 mt2
+  | ExternSmemoryType mt1, ExternSmemoryType mt2 -> match_smemory_type mt1 mt2
   | ExternGlobalType gt1, ExternGlobalType gt2 -> match_global_type gt1 gt2
   | _, _ -> false
 
@@ -165,3 +169,6 @@ let string_of_extern_type = function
   | ExternMemoryType mt -> "memory " ^ string_of_memory_type mt
   | ExternSmemoryType mt -> "smemory " ^ string_of_smemory_type mt
   | ExternGlobalType gt -> "global " ^ string_of_global_type gt
+
+let memory_to_smemory_type = function
+  | MemoryType lim -> SmemoryType lim 

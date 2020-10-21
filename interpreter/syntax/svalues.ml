@@ -23,7 +23,7 @@ let default_value = function
   | SF32Type -> SF32 F32.zero
   | SF64Type -> SF64 F64.zero
 
-let value_to_svalue = function
+let value_to_svalue_type = function
   | Types.I32Type -> SI32Type
   | Types.I64Type -> SI64Type
   | Types.F32Type -> SF32Type
@@ -83,3 +83,10 @@ struct
   let to_value i = SF64 i
   let of_value = function SF64 z -> z | _ -> raise (SValue SF64Type)
 end
+
+
+let value_to_svalue = function
+  | Values.I32 i32 -> SI32 (Si32.bv_of_int (Int32.to_int i32) 32)
+  | Values.I64 i64 -> SI64 (Si64.bv_of_int (Int64.to_int i64) 64)
+  | Values.F32 f32 -> SF32 f32
+  | Values.F64 f64 -> SF64 f64

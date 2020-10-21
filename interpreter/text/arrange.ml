@@ -439,7 +439,7 @@ let action mode act =
     Node ("invoke" ^ access x_opt name, List.map (literal mode) lits)
   | Get (x_opt, name) ->
     Node ("get" ^ access x_opt name, [])
-  | Symb_exec (x_opt, name, slits, _) ->
+  | Symb_exec (x_opt, name, slits) ->
      failwith "Arrange: error symb exec."
 
 let nan = function

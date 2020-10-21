@@ -9,11 +9,13 @@ type module_inst =
   funcs : func_inst list;
   tables : table_inst list;
   memories : memory_inst list;
-  (* for now support one one memory - the rest are instances. *)
+  (* TODO(Romy): for now support one memory - the rest are instances. *)
   smemories : smemory_inst list;
   smemlen : length;
   globals : global_inst list;
   exports : export_inst list;
+  secrets : security_inst list;
+  public  : security_inst list;
 }
 
 and func_inst = module_inst ref Func.t
@@ -22,6 +24,7 @@ and memory_inst = Memory.t
 and smemory_inst = Smemory.t
 and global_inst = Global.t
 and export_inst = Ast.name * extern
+and security_inst = int * int
 
 and extern =
   | ExternFunc of func_inst
@@ -37,7 +40,7 @@ type Table.elem += FuncElem of func_inst
 
 let empty_module_inst =
   { types = []; funcs = []; tables = []; memories = []; smemories = []; smemlen = 0;
-    globals = []; exports = []}
+    globals = []; exports = []; secrets = []; public = []}
 
 let extern_type_of = function
   | ExternFunc func -> ExternFuncType (Func.type_of func)

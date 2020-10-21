@@ -30,31 +30,31 @@ type t = memory
 
 let get_secrets mem =
   mem.secrets
-       
+  
 let get_stores mem =
-  let create_hstores (lo,hi) =
-    let lo,hi = Int32.to_int lo, Int32.to_int hi in
-    let hi_list = (List.init (hi-lo+1) (fun x-> x + lo)) in
-    (* List.iter (fun x -> print_endline (string_of_int x)) hi_list; *)
-    let stores = List.map Eval_symbolic.create_new_hstore hi_list in
-    stores
-  in
-  let create_lstores (lo,hi) =
-    let lo,hi = Int32.to_int lo, Int32.to_int hi in
-    let lo_list = (List.init (hi-lo+1) (fun x-> x + lo)) in
-    (* List.iter (fun x -> print_endline (string_of_int x)) lo_list; *)
-    let stores = List.map Eval_symbolic.create_new_lstore lo_list in
-    stores
-  in
-  let nsec = (Int32.of_int 16, Int32.of_int 32) in
-  let mem = {mem with nonsecrets = [nsec]} in
-  let all_stores = 
-    List.fold_left (fun l sec -> l @ create_lstores sec) [] mem.nonsecrets @
-      List.fold_left (fun l sec -> l @ create_hstores sec) [] mem.secrets @ mem.stores
-  in
-  print_endline "get_stores";
-  print_endline (string_of_int (List.length all_stores));
-  all_stores
+  (* let create_hstores (lo,hi) =
+   *   let lo,hi = Int32.to_int lo, Int32.to_int hi in
+   *   let hi_list = (List.init (hi-lo+1) (fun x-> x + lo)) in
+   *   (\* List.iter (fun x -> print_endline (string_of_int x)) hi_list; *\)
+   *   let stores = List.map Eval_symbolic.create_new_hstore hi_list in
+   *   stores
+   * in
+   * let create_lstores (lo,hi) =
+   *   let lo,hi = Int32.to_int lo, Int32.to_int hi in
+   *   let lo_list = (List.init (hi-lo+1) (fun x-> x + lo)) in
+   *   (\* List.iter (fun x -> print_endline (string_of_int x)) lo_list; *\)
+   *   let stores = List.map Eval_symbolic.create_new_lstore lo_list in
+   *   stores
+   * in
+   * let nsec = (Int32.of_int 16, Int32.of_int 32) in
+   * let mem = {mem with nonsecrets = [nsec]} in
+   * let all_stores = 
+   *   List.fold_left (fun l sec -> l @ create_lstores sec) [] mem.nonsecrets @
+   *     List.fold_left (fun l sec -> l @ create_hstores sec) [] mem.secrets @ mem.stores
+   * in
+   * print_endline "get_stores";
+   * print_endline (string_of_int (List.length all_stores)); *)
+  mem.stores
   
 let create_mem () =  Smem.empty 
   (* Smem.add 1 Si32.zero m *)
@@ -271,9 +271,8 @@ let store_sind_value mem store =
   {mem with stores = store::mem.stores }
 
 
-let init_secrets mem sec =
-  print_endline "INIT Secrets.";
-  {mem with secrets = sec }
+(* let init_secrets mem sec =
+ *   {mem with secrets = sec } *)
 
 (* let extend x n = function
  *   | ZX -> x

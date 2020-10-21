@@ -399,6 +399,7 @@ rule token = parse
   | "elem" { ELEM }
   | "data" { DATA }
   | "secret" { SECRET }
+  | "public" { PUBLIC }
   | "offset" { OFFSET }
   | "import" { IMPORT }
   | "export" { EXPORT }

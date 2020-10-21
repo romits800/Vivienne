@@ -33,5 +33,5 @@ val store_value :
 (* inputs: memory, store_svalue (index, value); outputs: memory *)
 val store_sind_value : memory -> svalue -> memory
 
-val init_secrets : memory -> (int32 * int32 ) list -> memory
+(* val init_secrets : memory -> (int32 * int32 ) list -> memory *)
 
