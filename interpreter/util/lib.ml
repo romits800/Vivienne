@@ -141,7 +141,7 @@ struct
   let rec replace n x xs =
     match n, xs with
     | 0l, x'::xs' -> x::xs'  
-    | n, _::xs' when n > 0l -> x :: replace (Int32.sub n 1l) x xs'
+    | n, x'::xs' when n > 0l -> x'::replace (Int32.sub n 1l) x xs'
     | _ -> failwith "replace"
 
   let insert x xs = x::xs
