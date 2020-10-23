@@ -1,9 +1,9 @@
-(*In part based on https://people.cs.umass.edu/~arjun/courses/cmpsci631-spring2016/ocamldoc/Smtlib.html*)
+ (*In part based on https://people.cs.umass.edu/~arjun/courses/cmpsci631-spring2016/ocamldoc/Smtlib.html*)
 
 module type SmtType =
 sig
   type term
-
+  type mergetype
   (* val declare_const : solver -> identifier -> sort -> unit
    *   
    * val assert_ : solver -> term -> unit
@@ -21,7 +21,7 @@ sig
    * val bool_sort : sort
    * 
    * val array_sort : sort -> sort -> sort *)
-
+  
   val size: int
   val zero: term
   val one: term
@@ -93,13 +93,15 @@ sig
   val bvsgt : term -> term -> term
 
   val term_to_string : term -> string
+  val merge : term -> term -> (mergetype * mergetype) option
+  val merge_to_string : mergetype -> string
 end
 
 module type S =
 sig
   type t
   type bits
-
+  type mtype
   (* val of_bits : bits -> t
    * val to_bits : t -> bits *)
 
@@ -165,9 +167,12 @@ sig
   val to_string_s : t -> string
   val to_string_u : t -> string
   val to_hex_string : t -> string
+
+  val merge : t -> t-> (mtype * mtype) option
+  val merge_to_string : mtype -> string
 end
 
-module Make (Rep : SmtType) : S with type bits = Rep.term and type t = Rep.term =
+module Make (Rep : SmtType) : S with type bits = Rep.term and type mtype = Rep.mergetype and type t = Rep.term  =
 struct
   (*
    * Unsigned comparison in terms of signed comparison.
@@ -193,7 +198,7 @@ struct
 
   type t = Rep.term
   type bits = Rep.term
-
+  type mtype = Rep.mergetype
   (* let of_bits x = x
    * let to_bits x = x *)
 
@@ -351,6 +356,8 @@ struct
   let to_string_u t = ""
   let to_hex_string t = ""
 
+  let merge = Rep.merge
+  let merge_to_string = Rep.merge_to_string
 (* let to_int_s = Rep.to_int
    * let to_int_u i = Rep.to_int i land (Rep.to_int Rep.max_int lsl 1) lor 1
    * 

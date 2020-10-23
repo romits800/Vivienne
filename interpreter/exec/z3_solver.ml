@@ -406,4 +406,64 @@ let is_sat (pc : pc) (mem: Smemory.t list * int) : bool =
     (* | Solver.UNKNOWN  -> true *)  
   | _ -> false
 
-      
+
+let max = Optimize.maximize
+let min = Optimize.minimize
+
+
+let optimize (f : Z3.Optimize.optimize -> Z3.Expr.expr -> Z3.Optimize.handle)
+      (pc : pc) (mem: Smemory.t list * int) (sv : svalue)  =
+  let cfg = [("model", "true"); ("proof", "false")] in
+  let ctx = mk_context cfg in
+  let g1 = Goal.mk_goal ctx true false false in
+
+  let opt1 = Optimize.mk_opt ctx in
+
+  let pcexp = pc_to_expr pc ctx mem in
+  (* TODO(Romy): Fix for two paths *)
+  (match pcexp with
+   | L pcv -> Goal.add g1 [pcv] 
+   | H (pcv1, pcv2) -> Goal.add g1 [pcv1]
+                       (* Goal.add g2 [pcv2] *) 
+  );
+
+  List.iter (fun f -> Optimize.add opt1 [f]) (Goal.get_formulas g1);
+
+  let v = sv_to_expr sv ctx mem in
+  (* TODO(Romy): Fix for two paths *)
+  let h =
+    (match v with
+     | L v ->
+        let bv = Expr.get_sort v  in
+        (* half max int *)
+        let hmi = Expr.mk_numeral_int ctx 0x80000000 bv in
+        let v' =
+          match Sort.get_sort_kind bv with
+          | Z3enums.BV_SORT ->  BitVector.mk_add ctx v hmi
+          | _ -> failwith ("Wrong type of sort " ^ (Sort.to_string bv))
+        in
+        f opt1 v'
+     | H (v1,v2) ->
+        let bv = Expr.get_sort v1  in
+        (* half max int *)
+        let hmi = Expr.mk_numeral_int ctx 0x80000000 bv in
+        let v' =
+          match Sort.get_sort_kind bv with
+          | Z3enums.BV_SORT ->  BitVector.mk_add ctx v1 hmi
+          | _ -> failwith ("Wrong type of sort " ^ (Sort.to_string bv))
+        in
+        f opt1 v'
+    ) in
+
+  (* List.iter (fun f -> Optimize.add opt2 [f]) (Goal.get_formulas g2); *)
+  match (Optimize.check opt1) with
+   | Solver.SATISFIABLE ->
+      let ex1 = Optimize.get_lower h in
+      let ex2 = Optimize.get_upper h in
+      if Expr.equal ex1 ex2 then
+        let i = Arithmetic.Integer.get_big_int ex1 in
+        let bi = Big_int.sub_big_int i (Big_int.big_int_of_int64 2147483648L) in
+        let i = Big_int.int_of_big_int bi in
+        Some (i)
+      else None
+   | _ ->  None

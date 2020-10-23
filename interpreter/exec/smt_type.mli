@@ -40,12 +40,8 @@ type term =
   | App of func * term list
   | Let of string * term * term
 
-type check_sat_result = 
-  | Sat
-  | Unsat
-  | Unknown
-
-
+type mergetype = PLUS_INF | MINUS_INF | Integer of int | Term of term
+                                                     
 (* let curr_num = ref 0 *)
              
 (* val int_sort : sort
@@ -119,5 +115,6 @@ val bvslt : term -> term -> term
 val bvsge : term -> term -> term
 val bvsgt : term -> term -> term
 
-
+val merge : term -> term -> (mergetype * mergetype) option
+val merge_to_string :  mergetype -> string
 val term_to_string : term -> string

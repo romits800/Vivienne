@@ -52,7 +52,7 @@ type 'a stack = 'a list
 type frame =
 {
   inst : module_inst;
-  locals : svalue ref list;
+  locals : svalue list;
 }
 
 type code = svalue stack * admin_instr list
@@ -81,16 +81,25 @@ type config =
   budget : int;  (* to model stack overflow *)
   pc : pc;  (* to model path condition *)
   msecrets : secret_type list;
-  (* secret_reg : (int32 * int32) list *)
+  loops : config list;
+  abstract_loops: admin_instr' list;
   observations: obs_type
 }
 and
 secret_type = int * int
 
+
+(* type configs =
+ *   {
+ *     cs : config list;
+ *     loops : config list;
+ *   } *)
+
+            
 let frame inst locals = {inst; locals}
 let config inst vs es =
   {frame = frame inst []; code = vs, es; budget = 300;
-   pc = PCTrue; msecrets = inst.secrets;
+   pc = PCTrue; msecrets = inst.secrets; loops = []; abstract_loops = [];
    observations = OBSTRUE }
 
 let plain e = Plain e.it @@ e.at
@@ -121,6 +130,12 @@ let insert_smemory (inst : module_inst) (mem : Instance.smemory_inst)  =
                smemlen = inst.smemlen + 1 }
   with Failure _ ->
     failwith "insert memory"
+
+let update_local (frame : frame) (x : int32 Source.phrase) (sv: svalue) = 
+  try
+    {frame with locals = Lib.List32.replace x.it sv frame.locals}
+  with Failure _ ->
+    Crash.error x.at ("udefined local " ^ Int32.to_string x.it)
 
 (* let elem inst x i at =
  *   match Table.load (table inst x) i with
@@ -209,6 +224,135 @@ let select_condition v0 v1 v2 = (* (v0: svalue  v1: svalue): svalue = *)
   | _ -> failwith "Type problem select"
 
 
+let merge l1 l2 =
+  match l1,l2 with
+  | SI32 l1, SI32 l2 ->
+     let ishigh = Si32.is_high l1 || Si32.is_high l2 in
+     let newv = if ishigh then Si32.of_high () else Si32.of_low() in
+     Some (SI32 newv, Si32.merge l1 l2)
+  | SI64 l1, SI64 l2 ->
+     let ishigh = Si64.is_high l1 || Si64.is_high l2 in
+     let newv = if ishigh then Si64.of_high () else Si64.of_low() in
+     Some (SI32 newv, Si64.merge l1 l2)
+  (* (match m with
+      * | Some (m1, m2) ->
+      *    Si64.merge_to_string m1 |> print_endline;
+      *    Si64.merge_to_string m2 |> print_endline; *)
+     (* | None -> print_endline "None SI64") *)
+  | _ -> None
+
+let gen_constraints v range =
+  match v with
+  | SI32 v ->
+     (match range with
+     | None -> []
+     | Some (Smt_type.Term t, Smt_type.PLUS_INF)  -> [SI32 (Si32.ge_s v t)]
+     | Some (Smt_type.MINUS_INF, Smt_type.Term t) -> [SI32 (Si32.le_s v t)]
+     | Some (Smt_type.Integer i, Smt_type.Term t) ->
+        [SI32 (Si32.le_s v t); SI32 (Si32.ge_s v (Si32.of_int_s i))]
+     | Some (Smt_type.Term t, Smt_type.Integer i) ->
+        [SI32 (Si32.ge_s v t); SI32 (Si32.le_s v (Si32.of_int_s i))]
+     | _ -> [])
+  | SI64 v ->
+     (match range with
+     | None -> []
+     | Some (Smt_type.Term t, Smt_type.PLUS_INF)  -> [SI64 (Si64.ge_s v t)]
+     | Some (Smt_type.MINUS_INF, Smt_type.Term t) -> [SI64 (Si64.le_s v t)]
+     | Some (Smt_type.Integer i, Smt_type.Term t) ->
+        [SI64 (Si64.le_s v t); SI64 (Si64.ge_s v (Si64.of_int_s i))]
+     | Some (Smt_type.Term t, Smt_type.Integer i) ->
+        [SI64 (Si64.ge_s v t); SI64 (Si64.le_s v (Si64.of_int_s i))]
+     | _ -> [])
+
+  | _ -> []
+
+let is_loop_equal l1 l2 =
+  match l1, l2 with
+    | Plain(Loop (bv, es')), Plain(Loop (bvi, esi')) when bv == bvi && es' == esi' -> true
+    | _ -> false
+
+       
+let rec check_loops c cs =
+  let check_loops_i c ci =
+    let rec check_locals l1s l2s ind ci =
+      match l1s,l2s with
+      | l1::l1s',l2::l2s' ->
+         (* svalue_to_string l1 |> print_endline; *)
+         (* svalue_to_string l2 |> print_endline; *)
+         let mem = (ci.frame.inst.smemories, smemlen ci.frame.inst) in
+         (* print_endline "merge"; *)
+         let newvrange = merge l1 l2 in
+         (match newvrange with
+         | Some (newv,range) ->
+            (* print_endline (merge_to_string comp); *)
+            let ci' = { ci with frame = update_local ci.frame ind newv } in
+            let ci' =
+              match range with
+              | None -> ci'
+              | Some (Smt_type.Term t, Smt_type.PLUS_INF) ->
+                 let mv = Z3_solver.optimize Z3_solver.max ci.pc mem l2 in
+                 (match mv with
+                  | None ->
+                     let cs = gen_constraints newv range in
+                     let pc' = List.fold_left (fun pci c -> PCAnd (c, pci)) ci'.pc cs in
+                     { ci' with pc = pc' }
+                     (* Some (newv, cs) *)
+                  | Some v ->
+                     let nrange = Some (Smt_type.Term t, Smt_type.Integer v) in
+                     let cs = gen_constraints newv nrange in
+                     let pc' = List.fold_left (fun pci c -> PCAnd (c, pci)) ci'.pc cs in
+                     { ci' with pc = pc' }
+                 (* Some (newv, cs) *)
+                 )
+              | Some (Smt_type.MINUS_INF, Smt_type.Term t) ->
+                 let mv = Z3_solver.optimize Z3_solver.min ci'.pc mem l2 in
+                 (match mv with
+                  | None ->
+                     let cs = gen_constraints newv range in
+                     let pc' = List.fold_left (fun pci c -> PCAnd (c, pci)) ci'.pc cs in
+                     { ci' with pc = pc' }
+                     (* Some (newv, cs) *)
+                  | Some v ->
+                     let nrange = Some (Smt_type.Term t, Smt_type.Integer v) in
+                     let cs = gen_constraints newv nrange in
+                     let pc' = List.fold_left (fun pci c -> PCAnd (c, pci)) ci'.pc cs in
+                     { ci' with pc = pc' }
+                     (* Some (newv, cs) *)
+                 )
+              | _ -> ci'
+            in
+            let nind = Int32.of_int ((Int32.to_int ind.it) + 1) in
+            check_locals l1s' l2s' (nind @@ ind.at) ci'
+         | None ->
+            let nind = Int32.of_int ((Int32.to_int ind.it) + 1) in
+            check_locals l1s' l2s' (nind @@ ind.at) ci
+         (* check_locals (None::acc) l1s' l2s' ind ci) *)
+         )
+      | l::_, [] 
+        | [], l::_ -> ci (*List.rev acc*)
+      | [], [] -> ci (* List.rev acc *)
+    in
+    let {frame; code = vs, es; pc; _} = c in
+    let {frame = framei; code = vsi,esi; pc = pci; _} = ci in
+    let e, ei = (List.hd es, List.hd esi) in 
+    if is_loop_equal e.it ei.it then 
+    (* match e.it, ei.it with
+     * | Plain ( Loop (bv, es')), Plain ( Loop (bvi, esi')) when bv == bvi && es' == esi' -> *)
+      let loc1 = frame.locals in
+      let loc2 = framei.locals in
+      Some (check_locals loc1 loc2 (0l @@ e.at) ci)
+    else None
+    (* | _ -> None *)
+  in
+  match c, cs with
+  | _, c1::cs' ->
+     let cl = check_loops_i c c1 in
+     (match cl with
+      (* Terminates after the first matching loop *)
+     | Some (cls) -> Some (cls)
+     | None -> check_loops c cs')
+  | _, [] -> None
+
 (* Evaluation *)
 
 (*
@@ -245,12 +389,31 @@ let rec step (c : config) : config list =
            let vs', es' = vs', [Label (n2, [], (args, List.map plain es')) @@ e.at] in
            [{c with code = vs', es' @ List.tl es}]
         | Loop (bt, es'), vs ->
-           let FuncType (ts1, ts2) = block_type frame.inst bt in
-           let n1 = Lib.List32.length ts1 in
-           let args, vs' = take n1 vs e.at, drop n1 vs e.at in
-           let vs', es' = vs', [Label (n1, [e' @@ e.at], (args, List.map plain es')) @@ e.at] in
-           [{c with code = vs', es' @ List.tl es}]
-
+           (* print_endline "loop"; *)
+           (if (List.fold_left (fun b ei -> (is_loop_equal e.it ei) || b)
+                  false c.abstract_loops) then
+              (print_endline "Skipping loop";
+              let vs', es' = vs, [] in
+              [{c with code = vs', es' @ List.tl es}])
+            else 
+              (match (check_loops c c.loops) with
+               | Some newc -> 
+                  let FuncType (ts1, ts2) = block_type frame.inst bt in
+                  let n1 = Lib.List32.length ts1 in
+                  let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+                  let vs', es' = vs', [Label (n1, [e' @@ e.at], (args, List.map plain es')) @@ e.at] in
+                  [{newc with code = vs', es' @ List.tl es;
+                              abstract_loops = e.it::c.abstract_loops;
+                              loops = c.loops}]
+                  
+               | None -> 
+                  let FuncType (ts1, ts2) = block_type frame.inst bt in
+                  let n1 = Lib.List32.length ts1 in
+                  let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+                  let vs', es' = vs', [Label (n1, [e' @@ e.at], (args, List.map plain es')) @@ e.at] in
+                  [{c with code = vs', es' @ List.tl es; loops = c::c.loops}]
+              )
+           )
         | If (bt, es1, es2), v :: vs' ->
            (* print_endline "if"; *)
            let pc', pc'' = split_condition v pc in
@@ -297,8 +460,6 @@ let rec step (c : config) : config list =
                      else res in
            
            (* Must be unsat *)
-           (* print_endline "before unsat";
-            * Pc_type.print_pc pc' |> print_endline; *)
 
            if Z3_solver.is_ct_unsat pc v mem then res
            else failwith "BrIf: Constant-time failure"
@@ -340,21 +501,21 @@ let rec step (c : config) : config list =
            
         | LocalGet x, vs ->
            (* print_endline "localget"; *)
-           (* Pc_type.print_pc pc |> print_endline; *)
-           let vs', es' = !(local frame x) :: vs, [] in
+           let vs', es' = (local frame x) :: vs, [] in
            [{c with code = vs', es' @ List.tl es}]
 
         | LocalSet x, v :: vs' ->
            (* print_endline "localset"; *)
-           local frame x := v;
+           let frame' = update_local c.frame x v in
            let vs', es' = vs', [] in
-           [{c with code = vs', es' @ List.tl es}]
+           [{c with code = vs', es' @ List.tl es; frame = frame'}]
 
         | LocalTee x, v :: vs' ->
            (* print_endline "localtee"; *)
-           local frame x := v;
+           let frame' = update_local c.frame x v in
+           (* local frame x := v; *)
            let vs', es' = v :: vs', [] in
-           [{c with code = vs', es' @ List.tl es}]
+           [{c with code = vs', es' @ List.tl es; frame = frame'}]
 
         (* | GlobalGet x, vs ->
          *   Global.load (global frame.inst x) :: vs, [] *)
@@ -570,7 +731,8 @@ let rec step (c : config) : config list =
     | Label (n, es0, code'), vs ->
        (* print_endline "lab6"; *)
        let c' = step {c with code = code'} in
-       List.map (fun ci -> {ci with code = vs, [Label (n, es0, ci.code) @@ e.at] @ List.tl es}) c'
+       List.map (fun ci -> {ci with code = vs, [Label (n, es0, ci.code) @@ e.at]
+                                               @ List.tl es}) c'
 
     | Frame (n, frame', (vs', [])), vs ->
        (* print_endline "frame1"; *)
@@ -604,7 +766,7 @@ let rec step (c : config) : config list =
         | Func.AstFunc (t, inst', f) ->
            let rest = List.map value_to_svalue_type f.it.locals in
            let locals' = List.rev args @ List.map Svalues.default_value rest in
-           let frame' = {inst = !inst'; locals = List.map ref locals'} in
+           let frame' = {inst = !inst'; locals = locals'} in
            let instr' = [Label (n2, [], ([], List.map plain f.it.body)) @@ f.at] in 
            let vs', es' = vs', [Frame (n2, frame', ([], instr')) @@ e.at] in
            [{c with code = vs', es' @ List.tl es}]
@@ -661,6 +823,8 @@ let rec eval_bfs (cs : config list) : pc list =
   spaths @ (List.fold_left (@) [] css |> eval_bfs)
 
 
+             
+     
 (* Eval DFS *)
 let eval_dfs (cs : config list) : pc list =
   let rec eval_dfs_i (cs : config list) (acc : pc list) =
@@ -668,10 +832,7 @@ let eval_dfs (cs : config list) : pc list =
     match cs with
     | c::cs' ->
        (match c.code with
-        | vs, [] ->
-           (* print_pc c.pc |> print_endline; *)
-           (* "Printing pc"  |> print_endline; *)
-           eval_dfs_i cs' (c.pc::acc)
+        | vs, [] -> eval_dfs_i cs' (c.pc::acc)
         | vs, {it = Trapping msg; at} :: _ -> Trap.error at msg
         | vs, es -> (
            let ncs = step c in
@@ -699,7 +860,7 @@ let eval (c : config) : pc list =
   if !Flags.bfs then
     eval_bfs [c]
   else 
-    eval_dfs [c] 
+    eval_dfs [c] (* {cs = [c]; loops = []} *)
 
 (* Functions & Constants *)
 
