@@ -67,14 +67,22 @@ and admin_instr' =
   | Label of int32 * instr list * code
   | Frame of int32 * frame * code
 
+           
+type obs_type =
+  | CT_UNSAT of pc * svalue * (Smemory.t list * int) * obs_type
+  | CT_V_UNSAT of pc * svalue * (Smemory.t list * int) * obs_type
+  (* | CT_SAT of pc * obs_type *)
+  | OBSTRUE
+  
 type config =
 {
   frame : frame;
   code : code;
   budget : int;  (* to model stack overflow *)
   pc : pc;  (* to model path condition *)
-  msecrets : secret_type list 
+  msecrets : secret_type list;
   (* secret_reg : (int32 * int32) list *)
+  observations: obs_type
 }
 and
 secret_type = int * int
@@ -82,7 +90,8 @@ secret_type = int * int
 let frame inst locals = {inst; locals}
 let config inst vs es =
   {frame = frame inst []; code = vs, es; budget = 300;
-   pc = PCTrue; msecrets = inst.secrets}
+   pc = PCTrue; msecrets = inst.secrets;
+   observations = OBSTRUE }
 
 let plain e = Plain e.it @@ e.at
 
@@ -251,6 +260,8 @@ let rec step (c : config) : config list =
 
            let mem = (frame.inst.smemories, smemlen frame.inst) in 
 
+           let c = {c with observations = CT_UNSAT(pc, v, mem, c.observations)} in
+           
            let res = if Z3_solver.is_sat pc' mem then
                        [{c with code = vs', es' @ List.tl es; pc = pc'}]
                      else [] in
@@ -274,6 +285,9 @@ let rec step (c : config) : config list =
            let vs', es' = vs', [] in
            
            let mem = (frame.inst.smemories, smemlen frame.inst) in
+
+           (* proof obligation *)
+           let c = {c with observations = CT_UNSAT(pc, v, mem, c.observations)} in
            
            let res = if Z3_solver.is_sat pc' mem then
                        [{c with code = vs', es' @ List.tl es; pc = pc'}]
@@ -357,8 +371,7 @@ let rec step (c : config) : config list =
            
            let frame = {frame with
                          inst = update_smemory frame.inst mem (0l @@ e.at)} in
-           (* print_endline "Load";
-            * List.iter (fun m -> print_endline (string_of_int (List.length (Smemory.get_secrets m)))) frame.inst.smemories; *)
+           
            let addr =
              (match si with
               | SI32 v -> v
@@ -366,6 +379,9 @@ let rec step (c : config) : config list =
              ) in (* I64_convert.extend_i32_u i in *)
            let offset = Int32.to_int offset in        
            let mem = (frame.inst.smemories, smemlen frame.inst) in
+
+           let c = {c with observations = CT_V_UNSAT(pc, si, mem, c.observations)} in
+
            if (Z3_solver.is_v_ct_unsat pc si mem) then
              (
              let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
@@ -408,25 +424,12 @@ let rec step (c : config) : config list =
               | _ -> failwith "Error: Address should be 32-bit integer"
              ) in (* I64_convert.extend_i32_u i in *)
            let offset = Int32.to_int offset in
-           (* if Si32.is_int addr then
-            *   (\* The address is a value *\)
-            *   let addr = Si32.to_int_u addr in
-            *   let vs', es', mem' =
-            *     (try
-            *        let mem' =
-            *          match sz with
-            *          | None -> Smemory.store_value mem addr offset sv 
-            *          | Some sz -> failwith "Not packed sz supported for  now."
-            *                                (\* Memory.load_packed sz ext mem addr offset ty *\)
-            *        in  vs', [], mem'
-            *      with exn -> vs', [Trapping (smemory_error e.at exn) @@ e.at], mem)
-            *   in
-            *   [{c with code = vs', es' @ List.tl es;
-            *            frame = {frame with
-            *                      inst = update_smemory frame.inst mem' (0l @@ e.at)}}]
-            * else *)
-             (* check if we satisfy CT  for the index *)
+           (* check if we satisfy CT  for the index *)
+
            let mems = (frame.inst.smemories, smemlen frame.inst) in
+           
+           let c = {c with observations = CT_V_UNSAT(pc, si, mems, c.observations)} in
+           
            if (Z3_solver.is_v_ct_unsat pc si mems) then
              let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
              let msec = c.msecrets in
@@ -448,9 +451,8 @@ let rec step (c : config) : config list =
              (* Path2: we store the value in non secret memory *)
              (* print_endline "before is_sat"; *)
              let res = if Z3_solver.is_sat pc'' mems then
-                         (* low values *)
                          (
-                           (* print_endline "in is_sat2"; *)
+                           let c = {c with observations = CT_V_UNSAT(pc'', sv, mems, c.observations)} in
                            if Z3_solver.is_v_ct_unsat pc'' sv mems then
                              {c with code = vs', es' @ List.tl es;
                                      frame = nframe;
@@ -459,28 +461,6 @@ let rec step (c : config) : config list =
                        else res in
              res
            else failwith "The index does not satisfy CT."
-
-        (* | Load {offset; ty; sz; _}, I32 i :: vs' ->
-         *   let mem = memory frame.inst (0l @@ e.at) in
-         *   let addr = I64_convert.extend_i32_u i in
-         *   (try
-         *     let v =
-         *       match sz with
-         *       | None -> Memory.load_value mem addr offset ty
-         *       | Some (sz, ext) -> Memory.load_packed sz ext mem addr offset ty
-         *     in v :: vs', []
-         *   with exn -> vs', [Trapping (memory_error e.at exn) @@ e.at]) *)
-
-        (* | Store {offset; sz; _}, v :: I32 i :: vs' ->
-         *   let mem = memory frame.inst (0l @@ e.at) in
-         *   let addr = I64_convert.extend_i32_u i in
-         *   (try
-         *     (match sz with
-         *     | None -> Memory.store_value mem addr offset v
-         *     | Some sz -> Memory.store_packed sz mem addr offset v
-         *     );
-         *     vs', []
-         *   with exn -> vs', [Trapping (memory_error e.at exn) @@ e.at]); *)
 
         (* | MemorySize, vs ->
          *   let mem = memory frame.inst (0l @@ e.at) in
