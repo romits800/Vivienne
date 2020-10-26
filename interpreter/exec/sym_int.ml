@@ -4,6 +4,7 @@ module type SmtType =
 sig
   type term
   type mergetype
+  type solv_type
   (* val declare_const : solver -> identifier -> sort -> unit
    *   
    * val assert_ : solver -> term -> unit
@@ -93,7 +94,7 @@ sig
   val bvsgt : term -> term -> term
 
   val term_to_string : term -> string
-  val merge : term -> term -> (mergetype * mergetype) option
+  val merge : solv_type -> term -> term -> (mergetype * mergetype) option
   val merge_to_string : mergetype -> string
 end
 
@@ -102,6 +103,7 @@ sig
   type t
   type bits
   type mtype
+  type stype
   (* val of_bits : bits -> t
    * val to_bits : t -> bits *)
 
@@ -168,11 +170,12 @@ sig
   val to_string_u : t -> string
   val to_hex_string : t -> string
 
-  val merge : t -> t-> (mtype * mtype) option
+  val merge : stype -> t -> t-> (mtype * mtype) option
   val merge_to_string : mtype -> string
 end
 
-module Make (Rep : SmtType) : S with type bits = Rep.term and type mtype = Rep.mergetype and type t = Rep.term  =
+module Make (Rep : SmtType) : S with type bits = Rep.term and type stype = Rep.solv_type and
+                                     type mtype = Rep.mergetype and type t = Rep.term  =
 struct
   (*
    * Unsigned comparison in terms of signed comparison.
@@ -199,6 +202,7 @@ struct
   type t = Rep.term
   type bits = Rep.term
   type mtype = Rep.mergetype
+  type stype = Rep.solv_type
   (* let of_bits x = x
    * let to_bits x = x *)
 

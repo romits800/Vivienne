@@ -175,11 +175,25 @@ let drop n (vs : 'a stack) at =
 
   
 let split_condition (sv : svalue) (pc : pc): pc * pc =
-  let pc' = PCAnd (sv, pc) in
+  let pc' = 
+    match sv with
+    | SI32 vi32 ->
+       let zero = Si32.zero in
+       PCAnd( SI32 (Si32.ne vi32 zero), pc)
+    | SI64 vi64 ->
+       let zero = Si32.zero in
+       PCAnd( SI64 (Si64.ne vi64 zero), pc)
+    | SF32 vf32 -> PCAnd( SF32 ( F32.neg vf32), pc)
+    | SF64 vf64 -> PCAnd( SF64 ( F64.neg vf64), pc)
+  in
   let pc'' =
     match sv with
-    | SI32 vi32 -> PCAnd( SI32 ( Si32.not_ vi32), pc)
-    | SI64 vi64 -> PCAnd( SI64 ( Si64.not_ vi64), pc)
+    | SI32 vi32 ->
+       let zero = Si32.zero in
+       PCAnd( SI32 ( Si32.eq vi32 zero ), pc)
+    | SI64 vi64 ->
+       let zero = Si64.zero in
+       PCAnd( SI64 ( Si64.eq vi64 zero), pc)
     | SF32 vf32 -> PCAnd( SF32 ( F32.neg vf32), pc)
     | SF64 vf64 -> PCAnd( SF64 ( F64.neg vf64), pc)
   in
@@ -190,7 +204,7 @@ let split_msec (sv : svalue) (msec : (int * int) list ) (pc : pc) : pc * pc =
    * let pc'' = *)
   let rec within_hrange sv msec =
     match msec with
-    | [] -> Si32.eq Si32.zero Si32.zero
+    | [] -> Si32.ne Si32.zero Si32.zero
     | (lo, hi)::[] ->
        let hrange = Si32.le_u sv (Si32.of_int_s hi) in
        let lrange = Si32.ge_u sv (Si32.of_int_s lo) in
@@ -224,21 +238,57 @@ let select_condition v0 v1 v2 = (* (v0: svalue  v1: svalue): svalue = *)
   | _ -> failwith "Type problem select"
 
 
-let merge l1 l2 =
-  match l1,l2 with
+let merge lold lnew pcnew mem =
+  print_endline "merge eval";
+  Pc_type.print_pc pcnew |> print_endline;
+  svalue_to_string lold |> print_endline;
+  svalue_to_string lnew |> print_endline;
+
+  match lold,lnew with
   | SI32 l1, SI32 l2 ->
      let ishigh = Si32.is_high l1 || Si32.is_high l2 in
      let newv = if ishigh then Si32.of_high () else Si32.of_low() in
-     Some (SI32 newv, Si32.merge l1 l2)
+     let ge = Si32.ge_s l1 l2 in
+     if (Z3_solver.is_unsat pcnew (SI32 ge) mem) then
+       Some (SI32 newv, Si32.merge Smt_type.TLT l1 l2)
+     else (
+       let gt = Si32.gt_s l1 l2 in
+       if (Z3_solver.is_unsat pcnew (SI32 gt) mem) then
+         Some (SI32 newv, Si32.merge Smt_type.TLE l1 l2)
+       else (
+         let le = Si32.le_s l1 l2 in
+         if (Z3_solver.is_unsat pcnew (SI32 le) mem) then
+           Some (SI32 newv, Si32.merge Smt_type.TGT l1 l2)
+         else (
+           let lt = Si32.lt_s l1 l2 in
+           if (Z3_solver.is_unsat pcnew (SI32 lt) mem) then
+             Some (SI32 newv, Si32.merge Smt_type.TGE l1 l2)
+           else Some (SI32 newv, Si32.merge Smt_type.TNONE l1 l2)
+         )
+       )
+     )
   | SI64 l1, SI64 l2 ->
      let ishigh = Si64.is_high l1 || Si64.is_high l2 in
      let newv = if ishigh then Si64.of_high () else Si64.of_low() in
-     Some (SI32 newv, Si64.merge l1 l2)
-  (* (match m with
-      * | Some (m1, m2) ->
-      *    Si64.merge_to_string m1 |> print_endline;
-      *    Si64.merge_to_string m2 |> print_endline; *)
-     (* | None -> print_endline "None SI64") *)
+     let ge = Si64.ge_s l1 l2 in
+     if (Z3_solver.is_unsat pcnew (SI64 ge) mem) then
+       Some (SI64 newv, Si64.merge Smt_type.TLT l1 l2)
+     else (
+       let gt = Si64.gt_s l1 l2 in
+       if (Z3_solver.is_unsat pcnew (SI64 gt) mem) then
+         Some (SI64 newv, Si64.merge Smt_type.TLE l1 l2)
+       else (
+         let le = Si64.le_s l1 l2 in
+         if (Z3_solver.is_unsat pcnew (SI64 le) mem) then
+           Some (SI64 newv, Si64.merge Smt_type.TGT l1 l2)
+         else (
+           let lt = Si64.lt_s l1 l2 in
+           if (Z3_solver.is_unsat pcnew (SI64 lt) mem) then
+             Some (SI64 newv, Si64.merge Smt_type.TGE l1 l2)
+           else Some (SI64 newv, Si64.merge Smt_type.TNONE l1 l2)
+         )
+       )
+     )
   | _ -> None
 
 let gen_constraints v range =
@@ -279,9 +329,10 @@ let rec check_loops c cs =
       | l1::l1s',l2::l2s' ->
          (* svalue_to_string l1 |> print_endline; *)
          (* svalue_to_string l2 |> print_endline; *)
-         let mem = (ci.frame.inst.smemories, smemlen ci.frame.inst) in
+         (* New mem *)
+         let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
          (* print_endline "merge"; *)
-         let newvrange = merge l1 l2 in
+         let newvrange = merge l1 l2 c.pc mem in
          (match newvrange with
          | Some (newv,range) ->
             (* print_endline (merge_to_string comp); *)
@@ -526,12 +577,12 @@ let rec step (c : config) : config list =
          *      | Global.Type -> Crash.error e.at "type mismatch at global write") *)
 
         | Load {offset; ty; sz; _}, si :: vs' ->
-           let mem = smemory frame.inst (0l @@ e.at) in
+           let imem = smemory frame.inst (0l @@ e.at) in
 
            (* let mem = Smemory.init_secrets mem c.msecrets in *)
            
            let frame = {frame with
-                         inst = update_smemory frame.inst mem (0l @@ e.at)} in
+                         inst = update_smemory frame.inst imem (0l @@ e.at)} in
            
            let addr =
              (match si with
@@ -545,34 +596,32 @@ let rec step (c : config) : config list =
 
            if (Z3_solver.is_v_ct_unsat pc si mem) then
              (
-             let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
-             (* let final_addr = Eval_symbolic.address ty addr offset in (\*  *\) *)
-             let msec = c.msecrets in
-             let pc', pc'' = split_msec final_addr msec pc in
-             (* The loaded value consists of the (symbolic) index and the memory
+               let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
+               (* let final_addr = Eval_symbolic.address ty addr offset in (\*  *\) *)
+               let msec = Smemory.get_secrets imem in
+               let pc', pc'' = split_msec final_addr msec pc in
+               (* The loaded value consists of the (symbolic) index and the memory
                    index *)
-             let nv = Eval_symbolic.eval_load ty final_addr (smemlen frame.inst) in
-             let vs', es' =  nv :: vs', [] in 
-             let res = if Z3_solver.is_sat pc' mem then(
-                       [{c with code = vs', es' @ List.tl es;
-                                  frame = frame;
-                                  (* frame = ... ;*)
-                                  pc = pc'}])
-                       else []
-             in
-             let res = if Z3_solver.is_sat pc'' mem then
-                         (* low values *)
-                         {c with code = vs', es' @ List.tl es;
-                                 (* frame = ... ;*)
-                                 frame = frame;
-                                 pc = pc''}:: res
-                       else res in
-             res)
+               let nv = Eval_symbolic.eval_load ty final_addr (smemlen frame.inst) in
+               let vs', es' =  nv :: vs', [] in 
+               let res = if Z3_solver.is_sat pc' mem then(
+                           [{c with code = vs', es' @ List.tl es;
+                                    frame = frame;
+                                    pc = pc'}])
+                         else []
+               in
+               let res = if Z3_solver.is_sat pc'' mem then
+                           (* low values *)
+                           {c with code = vs', es' @ List.tl es;
+                                   frame = frame;
+                                   pc = pc''}:: res
+                         else res in
+               res)
            else failwith "The index does not satisfy CT."
        (* ) *)
            
         | Store {offset; ty; sz; _}, sv :: si :: vs' ->
-           (* print_endline "store"; *)
+           print_endline "store";
            (* Pc_type.print_pc pc |> print_endline; *)
            let mem = smemory frame.inst (0l @@ e.at) in
            (* TODO(Romy): find a better way to do this *)
@@ -593,7 +642,9 @@ let rec step (c : config) : config list =
            
            if (Z3_solver.is_v_ct_unsat pc si mems) then
              let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
-             let msec = c.msecrets in
+             let msec = Smemory.get_secrets mem in
+             (* print_endline "c.msecrets";
+              * List.length msec |> string_of_int |> print_endline; *)
              let pc', pc'' = split_msec final_addr msec pc in
              let nv = Eval_symbolic.eval_store ty final_addr sv (smemlen frame.inst) in
              let mem' = Smemory.store_sind_value mem nv in
@@ -610,15 +661,14 @@ let rec step (c : config) : config list =
                        else []
              in
              (* Path2: we store the value in non secret memory *)
-             (* print_endline "before is_sat"; *)
              let res = if Z3_solver.is_sat pc'' mems then
-                         (
-                           let c = {c with observations = CT_V_UNSAT(pc'', sv, mems, c.observations)} in
-                           if Z3_solver.is_v_ct_unsat pc'' sv mems then
-                             {c with code = vs', es' @ List.tl es;
-                                     frame = nframe;
-                                     pc = pc''}:: res
-                           else failwith "Trying to write high values in low memory")
+                         (let c = {c with observations =
+                                            CT_V_UNSAT(pc'', sv, mems, c.observations)} in
+                          if Z3_solver.is_v_ct_unsat pc'' sv mems then
+                            {c with code = vs', es' @ List.tl es;
+                                    frame = nframe;
+                                    pc = pc''}:: res
+                          else failwith "Trying to write high values in low memory")
                        else res in
              res
            else failwith "The index does not satisfy CT."
@@ -982,14 +1032,19 @@ let init_smemory (secret : bool) (inst : module_inst) (sec : security) =
     | false -> List.map Eval_symbolic.create_new_lstore hi_list
   in
 
-  let inst' =
+  (* let inst' =
+   *   match secret with
+   *   | true -> { inst with secrets = (lo,hi)::inst.secrets }
+   *   | false -> { inst with public = (lo,hi)::inst.public }
+   * in *)
+  let smem =
     match secret with
-    | true -> { inst with secrets = (lo,hi)::inst.secrets }
-    | false -> { inst with public = (lo,hi)::inst.public }
+    | true -> Smemory.add_secret smem (lo,hi)
+    | false -> Smemory.add_public smem (lo,hi)
   in
 
   let mem = List.fold_left Smemory.store_sind_value smem stores in  
-  update_smemory inst' mem  (0l @@ sec.at)
+  update_smemory inst mem  (0l @@ sec.at)
   
   (* let offset' = i32 (eval_const inst const) const.at in *)
   (* let offset = I64_convert.extend_i32_u offset' in *)

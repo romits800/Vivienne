@@ -53,18 +53,24 @@ struct
       | Eqz -> IXX.eqz
     in fun v -> to_value (f (of_value 1 v))
 
+  let cond op t1 t2 =
+    let one = IXX.one in
+    let zero = IXX.zero in
+    let v = op t1 t2 in
+    IXX.ite v one zero
+    
   let relop op =
     let f = match op with
       | Eq -> IXX.eq
       | Ne -> IXX.ne
-      | LtS -> IXX.lt_s
-      | LtU -> IXX.lt_u
-      | LeS -> IXX.le_s
-      | LeU -> IXX.le_u
-      | GtS -> IXX.gt_s
-      | GtU -> IXX.gt_u
-      | GeS -> IXX.ge_s
-      | GeU -> IXX.ge_u
+      | LtS -> cond (IXX.lt_s)
+      | LtU -> cond (IXX.lt_u)
+      | LeS -> cond (IXX.le_s)
+      | LeU -> cond (IXX.le_u)
+      | GtS -> cond (IXX.gt_s)
+      | GtU -> cond (IXX.gt_u)
+      | GeS -> cond (IXX.ge_s)
+      | GeU -> cond (IXX.ge_u)
     in fun v1 v2 -> to_value (f (of_value 1 v1) (of_value 2 v2))
 
 end

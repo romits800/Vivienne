@@ -41,7 +41,8 @@ type term =
   | Let of string * term * term
 
 type mergetype = PLUS_INF | MINUS_INF | Integer of int | Term of term
-                                                     
+
+type solv_type = TGT | TGE | TLT | TLE | TNONE
 (* let curr_num = ref 0 *)
              
 (* val int_sort : sort
@@ -115,6 +116,6 @@ val bvslt : term -> term -> term
 val bvsge : term -> term -> term
 val bvsgt : term -> term -> term
 
-val merge : term -> term -> (mergetype * mergetype) option
+val merge : solv_type -> term -> term -> (mergetype * mergetype) option
 val merge_to_string :  mergetype -> string
 val term_to_string : term -> string

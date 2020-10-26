@@ -24,8 +24,8 @@ type memory = {content : memory';
                current: size;
                max : size option;
                stores: svalue list;
-               secrets: (int32 * int32) list;
-               nonsecrets: (int32 * int32) list}
+               secrets: (int * int) list;
+               nonsecrets: (int * int) list}
 type t = memory
 
 let get_secrets mem =
@@ -129,7 +129,7 @@ let load_byte (mem: memory) (a:int) =
     (mem, Smem.find a mem.content)
   with Not_found ->
     let nval =
-      if (is_high (Int32.of_int a) mem.secrets) then
+      if (is_high a mem.secrets) then
         Si8.of_high()
       else
         Si8.of_low()
@@ -269,6 +269,12 @@ let store_value mem a o v =
 (* Stores needs to be reversed *)
 let store_sind_value mem store = 
   {mem with stores = store::mem.stores }
+
+let add_secret mem sec = 
+  {mem with secrets = sec::mem.secrets }
+
+let add_public mem sec = 
+  {mem with nonsecrets = sec::mem.nonsecrets }
 
 
 (* let init_secrets mem sec =
