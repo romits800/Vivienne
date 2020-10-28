@@ -33,6 +33,7 @@ sig
   val drop : int32 -> 'a list -> 'a list (* raises Failure *)
   val replace : int32 -> 'a -> 'a list -> 'a list
   val insert : 'a -> 'a list -> 'a list
+  val pop_if : ('a -> bool) -> 'a list -> ('a * 'a list)
 end
 
 module Array32 :

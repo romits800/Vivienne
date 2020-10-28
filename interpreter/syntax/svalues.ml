@@ -8,6 +8,7 @@ type ('i32, 'i64, 'f32, 'f64) op =
 
 type svalue = (Si32.t, Si64.t, F32.t, F64.t) op
 
+            (* type svalue_d = Hi of (svalue *) 
 
 (* Typing *)
 

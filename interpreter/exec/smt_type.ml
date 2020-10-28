@@ -236,55 +236,6 @@ let bvsgt t1 t2 = App (BvSgt, [t1;t2])
 
 
 
-(* let equal_app f1 f2 =
- *   match f1,f2 with
- *   | Eq, Eq | Or, Or | Ite, Ite | Not, Not | Implies, Implies
- *     | Add, Add | Sub, Sub | Mul, Mul | Div, Div | Lt, Lt
- *     | Gt, Gt   | Lte, Lte | Gte, Gte | BvAdd, BvAdd | BvSub, BvSub
- *     | BvMul, BvMul | BvURem, BvURem | BvSRem, BvSRem | BvSMod, BvSMod
- *     | BvDiv, BvDiv | BvShl, BvShl  | BvLShr, BvLShr  | BvAShr, BvAShr
- *     | BvOr, BvOr   | BvAnd, BvAnd  | BvNand, BvNand  | BvNor, BvNor
- *     | BvXNor, BvXNor  | BvXor, BvXor | BvNeg, BvNeg  | BvNot, BvNot
- *     | BvUle, BvUle | BvUlt, BvUlt  | BvSle, BvSle    | BvSlt, BvSlt
- *     | BvUge, BvUge | BvUgt, BvUgt  | BvSgt, BvSgt    | BvSge, BvSge
- *     | And, And -> true
- *   | _ -> false
- *        
- * let equal_id i1 i2 =
- *   match i1,i2 with
- *   | High i, High j when i == j -> true
- *   | Low i, Low j when i == j -> true
- *   | _ -> false
- * 
- * let rec equal t1 t2 =
- *   match t1,t2 with
- *   | Int i, Int j when i == j -> true
- *   | BitVec (i1,n1), BitVec (i2,n2) when i1 == i2 && n1 == n2 -> true
- *   | Const id1, Const id2 -> equal_id id1 id2
- *   | Load (t11,i1), Load (t21, i2) when equal t11 t21 && i1 == i2 -> true
- *   | Store (t11,t12,i1), Store (t21,t22,i2) when equal t11 t21 && equal t12 t22 && i1 == i2 -> true
- *   | App (f1, ts1), App (f2, ts2) -> equal_app f1 f2 && equal_list ts1 ts2 
- *   | _ -> false
- * 
- * and equal_list ts1 ts2 =
- *   match ts1,ts2 with
- *   | [], [] -> true
- *   | t1::ts1',t2::ts2' -> equal t1 t2 && equal_list ts1' ts2'
- *   | [], _ | _, [] -> false
- * 
- * 
- * let ispos v =
- *   match v with
- *   | BitVec (i, n) -> i>0
- *   | Int i -> i>0
- *   | _ -> false
- *        
- * let isneg v = 
- *   match v with
- *   | BitVec (i, n) -> i<0
- *   | Int i -> i<0
- *   | _ -> false *)
-
 (* Not accounting for overflows *)
 let merge solv told tnew =
   match solv with
@@ -294,43 +245,6 @@ let merge solv told tnew =
   | TLE -> Some (Term told, PLUS_INF)
   | TNONE -> None
   
-  (* match tnew,told with
-   * | App(BvAdd,v1::v2::[]), ts2 
-   *   | ts2, App(BvAdd,v1::v2::[]) ->
-   *    if (equal ts2 v1 && ispos v2) || (equal ts2 v2 && ispos v1)
-   *    then Some (Term ts2, PLUS_INF)
-   *    else
-   *      if (equal ts2 v1 && isneg v2) || (equal ts2 v2 && isneg v1)
-   *      then Some (MINUS_INF, Term ts2)
-   *      else None
-   * | App(BvSub,v1::v2::[]), ts2 
-   *   | ts2, App(BvSub,v1::v2::[]) ->
-   *    if (equal ts2 v1 && isneg v2) || (equal ts2 v2 && isneg v1)
-   *    then Some (Term ts2, PLUS_INF)
-   *    else
-   *      if (equal ts2 v1 && ispos v2) || (equal ts2 v2 && ispos v1)
-   *      then Some (MINUS_INF, Term ts2)
-   *      else None
-   * | App(BvMul,v1::v2::[]), ts2 
-   *   | ts2, App(BvMul,v1::v2::[]) ->
-   *    if (equal ts2 v1 && ispos v2) || (equal ts2 v2 && ispos v1)
-   *    then Some (Term ts2, PLUS_INF)
-   *    else
-   *      if (equal ts2 v1 && isneg v2) || (equal ts2 v2 && isneg v1)
-   *      then Some (MINUS_INF, Term ts2)
-   *      else None
-   * | App(BvShl,v1::v2::[]), ts2 
-   *   | ts2, App(BvShl,v1::v2::[]) ->
-   *    if (equal ts2 v1 && ispos v2) || (equal ts2 v2 && ispos v1)
-   *    then Some (Term ts2, PLUS_INF)
-   *    else None
-   * | App(BvAShr,v1::v2::[]), ts2 
-   *   | ts2, App(BvAShr,v1::v2::[]) ->
-   *    if (equal ts2 v1 && ispos v2) || (equal ts2 v2 && ispos v1)
-   *    then Some (Term ts2, PLUS_INF)
-   *    else None
-   * | _ -> None *)
-
     
 let identifier_to_string id =
   match id with

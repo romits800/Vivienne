@@ -73,7 +73,9 @@ type obs_type =
   | CT_V_UNSAT of pc * svalue * (Smemory.t list * int) * obs_type
   (* | CT_SAT of pc * obs_type *)
   | OBSTRUE
-  
+
+type loop_stage = RUN_INIT | COLLECT_VAR | COLLECT_INVAR | RUN_ABSTRACT | NONE 
+                                              
 type config =
 {
   frame : frame;
@@ -82,8 +84,10 @@ type config =
   pc : pc;  (* to model path condition *)
   msecrets : secret_type list;
   loops : config list;
-  abstract_loops: admin_instr' list;
-  observations: obs_type
+  (* abstract_loops: admin_instr' list; *)
+  abstract_loops: config list;
+  stage : loop_stage;
+  observations: obs_type;
 }
 and
 secret_type = int * int
@@ -100,7 +104,7 @@ let frame inst locals = {inst; locals}
 let config inst vs es =
   {frame = frame inst []; code = vs, es; budget = 300;
    pc = PCTrue; msecrets = inst.secrets; loops = []; abstract_loops = [];
-   observations = OBSTRUE }
+   observations = OBSTRUE; stage = NONE }
 
 let plain e = Plain e.it @@ e.at
 
@@ -206,16 +210,15 @@ let split_msec (sv : svalue) (msec : (int * int) list ) (pc : pc) : pc * pc =
     match msec with
     | [] -> Si32.ne Si32.zero Si32.zero
     | (lo, hi)::[] ->
-       let hrange = Si32.le_u sv (Si32.of_int_s hi) in
-       let lrange = Si32.ge_u sv (Si32.of_int_s lo) in
+       let hrange = Si32.le_s sv (Si32.of_int_s hi) in
+       let lrange = Si32.ge_s sv (Si32.of_int_s lo) in
        Si32.and_ hrange lrange
        (* PCAnd(sv, pc) *)
     | (lo, hi)::msecs ->
-       let hrange = Si32.le_u sv (Si32.of_int_s hi) in
-       let lrange = Si32.ge_u sv (Si32.of_int_s lo) in
+       let hrange = Si32.le_s sv (Si32.of_int_s hi) in
+       let lrange = Si32.ge_s sv (Si32.of_int_s lo) in
        let hl = Si32.and_ hrange lrange in
        Si32.or_ hl (within_hrange sv msecs)
- 
   in
     match sv with
     | SI32 vi32 ->
@@ -238,83 +241,85 @@ let select_condition v0 v1 v2 = (* (v0: svalue  v1: svalue): svalue = *)
   | _ -> failwith "Type problem select"
 
 
-let merge lold lnew pcnew mem =
-  print_endline "merge eval";
-  Pc_type.print_pc pcnew |> print_endline;
-  svalue_to_string lold |> print_endline;
-  svalue_to_string lnew |> print_endline;
+(* let merge lold lnew pcnew mem =
+ *   print_endline "merge eval";
+ *   Pc_type.print_pc pcnew |> print_endline;
+ *   print_endline "old";
+ *   svalue_to_string lold |> print_endline;
+ *   print_endline "new:";
+ *   svalue_to_string lnew |> print_endline;
+ * 
+ *   match lold,lnew with
+ *   | SI32 l1, SI32 l2 ->
+ *      let ishigh = Si32.is_high l1 || Si32.is_high l2 in
+ *      let newv = if ishigh then Si32.of_high () else Si32.of_low() in
+ *      let ge = Si32.ge_s l1 l2 in
+ *      if (Z3_solver.is_unsat pcnew (SI32 ge) mem) then
+ *        Some (SI32 newv, Si32.merge Smt_type.TLT l1 l2)
+ *      else (
+ *        let gt = Si32.gt_s l1 l2 in
+ *        if (Z3_solver.is_unsat pcnew (SI32 gt) mem) then
+ *          Some (SI32 newv, Si32.merge Smt_type.TLE l1 l2)
+ *        else (
+ *          let le = Si32.le_s l1 l2 in
+ *          if (Z3_solver.is_unsat pcnew (SI32 le) mem) then
+ *            Some (SI32 newv, Si32.merge Smt_type.TGT l1 l2)
+ *          else (
+ *            let lt = Si32.lt_s l1 l2 in
+ *            if (Z3_solver.is_unsat pcnew (SI32 lt) mem) then
+ *              Some (SI32 newv, Si32.merge Smt_type.TGE l1 l2)
+ *            else Some (SI32 newv, Si32.merge Smt_type.TNONE l1 l2)
+ *          )
+ *        )
+ *      )
+ *   | SI64 l1, SI64 l2 ->
+ *      let ishigh = Si64.is_high l1 || Si64.is_high l2 in
+ *      let newv = if ishigh then Si64.of_high () else Si64.of_low() in
+ *      let ge = Si64.ge_s l1 l2 in
+ *      if (Z3_solver.is_unsat pcnew (SI64 ge) mem) then
+ *        Some (SI64 newv, Si64.merge Smt_type.TLT l1 l2)
+ *      else (
+ *        let gt = Si64.gt_s l1 l2 in
+ *        if (Z3_solver.is_unsat pcnew (SI64 gt) mem) then
+ *          Some (SI64 newv, Si64.merge Smt_type.TLE l1 l2)
+ *        else (
+ *          let le = Si64.le_s l1 l2 in
+ *          if (Z3_solver.is_unsat pcnew (SI64 le) mem) then
+ *            Some (SI64 newv, Si64.merge Smt_type.TGT l1 l2)
+ *          else (
+ *            let lt = Si64.lt_s l1 l2 in
+ *            if (Z3_solver.is_unsat pcnew (SI64 lt) mem) then
+ *              Some (SI64 newv, Si64.merge Smt_type.TGE l1 l2)
+ *            else Some (SI64 newv, Si64.merge Smt_type.TNONE l1 l2)
+ *          )
+ *        )
+ *      )
+ *   | _ -> None *)
 
-  match lold,lnew with
-  | SI32 l1, SI32 l2 ->
-     let ishigh = Si32.is_high l1 || Si32.is_high l2 in
-     let newv = if ishigh then Si32.of_high () else Si32.of_low() in
-     let ge = Si32.ge_s l1 l2 in
-     if (Z3_solver.is_unsat pcnew (SI32 ge) mem) then
-       Some (SI32 newv, Si32.merge Smt_type.TLT l1 l2)
-     else (
-       let gt = Si32.gt_s l1 l2 in
-       if (Z3_solver.is_unsat pcnew (SI32 gt) mem) then
-         Some (SI32 newv, Si32.merge Smt_type.TLE l1 l2)
-       else (
-         let le = Si32.le_s l1 l2 in
-         if (Z3_solver.is_unsat pcnew (SI32 le) mem) then
-           Some (SI32 newv, Si32.merge Smt_type.TGT l1 l2)
-         else (
-           let lt = Si32.lt_s l1 l2 in
-           if (Z3_solver.is_unsat pcnew (SI32 lt) mem) then
-             Some (SI32 newv, Si32.merge Smt_type.TGE l1 l2)
-           else Some (SI32 newv, Si32.merge Smt_type.TNONE l1 l2)
-         )
-       )
-     )
-  | SI64 l1, SI64 l2 ->
-     let ishigh = Si64.is_high l1 || Si64.is_high l2 in
-     let newv = if ishigh then Si64.of_high () else Si64.of_low() in
-     let ge = Si64.ge_s l1 l2 in
-     if (Z3_solver.is_unsat pcnew (SI64 ge) mem) then
-       Some (SI64 newv, Si64.merge Smt_type.TLT l1 l2)
-     else (
-       let gt = Si64.gt_s l1 l2 in
-       if (Z3_solver.is_unsat pcnew (SI64 gt) mem) then
-         Some (SI64 newv, Si64.merge Smt_type.TLE l1 l2)
-       else (
-         let le = Si64.le_s l1 l2 in
-         if (Z3_solver.is_unsat pcnew (SI64 le) mem) then
-           Some (SI64 newv, Si64.merge Smt_type.TGT l1 l2)
-         else (
-           let lt = Si64.lt_s l1 l2 in
-           if (Z3_solver.is_unsat pcnew (SI64 lt) mem) then
-             Some (SI64 newv, Si64.merge Smt_type.TGE l1 l2)
-           else Some (SI64 newv, Si64.merge Smt_type.TNONE l1 l2)
-         )
-       )
-     )
-  | _ -> None
-
-let gen_constraints v range =
-  match v with
-  | SI32 v ->
-     (match range with
-     | None -> []
-     | Some (Smt_type.Term t, Smt_type.PLUS_INF)  -> [SI32 (Si32.ge_s v t)]
-     | Some (Smt_type.MINUS_INF, Smt_type.Term t) -> [SI32 (Si32.le_s v t)]
-     | Some (Smt_type.Integer i, Smt_type.Term t) ->
-        [SI32 (Si32.le_s v t); SI32 (Si32.ge_s v (Si32.of_int_s i))]
-     | Some (Smt_type.Term t, Smt_type.Integer i) ->
-        [SI32 (Si32.ge_s v t); SI32 (Si32.le_s v (Si32.of_int_s i))]
-     | _ -> [])
-  | SI64 v ->
-     (match range with
-     | None -> []
-     | Some (Smt_type.Term t, Smt_type.PLUS_INF)  -> [SI64 (Si64.ge_s v t)]
-     | Some (Smt_type.MINUS_INF, Smt_type.Term t) -> [SI64 (Si64.le_s v t)]
-     | Some (Smt_type.Integer i, Smt_type.Term t) ->
-        [SI64 (Si64.le_s v t); SI64 (Si64.ge_s v (Si64.of_int_s i))]
-     | Some (Smt_type.Term t, Smt_type.Integer i) ->
-        [SI64 (Si64.ge_s v t); SI64 (Si64.le_s v (Si64.of_int_s i))]
-     | _ -> [])
-
-  | _ -> []
+(* let gen_constraints v range =
+ *   match v with
+ *   | SI32 v ->
+ *      (match range with
+ *      | None -> []
+ *      | Some (Smt_type.Term t, Smt_type.PLUS_INF)  -> [SI32 (Si32.ge_s v t)]
+ *      | Some (Smt_type.MINUS_INF, Smt_type.Term t) -> [SI32 (Si32.le_s v t)]
+ *      | Some (Smt_type.Integer i, Smt_type.Term t) ->
+ *         [SI32 (Si32.le_s v t); SI32 (Si32.ge_s v (Si32.of_int_s i))]
+ *      | Some (Smt_type.Term t, Smt_type.Integer i) ->
+ *         [SI32 (Si32.ge_s v t); SI32 (Si32.le_s v (Si32.of_int_s i))]
+ *      | _ -> [])
+ *   | SI64 v ->
+ *      (match range with
+ *      | None -> []
+ *      | Some (Smt_type.Term t, Smt_type.PLUS_INF)  -> [SI64 (Si64.ge_s v t)]
+ *      | Some (Smt_type.MINUS_INF, Smt_type.Term t) -> [SI64 (Si64.le_s v t)]
+ *      | Some (Smt_type.Integer i, Smt_type.Term t) ->
+ *         [SI64 (Si64.le_s v t); SI64 (Si64.ge_s v (Si64.of_int_s i))]
+ *      | Some (Smt_type.Term t, Smt_type.Integer i) ->
+ *         [SI64 (Si64.ge_s v t); SI64 (Si64.le_s v (Si64.of_int_s i))]
+ *      | _ -> [])
+ * 
+ *   | _ -> [] *)
 
 let is_loop_equal l1 l2 =
   match l1, l2 with
@@ -322,88 +327,158 @@ let is_loop_equal l1 l2 =
     | _ -> false
 
        
-let rec check_loops c cs =
-  let check_loops_i c ci =
-    let rec check_locals l1s l2s ind ci =
-      match l1s,l2s with
-      | l1::l1s',l2::l2s' ->
-         (* svalue_to_string l1 |> print_endline; *)
-         (* svalue_to_string l2 |> print_endline; *)
-         (* New mem *)
-         let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
-         (* print_endline "merge"; *)
-         let newvrange = merge l1 l2 c.pc mem in
-         (match newvrange with
-         | Some (newv,range) ->
-            (* print_endline (merge_to_string comp); *)
-            let ci' = { ci with frame = update_local ci.frame ind newv } in
-            let ci' =
-              match range with
-              | None -> ci'
-              | Some (Smt_type.Term t, Smt_type.PLUS_INF) ->
-                 let mv = Z3_solver.optimize Z3_solver.max ci.pc mem l2 in
-                 (match mv with
-                  | None ->
-                     let cs = gen_constraints newv range in
-                     let pc' = List.fold_left (fun pci c -> PCAnd (c, pci)) ci'.pc cs in
-                     { ci' with pc = pc' }
-                     (* Some (newv, cs) *)
-                  | Some v ->
-                     let nrange = Some (Smt_type.Term t, Smt_type.Integer v) in
-                     let cs = gen_constraints newv nrange in
-                     let pc' = List.fold_left (fun pci c -> PCAnd (c, pci)) ci'.pc cs in
-                     { ci' with pc = pc' }
-                 (* Some (newv, cs) *)
-                 )
-              | Some (Smt_type.MINUS_INF, Smt_type.Term t) ->
-                 let mv = Z3_solver.optimize Z3_solver.min ci'.pc mem l2 in
-                 (match mv with
-                  | None ->
-                     let cs = gen_constraints newv range in
-                     let pc' = List.fold_left (fun pci c -> PCAnd (c, pci)) ci'.pc cs in
-                     { ci' with pc = pc' }
-                     (* Some (newv, cs) *)
-                  | Some v ->
-                     let nrange = Some (Smt_type.Term t, Smt_type.Integer v) in
-                     let cs = gen_constraints newv nrange in
-                     let pc' = List.fold_left (fun pci c -> PCAnd (c, pci)) ci'.pc cs in
-                     { ci' with pc = pc' }
-                     (* Some (newv, cs) *)
-                 )
-              | _ -> ci'
-            in
-            let nind = Int32.of_int ((Int32.to_int ind.it) + 1) in
-            check_locals l1s' l2s' (nind @@ ind.at) ci'
-         | None ->
-            let nind = Int32.of_int ((Int32.to_int ind.it) + 1) in
-            check_locals l1s' l2s' (nind @@ ind.at) ci
-         (* check_locals (None::acc) l1s' l2s' ind ci) *)
-         )
-      | l::_, [] 
-        | [], l::_ -> ci (*List.rev acc*)
-      | [], [] -> ci (* List.rev acc *)
-    in
-    let {frame; code = vs, es; pc; _} = c in
-    let {frame = framei; code = vsi,esi; pc = pci; _} = ci in
-    let e, ei = (List.hd es, List.hd esi) in 
-    if is_loop_equal e.it ei.it then 
-    (* match e.it, ei.it with
-     * | Plain ( Loop (bv, es')), Plain ( Loop (bvi, esi')) when bv == bvi && es' == esi' -> *)
-      let loc1 = frame.locals in
-      let loc2 = framei.locals in
-      Some (check_locals loc1 loc2 (0l @@ e.at) ci)
-    else None
-    (* | _ -> None *)
-  in
-  match c, cs with
-  | _, c1::cs' ->
-     let cl = check_loops_i c c1 in
-     (match cl with
-      (* Terminates after the first matching loop *)
-     | Some (cls) -> Some (cls)
-     | None -> check_loops c cs')
-  | _, [] -> None
+(* let rec check_loops c cs =
+ *   let check_loops_i c ci =
+ *     let rec check_locals l1s l2s ind ci =
+ *       match l1s,l2s with
+ *       | l1::l1s',l2::l2s' ->
+ *          (\* svalue_to_string l1 |> print_endline; *\)
+ *          (\* svalue_to_string l2 |> print_endline; *\)
+ *          (\* New mem *\)
+ *          let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
+ *          (\* print_endline "merge"; *\)
+ *          let newvrange = merge l1 l2 c.pc mem in
+ *          (match newvrange with
+ *          | Some (newv,range) ->
+ *             (\* print_endline (merge_to_string comp); *\)
+ *             let ci' = { ci with frame = update_local ci.frame ind newv } in
+ *             let ci' =
+ *               match range with
+ *               | None ->
+ *                  print_endline "some nv; none";
+ *                  ci'
+ *               | Some (Smt_type.Term t, Smt_type.PLUS_INF) ->
+ *                  let mv = Z3_solver.optimize Z3_solver.max ci.pc mem l1 in
+ *                  (match mv with
+ *                   | None ->
+ *                      let cs = gen_constraints newv range in
+ *                      let pc' = List.fold_left (fun pci c -> PCAnd (c, pci)) ci'.pc cs in
+ *                      { ci' with pc = pc' }
+ *                      (\* Some (newv, cs) *\)
+ *                   | Some v ->
+ *                      let nrange = Some (Smt_type.Term t, Smt_type.Integer v) in
+ *                      let cs = gen_constraints newv nrange in
+ *                      let pc' = List.fold_left (fun pci c -> PCAnd (c, pci)) ci'.pc cs in
+ *                      { ci' with pc = pc' }
+ *                  (\* Some (newv, cs) *\)
+ *                  )
+ *               | Some (Smt_type.MINUS_INF, Smt_type.Term t) ->
+ *                  let mv = Z3_solver.optimize Z3_solver.min ci'.pc mem l1 in
+ *                  (match mv with
+ *                   | None ->
+ *                      let cs = gen_constraints newv range in
+ *                      let pc' = List.fold_left (fun pci c -> PCAnd (c, pci)) ci'.pc cs in
+ *                      { ci' with pc = pc' }
+ *                      (\* Some (newv, cs) *\)
+ *                   | Some v ->
+ *                      let nrange = Some (Smt_type.Term t, Smt_type.Integer v) in
+ *                      let cs = gen_constraints newv nrange in
+ *                      let pc' = List.fold_left (fun pci c -> PCAnd (c, pci)) ci'.pc cs in
+ *                      { ci' with pc = pc' }
+ *                      (\* Some (newv, cs) *\)
+ *                  )
+ *               | _ -> ci'
+ *             in
+ *             print_endline "check_loops_some";
+ *             Pc_type.print_pc ci'.pc |> print_endline;
+ *             let nind = Int32.of_int ((Int32.to_int ind.it) + 1) in
+ *             check_locals l1s' l2s' (nind @@ ind.at) ci'
+ *          | None ->
+ *             let nind = Int32.of_int ((Int32.to_int ind.it) + 1) in
+ *             check_locals l1s' l2s' (nind @@ ind.at) ci
+ *          (\* check_locals (None::acc) l1s' l2s' ind ci) *\)
+ *          )
+ *       | l::_, [] 
+ *         | [], l::_ -> ci (\*List.rev acc*\)
+ *       | [], [] -> ci (\* List.rev acc *\)
+ *     in
+ *     let {frame; code = vs, es; pc; _} = c in
+ *     let {frame = framei; code = vsi,esi; pc = pci; _} = ci in
+ *     let e, ei = (List.hd es, List.hd esi) in 
+ *     if is_loop_equal e.it ei.it then 
+ *     (\* match e.it, ei.it with
+ *      * | Plain ( Loop (bv, es')), Plain ( Loop (bvi, esi')) when bv == bvi && es' == esi' -> *\)
+ *       let loc1 = frame.locals in
+ *       let loc2 = framei.locals in
+ *       Some (check_locals loc2 loc1 (0l @@ e.at) ci)
+ *     else None
+ *     (\* | _ -> None *\)
+ *   in
+ *   match c, cs with
+ *   | _, c1::cs' ->
+ *      let cl = check_loops_i c c1 in
+ *      (match cl with
+ *       (\* Terminates after the first matching loop *\)
+ *      | Some (cls) -> Some (cls)
+ *      | None -> check_loops c cs')
+ *   | _, [] -> None *)
 
+
+let update_loops_store v mem loop =
+  match loop.stage with
+  | COLLECT_VAR ->
+     (
+       match v with
+       | SI32 v32 ->
+          (* let ishigh = Si32.is_high v32 in *)
+          (* let newv = if ishigh then Si32.of_high () else Si32.of_low() in *)
+          let newv = Si32.of_high () in
+          let mem' = Smemory.store_sind_value mem (SI32 newv) in
+          (* Update memory with a store *)
+          let frame' = {loop.frame with inst = insert_smemory loop.frame.inst mem'} in
+          {loop with frame = frame'}
+       | SI64 v64 ->
+          (* let ishigh = Si64.is_high v64 in *)
+          (* let newv = if ishigh then Si64.of_high () else Si64.of_low() in *)
+          let newv = Si32.of_low () in
+          let mem' = Smemory.store_sind_value mem (SI32 newv) in
+          (* Update memory with a store *)
+          let frame' = {loop.frame with inst = insert_smemory loop.frame.inst mem'} in
+          {loop with frame = frame'}
+       | _ -> failwith "Floats not supported at the moment."
+     )
+  | _ -> loop
+
+
+         
+let update_loops_loc_set v ind loop =
+  match loop.stage with
+  | COLLECT_VAR ->
+     (
+       match v with
+       | SI32 v32 ->
+          (* let ishigh = Si32.is_high v32 in *)
+          (* let newv = if ishigh then Si32.of_high () else Si32.of_low() in *)
+          let newv = Si32.of_high () in
+          let frame' = update_local loop.frame ind (SI32 newv) in
+          {loop with frame = frame'}
+       | SI64 v64 ->
+          (* let ishigh = Si64.is_high v64 in *)
+          (* let newv = if ishigh then Si64.of_high () else Si64.of_low() in *)
+          let newv = Si64.of_high () in
+          let frame' = update_local loop.frame ind (SI64 newv) in
+          {loop with frame = frame'}
+
+       | _ -> failwith "Floats not supported at the moment."
+     )
+  | _ -> loop
+
+
+let update_loops_invar c loop =
+  match loop.stage with
+  | COLLECT_INVAR ->
+     {loop with pc = PCAnd(c, loop.pc)}
+  | _ -> loop
+
+
+let rec check_run_normal_loops loops =
+  match loops with
+  | [] -> true
+  | loop::loops ->
+     (match loop.stage with
+      | COLLECT_VAR
+        | COLLECT_INVAR -> false
+      | _ -> check_run_normal_loops loops)
 (* Evaluation *)
 
 (*
@@ -440,53 +515,119 @@ let rec step (c : config) : config list =
            let vs', es' = vs', [Label (n2, [], (args, List.map plain es')) @@ e.at] in
            [{c with code = vs', es' @ List.tl es}]
         | Loop (bt, es'), vs ->
-           (* print_endline "loop"; *)
-           (if (List.fold_left (fun b ei -> (is_loop_equal e.it ei) || b)
-                  false c.abstract_loops) then
-              (print_endline "Skipping loop";
-              let vs', es' = vs, [] in
-              [{c with code = vs', es' @ List.tl es}])
-            else 
-              (match (check_loops c c.loops) with
-               | Some newc -> 
-                  let FuncType (ts1, ts2) = block_type frame.inst bt in
-                  let n1 = Lib.List32.length ts1 in
-                  let args, vs' = take n1 vs e.at, drop n1 vs e.at in
-                  let vs', es' = vs', [Label (n1, [e' @@ e.at], (args, List.map plain es')) @@ e.at] in
-                  [{newc with code = vs', es' @ List.tl es;
-                              abstract_loops = e.it::c.abstract_loops;
-                              loops = c.loops}]
-                  
-               | None -> 
-                  let FuncType (ts1, ts2) = block_type frame.inst bt in
-                  let n1 = Lib.List32.length ts1 in
-                  let args, vs' = take n1 vs e.at, drop n1 vs e.at in
-                  let vs', es' = vs', [Label (n1, [e' @@ e.at], (args, List.map plain es')) @@ e.at] in
-                  [{c with code = vs', es' @ List.tl es; loops = c::c.loops}]
+           print_endline "loop";
+           (* List.length c.abstract_loops |> string_of_int |> print_endline;
+            * List.length c.loops |> string_of_int |> print_endline; *)
+
+           (if (List.fold_left (fun b ei -> (is_loop_equal e.it ((List.hd (snd ei.code)).it)) || b)
+                  false c.loops) then
+              (print_endline "Loop: Second time";
+               let newc,nloops = Lib.List32.pop_if
+                            (fun ci -> is_loop_equal ((List.hd (snd ci.code)).it) e.it)
+                            c.loops in
+               (match newc.stage with
+                | RUN_INIT ->
+                   print_endline "Loop: second time - Collecting variables";
+                   let FuncType (ts1, ts2) = block_type frame.inst bt in
+                   let n1 = Lib.List32.length ts1 in
+                   let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+                   let vs', es' = vs', [Label (n1, [e' @@ e.at],
+                                               (args, List.map plain es')) @@ e.at] in
+                   let newc' = {newc with stage = COLLECT_VAR} in
+                   (* Run again from zero, just follow all paths *)
+                   [{newc with code = vs', es' @ List.tl es;
+                            loops = newc'::nloops}]
+ 
+                | COLLECT_VAR ->
+                   print_endline "Loop: third time - Collecting invariants";
+                   let FuncType (ts1, ts2) = block_type frame.inst bt in
+                   let n1 = Lib.List32.length ts1 in
+                   let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+                   let vs', es' = vs', [Label (n1, [e' @@ e.at],
+                                               (args, List.map plain es')) @@ e.at] in
+                   let newc' = {newc with stage = COLLECT_INVAR} in
+                   [{newc with code = vs', es' @ List.tl es;
+                               loops = newc'::nloops}]
+                   
+                | COLLECT_INVAR ->
+                   print_endline "Loop: last time - collect invariants";
+                   let FuncType (ts1, ts2) = block_type frame.inst bt in
+                   let n1 = Lib.List32.length ts1 in
+                   let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+                   let vs', es' = vs', [Label (n1, [e' @@ e.at],
+                                               (args, List.map plain es')) @@ e.at] in
+                   let newc = {newc with stage = RUN_ABSTRACT} in
+                   [{c with code = vs', es' @ List.tl es;
+                            loops = newc::nloops}]
+                | RUN_ABSTRACT ->
+                   let vs', es' = vs, [] in
+                   [{c with code = vs', es' @ List.tl es;
+                            loops = nloops}]
+                | NONE -> failwith "Unexpected loop mode."
+
+               )
+              )
+            else
+              (
+                print_endline "Loop: first time";
+                let FuncType (ts1, ts2) = block_type frame.inst bt in
+                let n1 = Lib.List32.length ts1 in
+                let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+                let vs', es' = vs', [Label (n1, [e' @@ e.at],
+                                            (args, List.map plain es')) @@ e.at] in
+                let newc = {c with stage = RUN_INIT} in
+                [{c with code = vs', es' @ List.tl es;
+                         loops = newc::c.loops}]
+
               )
            )
         | If (bt, es1, es2), v :: vs' ->
            (* print_endline "if"; *)
-           let pc', pc'' = split_condition v pc in
-           let vs'', es'' = vs', [Plain (Block (bt, es1)) @@ e.at] in (* True *)
-           let vs', es' = vs', [Plain (Block (bt, es2)) @@ e.at] in (* False *)
-           (* Check sat of if *)
+           (match c.loops with
+            | []
+              | _ when check_run_normal_loops c.loops ->
+               let pc', pc'' = split_condition v pc in
+               let vs'', es'' = vs', [Plain (Block (bt, es1)) @@ e.at] in (* True *)
+               let vs', es' = vs', [Plain (Block (bt, es2)) @@ e.at] in (* False *)
+               (* Check sat of if *)
+               
+               let mem = (frame.inst.smemories, smemlen frame.inst) in 
+               
+               let c = {c with observations = CT_UNSAT(pc, v, mem, c.observations)} in
+               
+               let res = if Z3_solver.is_sat pc' mem then
+                           [{c with code = vs', es' @ List.tl es; pc = pc'}]
+                         else [] in
+               let res = if Z3_solver.is_sat pc'' mem then
+                           {c with code = vs'', es'' @ List.tl es; pc = pc''}::res
+                         else res in
+               
+               (* Must be unsat *)
+               if Z3_solver.is_ct_unsat pc v mem then res
+               else failwith "If: Constant-time failure"
+           | loops ->
+              let pc', pc'' = split_condition v pc in
+              let vs'', es'' = vs', [Plain (Block (bt, es1)) @@ e.at] in (* True *)
+              let vs',  es'  = vs', [Plain (Block (bt, es2)) @@ e.at] in (* False *)
+              (* Check sat of if *)
+              
+              let mem = (frame.inst.smemories, smemlen frame.inst) in 
+              let c = {c with observations = CT_UNSAT(pc, v, mem, c.observations)} in
 
-           let mem = (frame.inst.smemories, smemlen frame.inst) in 
+              (* TODO(Romy): FIX need to add the actual condition - I need to move 
+                 the paths from the solvers here *)
+              let nloops = List.map (update_loops_invar v) loops in
 
-           let c = {c with observations = CT_UNSAT(pc, v, mem, c.observations)} in
-           
-           let res = if Z3_solver.is_sat pc' mem then
-                       [{c with code = vs', es' @ List.tl es; pc = pc'}]
-                     else [] in
-           let res = if Z3_solver.is_sat pc'' mem then
-                       {c with code = vs'', es'' @ List.tl es; pc = pc''}::res
-                     else res in
-           
-           (* Must be unsat *)
-           if Z3_solver.is_ct_unsat pc v mem then res
-           else failwith "If: Constant-time failure"
-
+              
+              [{c with code = vs', es' @ List.tl es; pc = pc';
+                       loops = nloops};
+               {c with code = vs'', es'' @ List.tl es; pc = pc'';
+                       loops = nloops}]
+                           
+              (* (\* Must be unsat *\)
+               * if Z3_solver.is_ct_unsat pc v mem then res
+               * else failwith "If: Constant-time failure" *)
+           )
         | Br x, vs ->
            (* print_endline "br"; *)
            let vs', es' = [], [Breaking (x.it, vs) @@ e.at] in
@@ -494,26 +635,46 @@ let rec step (c : config) : config list =
            
         | BrIf x, v :: vs' ->
            (* print_endline "br_if"; *)
-           let pc', pc'' = split_condition v pc in
-           let vs'', es'' = vs', [Plain (Br x) @@ e.at] in
-           let vs', es' = vs', [] in
-           
-           let mem = (frame.inst.smemories, smemlen frame.inst) in
+           (match c.loops with
+            | [] 
+              | _ when check_run_normal_loops c.loops ->
+               let pc', pc'' = split_condition v pc in
+               let vs'', es'' = vs', [Plain (Br x) @@ e.at] in
+               let vs', es' = vs', [] in
+               
+               let mem = (frame.inst.smemories, smemlen frame.inst) in
 
-           (* proof obligation *)
-           let c = {c with observations = CT_UNSAT(pc, v, mem, c.observations)} in
-           
-           let res = if Z3_solver.is_sat pc' mem then
-                       [{c with code = vs', es' @ List.tl es; pc = pc'}]
-                     else [] in
-           let res = if Z3_solver.is_sat pc'' mem then
-                       {c with code = vs'', es'' @ List.tl es; pc = pc''}::res
-                     else res in
-           
+               (* proof obligation *)
+               let c = {c with observations = CT_UNSAT(pc, v, mem, c.observations)} in
+               
+               let res = if Z3_solver.is_sat pc' mem then
+                           [{c with code = vs', es' @ List.tl es; pc = pc'}]
+                         else [] in
+               let res = if Z3_solver.is_sat pc'' mem then
+                           {c with code = vs'', es'' @ List.tl es; pc = pc''}::res
+                         else res in
+               if Z3_solver.is_ct_unsat pc v mem then res
+               else failwith "BrIf: Constant-time failure"
+
+           | loops ->
+              let pc', pc'' = split_condition v pc in
+              let vs'', es'' = vs', [Plain (Br x) @@ e.at] in
+              let vs', es' = vs', [] in
+              
+              let mem = (frame.inst.smemories, smemlen frame.inst) in
+
+              (* proof obligation *)
+              let c = {c with observations = CT_UNSAT(pc, v, mem, c.observations)} in
+              (* TODO(Romy): FIX need to add the actual condition - I need to move 
+                 the paths from the solvers here *)
+              let nloops = List.map (update_loops_invar v) loops in
+
+              [{c with code = vs', es' @ List.tl es; pc = pc'; loops = nloops};
+               {c with code = vs'', es'' @ List.tl es; pc = pc''; loops = nloops}]
+              (* if Z3_solver.is_ct_unsat pc v mem then res
+               * else failwith "BrIf: Constant-time failure" *)
+           )
            (* Must be unsat *)
-
-           if Z3_solver.is_ct_unsat pc v mem then res
-           else failwith "BrIf: Constant-time failure"
            
         (* | BrTable (xs, x), I32 i :: vs' when I32.ge_u i (Lib.List32.length xs) ->
          *   vs', [Plain (Br x) @@ e.at]
@@ -557,17 +718,32 @@ let rec step (c : config) : config list =
 
         | LocalSet x, v :: vs' ->
            (* print_endline "localset"; *)
-           let frame' = update_local c.frame x v in
-           let vs', es' = vs', [] in
-           [{c with code = vs', es' @ List.tl es; frame = frame'}]
-
+           (match c.loops with
+           | [] ->
+              let frame' = update_local c.frame x v in
+              let vs', es' = vs', [] in
+              [{c with code = vs', es' @ List.tl es; frame = frame'}]
+           | loops ->
+              let frame' = update_local c.frame x v in
+              let vs', es' = vs', [] in
+              let nloops = List.map (update_loops_loc_set v x) c.loops in
+              [{c with code = vs', es' @ List.tl es; frame = frame';
+                       loops = nloops}]
+           )
         | LocalTee x, v :: vs' ->
            (* print_endline "localtee"; *)
-           let frame' = update_local c.frame x v in
-           (* local frame x := v; *)
-           let vs', es' = v :: vs', [] in
-           [{c with code = vs', es' @ List.tl es; frame = frame'}]
-
+           (match c.loops with
+           | [] ->
+              let frame' = update_local c.frame x v in
+              let vs', es' = v :: vs', [] in
+              [{c with code = vs', es' @ List.tl es; frame = frame'}]
+           | loops ->
+              let frame' = update_local c.frame x v in
+              let vs', es' = v :: vs', [] in
+              let nloops = List.map (update_loops_loc_set v x) c.loops in
+              [{c with code = vs', es' @ List.tl es; frame = frame';
+                       loops = nloops}]              
+           )
         (* | GlobalGet x, vs ->
          *   Global.load (global frame.inst x) :: vs, [] *)
 
@@ -579,11 +755,8 @@ let rec step (c : config) : config list =
         | Load {offset; ty; sz; _}, si :: vs' ->
            let imem = smemory frame.inst (0l @@ e.at) in
 
-           (* let mem = Smemory.init_secrets mem c.msecrets in *)
-           
            let frame = {frame with
-                         inst = update_smemory frame.inst imem (0l @@ e.at)} in
-           
+                         inst = update_smemory frame.inst imem (0l @@ e.at)} in           
            let addr =
              (match si with
               | SI32 v -> v
@@ -591,93 +764,158 @@ let rec step (c : config) : config list =
              ) in (* I64_convert.extend_i32_u i in *)
            let offset = Int32.to_int offset in        
            let mem = (frame.inst.smemories, smemlen frame.inst) in
-
-           let c = {c with observations = CT_V_UNSAT(pc, si, mem, c.observations)} in
-
-           if (Z3_solver.is_v_ct_unsat pc si mem) then
-             (
-               let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
-               (* let final_addr = Eval_symbolic.address ty addr offset in (\*  *\) *)
-               let msec = Smemory.get_secrets imem in
-               let pc', pc'' = split_msec final_addr msec pc in
-               (* The loaded value consists of the (symbolic) index and the memory
+           (match c.loops with
+            | [] -> (* Normal execution runs directly *)
+               let c = {c with observations = CT_V_UNSAT(pc, si, mem, c.observations)} in
+               if (Z3_solver.is_v_ct_unsat pc si mem) then
+                 (
+                   let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
+                   let msec = Smemory.get_secrets imem in
+                   let pc', pc'' = split_msec final_addr msec pc in
+                   (* The loaded value consists of the (symbolic) index and the memory
                    index *)
+                   let nv = Eval_symbolic.eval_load ty final_addr (smemlen frame.inst) in
+                   let vs', es' =  nv :: vs', [] in 
+                   let res = if Z3_solver.is_sat pc' mem then(
+                               [{c with code = vs', es' @ List.tl es;
+                                        frame = frame;
+                                        pc = pc'}])
+                             else []
+                   in
+                   let res = if Z3_solver.is_sat pc'' mem then
+                               (* low values *)
+                               {c with code = vs', es' @ List.tl es;
+                                       frame = frame;
+                                       pc = pc''}:: res
+                             else res in
+                   res)
+               else failwith "The index does not satisfy CT."
+            | loops ->
+               (* Loop execution runs directly *)
+
+               (* TODO(Romy): FIX need to add the actual condition - I need to move 
+                 the paths from the solvers here *)
+              let nloops = List.map (update_loops_invar si) loops in
+
+               let c = {c with observations = CT_V_UNSAT(pc, si, mem, c.observations)} in
+               let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
                let nv = Eval_symbolic.eval_load ty final_addr (smemlen frame.inst) in
                let vs', es' =  nv :: vs', [] in 
-               let res = if Z3_solver.is_sat pc' mem then(
-                           [{c with code = vs', es' @ List.tl es;
-                                    frame = frame;
-                                    pc = pc'}])
-                         else []
+               let res = [{c with code = vs', es' @ List.tl es;
+                                  frame = frame;
+                                  pc = pc;
+                                  loops = nloops}]
                in
-               let res = if Z3_solver.is_sat pc'' mem then
-                           (* low values *)
-                           {c with code = vs', es' @ List.tl es;
-                                   frame = frame;
-                                   pc = pc''}:: res
-                         else res in
-               res)
-           else failwith "The index does not satisfy CT."
+               res
+           )
        (* ) *)
            
         | Store {offset; ty; sz; _}, sv :: si :: vs' ->
            print_endline "store";
-           (* Pc_type.print_pc pc |> print_endline; *)
-           let mem = smemory frame.inst (0l @@ e.at) in
-           (* TODO(Romy): find a better way to do this *)
-           (* let mem = Smemory.init_secrets mem c.msecrets in *)
-           let frame = {frame with
-                         inst = update_smemory frame.inst mem (0l @@ e.at)} in
-           let addr =
-             (match si with
-              | SI32 v -> v
-              | _ -> failwith "Error: Address should be 32-bit integer"
-             ) in (* I64_convert.extend_i32_u i in *)
-           let offset = Int32.to_int offset in
-           (* check if we satisfy CT  for the index *)
+           (match c.loops with
+            | [] ->
+               (* Pc_type.print_pc pc |> print_endline; *)
+               let mem = smemory frame.inst (0l @@ e.at) in
+               let frame = {frame with
+                             inst = update_smemory frame.inst mem (0l @@ e.at)} in
+               let addr =
+                 (match si with
+                  | SI32 v -> v
+                  | _ -> failwith "Error: Address should be 32-bit integer"
+                 ) in (* I64_convert.extend_i32_u i in *)
+               let offset = Int32.to_int offset in
+               (* check if we satisfy CT  for the index *)
 
-           let mems = (frame.inst.smemories, smemlen frame.inst) in
-           
-           let c = {c with observations = CT_V_UNSAT(pc, si, mems, c.observations)} in
-           
-           if (Z3_solver.is_v_ct_unsat pc si mems) then
-             let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
-             let msec = Smemory.get_secrets mem in
-             (* print_endline "c.msecrets";
-              * List.length msec |> string_of_int |> print_endline; *)
-             let pc', pc'' = split_msec final_addr msec pc in
-             let nv = Eval_symbolic.eval_store ty final_addr sv (smemlen frame.inst) in
-             let mem' = Smemory.store_sind_value mem nv in
-             let vs', es' = vs', [] in
-             (* Update memory with a store *)
-             let nframe = {frame with inst = insert_smemory frame.inst mem'} in
-             (* Path1: we store the value in secret memory *)
-             (* print_endline "before is_sat1"; *)
-             let res = if Z3_solver.is_sat pc' mems then (
-                         (* print_endline "in is_sat1"; *)
-                         [{c with code = vs', es' @ List.tl es;
-                                  frame = nframe; 
-                                  pc = pc'}])
-                       else []
-             in
-             (* Path2: we store the value in non secret memory *)
-             let res = if Z3_solver.is_sat pc'' mems then
-                         (let c = {c with observations =
-                                            CT_V_UNSAT(pc'', sv, mems, c.observations)} in
-                          if Z3_solver.is_v_ct_unsat pc'' sv mems then
-                            {c with code = vs', es' @ List.tl es;
-                                    frame = nframe;
-                                    pc = pc''}:: res
-                          else failwith "Trying to write high values in low memory")
-                       else res in
-             res
-           else failwith "The index does not satisfy CT."
+               let mems = (frame.inst.smemories, smemlen frame.inst) in
+               
+               let c = {c with observations = CT_V_UNSAT(pc, si, mems, c.observations)} in
+               
+               if (Z3_solver.is_v_ct_unsat pc si mems) then
+                 let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
+                 let msec = Smemory.get_secrets mem in
+                 (* print_endline "c.msecrets";
+                  * List.length msec |> string_of_int |> print_endline; *)
+                 let pc', pc'' = split_msec final_addr msec pc in
+                 let nv = Eval_symbolic.eval_store ty final_addr sv (smemlen frame.inst) in
+                 let mem' = Smemory.store_sind_value mem nv in
+                 let vs', es' = vs', [] in
+                 (* Update memory with a store *)
+                 let nframe = {frame with inst = insert_smemory frame.inst mem'} in
+                 (* Path1: we store the value in secret memory *)
+                 let res = if Z3_solver.is_sat pc' mems then (
+                             (* print_endline "in is_sat1"; *)
+                             [{c with code = vs', es' @ List.tl es;
+                                      frame = nframe; 
+                                      pc = pc'}])
+                           else []
+                 in
+                 (* Path2: we store the value in non secret memory *)
+                 let res = if Z3_solver.is_sat pc'' mems then
+                             (let c = {c with observations =
+                                                CT_V_UNSAT(pc'', sv, mems, c.observations)} in
+                              if Z3_solver.is_v_ct_unsat pc'' sv mems then
+                                {c with code = vs', es' @ List.tl es;
+                                        frame = nframe;
+                                        pc = pc''}:: res
+                              else failwith "Trying to write high values in low memory")
+                           else res in
+                 res
+               else failwith "The index does not satisfy CT."
+           | loops ->
+              let mem = smemory frame.inst (0l @@ e.at) in
+              let frame = {frame with
+                            inst = update_smemory frame.inst mem (0l @@ e.at)} in
+              let addr =
+                (match si with
+                 | SI32 v -> v
+                 | _ -> failwith "Error: Address should be 32-bit integer"
+                ) in (* I64_convert.extend_i32_u i in *)
+              let offset = Int32.to_int offset in
 
+              let mems = (frame.inst.smemories, smemlen frame.inst) in
+
+
+              let c = {c with observations = CT_V_UNSAT(pc, si, mems, c.observations)} in
+               
+
+              (* if (Z3_solver.is_v_ct_unsat pc si mems) then *)
+              let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
+              let nv = Eval_symbolic.eval_store ty final_addr sv (smemlen frame.inst) in
+
+              (* Update possible collecting variables for loops *)
+              (* TODO(Romy): FIX need to add the actual condition - I need to move 
+                 the paths from the solvers here *)
+              let nloops = List.map (update_loops_invar si) loops in
+              let nloops = List.map (update_loops_invar sv) nloops in
+              let nloops = List.map (update_loops_store nv mem) nloops in
+              
+              let msec = Smemory.get_secrets mem in
+              let pc', pc'' = split_msec final_addr msec pc in
+              
+              let mem' = Smemory.store_sind_value mem nv in
+              let vs', es' = vs', [] in
+              (* Update memory with a store *)
+              let nframe = {frame with inst = insert_smemory frame.inst mem'} in
+              (* Path1: we store the value in secret memory *)
+              (* let res = if Z3_solver.is_sat pc' mems then ( *)
+              let res = [{c with code = vs', es' @ List.tl es;
+                                 frame = nframe; 
+                                 pc = pc'; loops = nloops}]
+              in
+                (* Path2: we store the value in non secret memory *)
+              let c = {c with observations = CT_V_UNSAT(pc'', sv, mems, c.observations)} in
+              {c with code = vs', es' @ List.tl es;
+                      frame = nframe;
+                      pc = pc'';
+                      loops = nloops}:: res
+           (* else failwith "The index does not satisfy CT." *)
+           )
         (* | MemorySize, vs ->
-         *   let mem = memory frame.inst (0l @@ e.at) in
-         *   I32 (Memory.size mem) :: vs, []
-         * 
-         * | MemoryGrow, I32 delta :: vs' ->
+         *   let mem = smemory frame.inst (0l @@ e.at) in
+         *   let vs', es' = (Si32.of_int_s (Smemory.size mem)) :: vs, [] in
+         *   [{c with code = vs', es' @ List.tl es} *)
+        
+        (* | MemoryGrow, I32 delta :: vs' ->
          *   let mem = memory frame.inst (0l @@ e.at) in
          *   let old_size = Memory.size mem in
          *   let result =
@@ -815,6 +1053,7 @@ let rec step (c : config) : config list =
        (match func with
         | Func.AstFunc (t, inst', f) ->
            let rest = List.map value_to_svalue_type f.it.locals in
+           (* let locals' = List.rev args @ List.map Svalues.default_value rest in *) 
            let locals' = List.rev args @ List.map Svalues.default_value rest in
            let frame' = {inst = !inst'; locals = locals'} in
            let instr' = [Label (n2, [], ([], List.map plain f.it.body)) @@ f.at] in 

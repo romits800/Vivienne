@@ -144,6 +144,15 @@ struct
     | n, x'::xs' when n > 0l -> x'::replace (Int32.sub n 1l) x xs'
     | _ -> failwith "replace"
 
+  let pop_if f xs =
+    let rec pop_if_i f a xs = 
+      match xs with
+      | x::xs' when f x -> (x, (a @ xs'))  
+      | x::xs' -> pop_if_i f (x::a) xs'
+      | [] -> failwith "pop_if"
+    in
+    pop_if_i f [] xs
+         
   let insert x xs = x::xs
 end
 
