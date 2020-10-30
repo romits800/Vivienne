@@ -601,7 +601,13 @@ let rec step (c : config) : config list =
                let res = if Z3_solver.is_sat pc'' mem then
                            {c with code = vs'', es'' @ List.tl es; pc = pc''}::res
                          else res in
-               
+
+               let res = 
+                 if res == [] then
+                   let vs', es' = vs, [] in
+                   [{c with code = vs', es' @ List.tl es}]
+                 else res
+               in
                (* Must be unsat *)
                if Z3_solver.is_ct_unsat pc v mem then res
                else failwith "If: Constant-time failure"
@@ -653,6 +659,12 @@ let rec step (c : config) : config list =
                let res = if Z3_solver.is_sat pc'' mem then
                            {c with code = vs'', es'' @ List.tl es; pc = pc''}::res
                          else res in
+               let res = if res == [] then
+                           let vs', es' = vs, [] in
+                           [{c with code = vs', es' @ List.tl es}]
+                         else res
+               in
+
                if Z3_solver.is_ct_unsat pc v mem then res
                else failwith "BrIf: Constant-time failure"
 
@@ -660,7 +672,6 @@ let rec step (c : config) : config list =
               let pc', pc'' = split_condition v pc in
               let vs'', es'' = vs', [Plain (Br x) @@ e.at] in
               let vs', es' = vs', [] in
-              
               let mem = (frame.inst.smemories, smemlen frame.inst) in
 
               (* proof obligation *)
@@ -671,8 +682,6 @@ let rec step (c : config) : config list =
 
               [{c with code = vs', es' @ List.tl es; pc = pc'; loops = nloops};
                {c with code = vs'', es'' @ List.tl es; pc = pc''; loops = nloops}]
-              (* if Z3_solver.is_ct_unsat pc v mem then res
-               * else failwith "BrIf: Constant-time failure" *)
            )
            (* Must be unsat *)
            
