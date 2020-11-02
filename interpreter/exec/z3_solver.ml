@@ -111,7 +111,7 @@ and si_to_expr is_value size ctx mem si: rel_type  =
      let smem, memlen = mem in
      let tmem = Lib.List32.nth smem (Int32.of_int (memlen - memi)) in
      let stores = Smemory.get_stores tmem in
-     let fmem = List.fold_left (update_mem size ctx mem) (H(arr1,arr2)) stores in
+     let fmem = List.fold_left (update_mem size ctx mem) (H (arr1,arr2)) (List.rev stores) in
      let index = si_to_expr is_value size ctx mem i in
      propagate_policy (Z3Array.mk_select ctx) fmem index
      (* index *)
@@ -334,9 +334,9 @@ let create_mem ctx size =
 
 
 let is_unsat (pc : pc) (sv : svalue) (mem: Smemory.t list * int) =
-  print_endline "is_unsat";
-  Pc_type.print_pc pc |> print_endline;
-  svalue_to_string sv |> print_endline;
+  (* print_endline "is_unsat";
+   * Pc_type.print_pc pc |> print_endline;
+   * svalue_to_string sv |> print_endline; *)
 
   let cfg = [("model", "true"); ("proof", "false")] in
   let ctx = mk_context cfg in
@@ -358,24 +358,26 @@ let is_unsat (pc : pc) (sv : svalue) (mem: Smemory.t list * int) =
       | H (pc1,pc2) ->  Goal.add g [pc1; v1 ]
      )
   );
-  Printf.printf "Goal: %s\n" (Goal.to_string g);
+  (* Printf.printf "Goal: %s\n" (Goal.to_string g); *)
   let solver = Solver.mk_solver ctx None in
   List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
   match (Solver.check solver []) with
-  | Solver.UNSATISFIABLE ->
-     print_endline "is_unsat: true";
-     true
+  | Solver.UNSATISFIABLE -> true
   | _ ->
-     let model = Solver.get_model solver in
-     (match model with
-      | None -> print_endline "None"
-      | Some m -> print_endline "Model"; print_endline (Model.to_string m)
-     );
+     (* let model = Solver.get_model solver in
+      * (match model with
+      *  | None -> print_endline "None"
+      *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
+      * ); *)
      false
 
 
   
 let is_ct_unsat (pc : pc) (sv : svalue) (mem: Smemory.t list * int) =
+  (* print_endline "is_ct_unsat";
+   * Pc_type.print_pc pc |> print_endline;
+   * svalue_to_string sv |> print_endline; *)
+
   let cfg = [("model", "true"); ("proof", "false")] in
   let ctx = mk_context cfg in
 
@@ -396,24 +398,24 @@ let is_ct_unsat (pc : pc) (sv : svalue) (mem: Smemory.t list * int) =
       | L p ->  Goal.add g [p ]
       | H (pc1, pc2) ->  Goal.add g [pc1; pc2 ]
      );
-     Printf.printf "Goal: %s\n" (Goal.to_string g);
+     (* Printf.printf "Goal: %s\n" (Goal.to_string g); *)
      let solver = Solver.mk_solver ctx None in
      List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
      match (Solver.check solver []) with
      | Solver.UNSATISFIABLE -> true
      | _ ->
-        let model = Solver.get_model solver in
-        (match model with
-         | None -> print_endline "None"
-         | Some m -> print_endline "Model"; print_endline (Model.to_string m)
-        );
+        (* let model = Solver.get_model solver in
+         * (match model with
+         *  | None -> print_endline "None"
+         *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
+         * ); *)
         false
 
   
 let is_v_ct_unsat (pc : pc) (sv : svalue) (mem: Smemory.t list * int) : bool =
-  print_endline "is_v_ct_unsat";
-  Pc_type.print_pc pc |> print_endline;
-  svalue_to_string sv |> print_endline;
+  (* print_endline "is_v_ct_unsat";
+   * Pc_type.print_pc pc |> print_endline; *)
+  (* svalue_to_string sv |> print_endline; *)
   let cfg = [("model", "true"); ("proof", "false")] in
   let ctx = mk_context cfg in
   
@@ -433,7 +435,7 @@ let is_v_ct_unsat (pc : pc) (sv : svalue) (mem: Smemory.t list * int) : bool =
       in
       Goal.add g [v'];
       Goal.add g [pcexp'];
-      Printf.printf "Goal: %s\n" (Goal.to_string g);
+      (* Printf.printf "Goal: %s\n" (Goal.to_string g); *)
       let solver = Solver.mk_solver ctx None in
       List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
       match (Solver.check solver []) with
@@ -446,28 +448,23 @@ let is_v_ct_unsat (pc : pc) (sv : svalue) (mem: Smemory.t list * int) : bool =
 
 let is_sat (pc : pc) (mem: Smemory.t list * int) : bool =
   (* check only satisfiability *)
+  (* print_endline "is_sat"; *)
   let cfg = [("model", "true"); ("proof", "false")] in
   let ctx = mk_context cfg in
-  print_endline (print_pc pc);
+  (* print_endline (print_pc pc); *)
   let v = pc_to_expr pc ctx mem in
   let g = Goal.mk_goal ctx true false false in
   (match v with
    | L v -> Goal.add g [v]
    | H (v1,v2) -> Goal.add g [v1;v2]
   );
-  (* Goal.add g [neq]; *)
-  Printf.printf "Goal: %s\n" (Goal.to_string g);
+  (* Printf.printf "Goal: %s\n" (Goal.to_string g); *)
   let solver = Solver.mk_solver ctx None in
   List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
   let check_solver = Solver.check solver [] in
-  (* let model = Solver.get_model solver in *)
-  (* (match model with
-   *  | None -> print_endline "None"
-   *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
-   * ); *)
   match check_solver with
-  | Solver.SATISFIABLE -> true
-    (* | Solver.UNKNOWN  -> true *)  
+  | Solver.SATISFIABLE
+    | Solver.UNKNOWN  -> true  
   | _ -> false
 
 

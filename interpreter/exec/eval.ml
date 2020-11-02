@@ -515,7 +515,7 @@ let rec step (c : config) : config list =
            let vs', es' = vs', [Label (n2, [], (args, List.map plain es')) @@ e.at] in
            [{c with code = vs', es' @ List.tl es}]
         | Loop (bt, es'), vs ->
-           print_endline "loop";
+           (* print_endline "loop"; *)
            (* List.length c.abstract_loops |> string_of_int |> print_endline;
             * List.length c.loops |> string_of_int |> print_endline; *)
 
@@ -569,15 +569,16 @@ let rec step (c : config) : config list =
               )
             else
               (
-                print_endline "Loop: first time";
+                (* print_endline "Loop: first time"; *)
                 let FuncType (ts1, ts2) = block_type frame.inst bt in
                 let n1 = Lib.List32.length ts1 in
                 let args, vs' = take n1 vs e.at, drop n1 vs e.at in
                 let vs', es' = vs', [Label (n1, [e' @@ e.at],
                                             (args, List.map plain es')) @@ e.at] in
-                let newc = {c with stage = RUN_INIT} in
+                let _ = {c with stage = RUN_INIT} in
                 [{c with code = vs', es' @ List.tl es;
-                         loops = newc::c.loops}]
+                         (* loops = newc::c.loops *)
+                }]
 
               )
            )
@@ -601,21 +602,20 @@ let rec step (c : config) : config list =
                let res = if Z3_solver.is_sat pc'' mem then
                            {c with code = vs'', es'' @ List.tl es; pc = pc''}::res
                          else res in
-
-               let res = 
-                 if res == [] then
+               (match res with
+                | [] ->
                    let vs', es' = vs, [] in
                    [{c with code = vs', es' @ List.tl es}]
-                 else res
-               in
-               (* Must be unsat *)
-               if Z3_solver.is_ct_unsat pc v mem then res
-               else failwith "If: Constant-time failure"
+                | _::[] -> res
+                | _ ->
+                   if Z3_solver.is_ct_unsat pc v mem then res
+                   else failwith "If: Constant-time failure"
+               )
            | loops ->
               let pc', pc'' = split_condition v pc in
               let vs'', es'' = vs', [Plain (Block (bt, es1)) @@ e.at] in (* True *)
               let vs',  es'  = vs', [Plain (Block (bt, es2)) @@ e.at] in (* False *)
-              (* Check sat of if *)
+              (* Skip check sat if there are other operations *)
               
               let mem = (frame.inst.smemories, smemlen frame.inst) in 
               let c = {c with observations = CT_UNSAT(pc, v, mem, c.observations)} in
@@ -659,14 +659,15 @@ let rec step (c : config) : config list =
                let res = if Z3_solver.is_sat pc'' mem then
                            {c with code = vs'', es'' @ List.tl es; pc = pc''}::res
                          else res in
-               let res = if res == [] then
-                           let vs', es' = vs, [] in
-                           [{c with code = vs', es' @ List.tl es}]
-                         else res
-               in
-
-               if Z3_solver.is_ct_unsat pc v mem then res
-               else failwith "BrIf: Constant-time failure"
+               (match res with
+                | [] ->
+                   let vs', es' = vs, [] in
+                   [{c with code = vs', es' @ List.tl es}]
+                | _::[] -> res
+                | _ ->
+                   if Z3_solver.is_ct_unsat pc v mem then res
+                   else failwith "BrIf: Constant-time failure"
+               )
 
            | loops ->
               let pc', pc'' = split_condition v pc in
@@ -806,21 +807,21 @@ let rec step (c : config) : config list =
                  the paths from the solvers here *)
               let nloops = List.map (update_loops_invar si) loops in
 
-               let c = {c with observations = CT_V_UNSAT(pc, si, mem, c.observations)} in
-               let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
-               let nv = Eval_symbolic.eval_load ty final_addr (smemlen frame.inst) in
-               let vs', es' =  nv :: vs', [] in 
-               let res = [{c with code = vs', es' @ List.tl es;
-                                  frame = frame;
-                                  pc = pc;
-                                  loops = nloops}]
-               in
-               res
+              let c = {c with observations = CT_V_UNSAT(pc, si, mem, c.observations)} in
+              let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
+              let nv = Eval_symbolic.eval_load ty final_addr (smemlen frame.inst) in
+              let vs', es' =  nv :: vs', [] in 
+              let res = [{c with code = vs', es' @ List.tl es;
+                                 frame = frame;
+                                 pc = pc;
+                                 loops = nloops}]
+              in
+              res
            )
        (* ) *)
            
         | Store {offset; ty; sz; _}, sv :: si :: vs' ->
-           print_endline "store";
+           (* print_endline "store"; *)
            (match c.loops with
             | [] ->
                (* Pc_type.print_pc pc |> print_endline; *)

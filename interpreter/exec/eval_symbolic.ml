@@ -48,21 +48,24 @@ struct
       | Rotr -> IXX.rotr
     in fun v1 v2 -> to_value (f (of_value 1 v1) (of_value 2 v2))
 
-  let testop op =
-    let f = match op with
-      | Eqz -> IXX.eqz
-    in fun v -> to_value (f (of_value 1 v))
-
   let cond op t1 t2 =
     let one = IXX.one in
     let zero = IXX.zero in
     let v = op t1 t2 in
     IXX.ite v one zero
+
+  let testop op =
+    let f = match op with
+      | Eqz ->
+         let zero = IXX.zero in
+         cond IXX.eq zero
+    in fun v -> to_value (f (of_value 1 v))
+
     
   let relop op =
     let f = match op with
-      | Eq -> IXX.eq
-      | Ne -> IXX.ne
+      | Eq -> cond (IXX.eq)
+      | Ne -> cond (IXX.ne)
       | LtS -> cond (IXX.lt_s)
       | LtU -> cond (IXX.lt_u)
       | LeS -> cond (IXX.le_s)
