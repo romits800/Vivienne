@@ -518,70 +518,82 @@ let rec step (c : config) : config list =
            (* print_endline "loop"; *)
            (* List.length c.abstract_loops |> string_of_int |> print_endline;
             * List.length c.loops |> string_of_int |> print_endline; *)
+           if !Flags.loop_invar then 
+              (if (List.fold_left (fun b ei -> (is_loop_equal e.it ((List.hd (snd ei.code)).it)) || b)
+                     false c.loops) then
+                 (print_endline "Loop: Second time";
+                  let newc,nloops = Lib.List32.pop_if
+                                      (fun ci -> is_loop_equal ((List.hd (snd ci.code)).it) e.it)
+                                      c.loops in
+                  (match newc.stage with
+                   | RUN_INIT ->
+                      print_endline "Loop: second time - Collecting variables";
+                      let FuncType (ts1, ts2) = block_type frame.inst bt in
+                      let n1 = Lib.List32.length ts1 in
+                      let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+                      let vs', es' = vs', [Label (n1, [e' @@ e.at],
+                                                  (args, List.map plain es')) @@ e.at] in
+                      let newc' = {newc with stage = COLLECT_VAR} in
+                      (* Run again from zero, just follow all paths *)
+                      [{newc with code = vs', es' @ List.tl es;
+                                  loops = newc'::nloops}]
+                      
+                   | COLLECT_VAR ->
+                      print_endline "Loop: third time - Collecting invariants";
+                      let FuncType (ts1, ts2) = block_type frame.inst bt in
+                      let n1 = Lib.List32.length ts1 in
+                      let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+                      let vs', es' = vs', [Label (n1, [e' @@ e.at],
+                                                  (args, List.map plain es')) @@ e.at] in
+                      let newc' = {newc with stage = COLLECT_INVAR} in
+                      [{newc with code = vs', es' @ List.tl es;
+                                  loops = newc'::nloops}]
+                      
+                   | COLLECT_INVAR ->
+                      print_endline "Loop: last time - collect invariants";
+                      let FuncType (ts1, ts2) = block_type frame.inst bt in
+                      let n1 = Lib.List32.length ts1 in
+                      let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+                      let vs', es' = vs', [Label (n1, [e' @@ e.at],
+                                                  (args, List.map plain es')) @@ e.at] in
+                      let newc = {newc with stage = RUN_ABSTRACT} in
+                      [{c with code = vs', es' @ List.tl es;
+                               loops = newc::nloops}]
+                   | RUN_ABSTRACT ->
+                      let vs', es' = vs, [] in
+                      [{c with code = vs', es' @ List.tl es;
+                               loops = nloops}]
+                   | NONE -> failwith "Unexpected loop mode."
 
-           (if (List.fold_left (fun b ei -> (is_loop_equal e.it ((List.hd (snd ei.code)).it)) || b)
-                  false c.loops) then
-              (print_endline "Loop: Second time";
-               let newc,nloops = Lib.List32.pop_if
-                            (fun ci -> is_loop_equal ((List.hd (snd ci.code)).it) e.it)
-                            c.loops in
-               (match newc.stage with
-                | RUN_INIT ->
-                   print_endline "Loop: second time - Collecting variables";
+                  )
+                 )
+               else
+                 (
+                   (* print_endline "Loop: first time"; *)
                    let FuncType (ts1, ts2) = block_type frame.inst bt in
                    let n1 = Lib.List32.length ts1 in
                    let args, vs' = take n1 vs e.at, drop n1 vs e.at in
                    let vs', es' = vs', [Label (n1, [e' @@ e.at],
                                                (args, List.map plain es')) @@ e.at] in
-                   let newc' = {newc with stage = COLLECT_VAR} in
-                   (* Run again from zero, just follow all paths *)
-                   [{newc with code = vs', es' @ List.tl es;
-                            loops = newc'::nloops}]
- 
-                | COLLECT_VAR ->
-                   print_endline "Loop: third time - Collecting invariants";
-                   let FuncType (ts1, ts2) = block_type frame.inst bt in
-                   let n1 = Lib.List32.length ts1 in
-                   let args, vs' = take n1 vs e.at, drop n1 vs e.at in
-                   let vs', es' = vs', [Label (n1, [e' @@ e.at],
-                                               (args, List.map plain es')) @@ e.at] in
-                   let newc' = {newc with stage = COLLECT_INVAR} in
-                   [{newc with code = vs', es' @ List.tl es;
-                               loops = newc'::nloops}]
-                   
-                | COLLECT_INVAR ->
-                   print_endline "Loop: last time - collect invariants";
-                   let FuncType (ts1, ts2) = block_type frame.inst bt in
-                   let n1 = Lib.List32.length ts1 in
-                   let args, vs' = take n1 vs e.at, drop n1 vs e.at in
-                   let vs', es' = vs', [Label (n1, [e' @@ e.at],
-                                               (args, List.map plain es')) @@ e.at] in
-                   let newc = {newc with stage = RUN_ABSTRACT} in
+                   let newc = {c with stage = RUN_INIT} in
                    [{c with code = vs', es' @ List.tl es;
-                            loops = newc::nloops}]
-                | RUN_ABSTRACT ->
-                   let vs', es' = vs, [] in
-                   [{c with code = vs', es' @ List.tl es;
-                            loops = nloops}]
-                | NONE -> failwith "Unexpected loop mode."
+                            loops = newc::c.loops
+                   }]
 
-               )
+                 )
               )
-            else
-              (
-                (* print_endline "Loop: first time"; *)
-                let FuncType (ts1, ts2) = block_type frame.inst bt in
-                let n1 = Lib.List32.length ts1 in
-                let args, vs' = take n1 vs e.at, drop n1 vs e.at in
-                let vs', es' = vs', [Label (n1, [e' @@ e.at],
-                                            (args, List.map plain es')) @@ e.at] in
-                let _ = {c with stage = RUN_INIT} in
-                [{c with code = vs', es' @ List.tl es;
-                         (* loops = newc::c.loops *)
-                }]
-
-              )
-           )
+           else ( (* Not using loop invariants *)
+              (* print_endline "Loop: first time"; *)
+              let FuncType (ts1, ts2) = block_type frame.inst bt in
+              let n1 = Lib.List32.length ts1 in
+              let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+              let vs', es' = vs', [Label (n1, [e' @@ e.at],
+                                          (args, List.map plain es')) @@ e.at] in
+              let _ = {c with stage = RUN_INIT} in
+              [{c with code = vs', es' @ List.tl es;
+                       (* loops = newc::c.loops *)
+              }]
+            )
         | If (bt, es1, es2), v :: vs' ->
            (* print_endline "if"; *)
            (match c.loops with

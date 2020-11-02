@@ -32,6 +32,7 @@ let argspec = Arg.align
   "-d", Arg.Set Flags.dry, " dry, do not run program";
   "-t", Arg.Set Flags.trace, " trace execution";
   "-b", Arg.Set Flags.bfs, "Run Breadth First Search instead of default DFS";
+  "-l", Arg.Set Flags.loop_invar, "Use loop invariant";
   "-v", Arg.Unit banner, " show version"
 ]
 

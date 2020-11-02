@@ -6,3 +6,4 @@ let dry = ref false
 let width = ref 80
 let harness = ref true
 let bfs = ref false
+let loop_invar = ref false
