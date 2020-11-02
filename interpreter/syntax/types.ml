@@ -15,6 +15,7 @@ type memory_type = MemoryType of Int32.t limits
 type svalue_type = SI32Type | SI64Type | SF32Type | SF64Type
 type smemory_type = SmemoryType of Int32.t limits
 
+type sglobal_type = SglobalType of svalue_type * mutability
 type global_type = GlobalType of value_type * mutability
 type extern_type =
   | ExternFuncType of func_type
@@ -22,6 +23,7 @@ type extern_type =
   | ExternMemoryType of memory_type
   | ExternSmemoryType of smemory_type
   | ExternGlobalType of global_type
+  | ExternSglobalType of sglobal_type
 
 type pack_size = Pack8 | Pack16 | Pack32
 type extension = SX | ZX
@@ -33,13 +35,16 @@ type extension = SX | ZX
 type sec_type =   High of string | Low of string
                 | Nat of string | Int of string | Float of string 
 
-
+                        
 let value_to_svalue_type = function
   | I32Type -> SI32Type
   | I64Type -> SI64Type
   | F32Type -> SF32Type
   | F64Type -> SF64Type
 (* Attributes *)
+
+let global_to_sglobal_type = function
+  | GlobalType (v,mut) -> SglobalType (value_to_svalue_type v, mut)
 
 let ssize = function
   | SI32Type | SF32Type -> 4
@@ -157,6 +162,10 @@ let string_of_global_type = function
   | GlobalType (t, Immutable) -> string_of_value_type t
   | GlobalType (t, Mutable) -> "(mut " ^ string_of_value_type t ^ ")"
 
+let string_of_sglobal_type = function
+  | SglobalType (t, Immutable) -> string_of_svalue_type t
+  | SglobalType (t, Mutable) -> "(mut " ^ string_of_svalue_type t ^ ")"
+
 let string_of_stack_type ts =
   "[" ^ String.concat " " (List.map string_of_value_type ts) ^ "]"
 
@@ -169,6 +178,7 @@ let string_of_extern_type = function
   | ExternMemoryType mt -> "memory " ^ string_of_memory_type mt
   | ExternSmemoryType mt -> "smemory " ^ string_of_smemory_type mt
   | ExternGlobalType gt -> "global " ^ string_of_global_type gt
+  | ExternSglobalType gt -> "sglobal " ^ string_of_sglobal_type gt
 
 let memory_to_smemory_type = function
   | MemoryType lim -> SmemoryType lim 

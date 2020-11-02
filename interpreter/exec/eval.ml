@@ -119,6 +119,7 @@ let memory (inst : module_inst) x = lookup "memory" inst.memories x
 let smemory (inst : module_inst) x = lookup "smemory" inst.smemories x
 let smemlen (inst : module_inst) =  inst.smemlen
 let global (inst : module_inst) x = lookup "global" inst.globals x
+let sglobal (inst : module_inst) x = lookup "sglobal" inst.sglobals x
 let local (frame : frame) x = lookup "local" frame.locals x
 
 let update_smemory (inst : module_inst) (mem : Instance.smemory_inst)
@@ -140,6 +141,13 @@ let update_local (frame : frame) (x : int32 Source.phrase) (sv: svalue) =
     {frame with locals = Lib.List32.replace x.it sv frame.locals}
   with Failure _ ->
     Crash.error x.at ("udefined local " ^ Int32.to_string x.it)
+
+let update_sglobal (inst : module_inst) (glob : Instance.sglobal_inst)
+      (x : int32 Source.phrase)  = 
+  try
+    {inst with sglobals = Lib.List32.replace x.it glob inst.sglobals}
+  with Failure _ ->
+    Crash.error x.at ("undefined smemory " ^ Int32.to_string x.it)
 
 (* let elem inst x i at =
  *   match Table.load (table inst x) i with
@@ -766,13 +774,23 @@ let rec step (c : config) : config list =
               [{c with code = vs', es' @ List.tl es; frame = frame';
                        loops = nloops}]              
            )
-        (* | GlobalGet x, vs ->
-         *   Global.load (global frame.inst x) :: vs, [] *)
+        | GlobalGet x, vs ->
+           let vs', es' = Sglobal.load (sglobal frame.inst x) :: vs, [] in
+           [{c with code = vs', es' @ List.tl es}]              
+           
 
+        | GlobalSet x, v :: vs' ->
+           let newg, vs', es' =
+             (try Sglobal.store (sglobal frame.inst x) v, vs', []
+              with Sglobal.NotMutable -> Crash.error e.at "write to immutable global"
+                 | Sglobal.Type -> Crash.error e.at "type mismatch at global write")
+           in
+           let frame' = {frame with inst = update_sglobal c.frame.inst newg x} in
+           [{c with code = vs', es' @ List.tl es; frame = frame'}]
         (* | GlobalSet x, v :: vs' ->
-         *   (try Global.store (global frame.inst x) v; vs', []
-         *   with Global.NotMutable -> Crash.error e.at "write to immutable global"
-         *      | Global.Type -> Crash.error e.at "type mismatch at global write") *)
+         *    (try Global.store (global frame.inst x) v; vs', []
+         *     with Global.NotMutable -> Crash.error e.at "write to immutable global"
+         *        | Global.Type -> Crash.error e.at "type mismatch at global write") *)
 
         | Load {offset; ty; sz; _}, si :: vs' ->
            let imem = smemory frame.inst (0l @@ e.at) in
@@ -1236,6 +1254,12 @@ let create_smemory (inst : module_inst) (mem : smemory) : smemory_inst =
   Smemory.alloc smtype
 
 
+let create_sglobal (inst : module_inst) (glob : global) : sglobal_inst =
+  let {gtype; value} = glob.it in
+  let sgtype = global_to_sglobal_type gtype in
+  let v = eval_const inst value in
+  Sglobal.alloc sgtype v
+
 (* let create_global (inst : module_inst) (glob : global) : global_inst =
  *   let {gtype; value} = glob.it in
  *   let v = eval_const inst value in
@@ -1328,6 +1352,7 @@ let add_import (m : module_) (ext : extern) (im : import) (inst : module_inst)
   | ExternSmemory smem -> {inst with smemories = smem :: inst.smemories;
                                      smemlen = 1 + inst.smemlen }
   | ExternGlobal glob -> {inst with globals = glob :: inst.globals}
+  | ExternSglobal glob -> {inst with sglobals = glob :: inst.sglobals}
 
 let init (m : module_) (exts : extern list) : module_inst =
   let
@@ -1353,6 +1378,7 @@ let init (m : module_) (exts : extern list) : module_inst =
       smemories = inst0.smemories @ List.map (create_smemory inst0) smemories;
       smemlen = List.length  (inst0.smemories) + List.length(smemories);
       globals = inst0.globals;
+      sglobals = inst0.sglobals @ List.map (create_sglobal inst0) globals;
       (* msecrets = inst0.msecrets @ List.map (create_secrets inst0) secrets; *)
                   (* @ List.map (create_global inst0) globals; *)
     }

@@ -217,6 +217,7 @@ let print_import m im =
     | ExternMemoryType t -> "memory", string_of_memory_type t
     | ExternSmemoryType t -> "smemory", string_of_smemory_type t
     | ExternGlobalType t -> "global", string_of_global_type t
+    | ExternSglobalType t -> "sglobal", string_of_sglobal_type t
   in
   Printf.printf "  import %s \"%s\" \"%s\" : %s\n"
     category (Ast.string_of_name im.it.Ast.module_name)
@@ -231,6 +232,7 @@ let print_export m ex =
     | ExternMemoryType t -> "memory", string_of_memory_type t
     | ExternSmemoryType t -> "smemory", string_of_smemory_type t
     | ExternGlobalType t -> "global", string_of_global_type t
+    | ExternSglobalType t -> "sglobal", string_of_sglobal_type t
   in
   Printf.printf "  export %s \"%s\" : %s\n"
     category (Ast.string_of_name ex.it.Ast.name) annotation
