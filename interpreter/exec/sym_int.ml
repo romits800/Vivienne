@@ -44,8 +44,8 @@ sig
   (* val const : string -> term *)
   val equals : term -> term -> term
 
-  val load : term -> int -> term
-  val store : term -> term -> int -> term
+  val load : term -> int -> int -> Types.extension option -> term
+  val store : term -> term -> int -> int -> term
     
   val and_ : term -> term -> term
   val or_ : term -> term -> term
@@ -110,8 +110,8 @@ sig
   val zero : t
   val one : t
     
-  val load : t -> int -> t
-  val store : t -> t -> int -> t
+  val load : t -> int -> int -> Types.extension option -> t
+  val store : t -> t -> int -> int -> t
   val add : t -> t -> t
   val sub : t -> t -> t
   val mul : t -> t -> t

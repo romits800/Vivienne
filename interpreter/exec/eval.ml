@@ -814,7 +814,23 @@ let rec step (c : config) : config list =
                    let pc', pc'' = split_msec final_addr msec pc in
                    (* The loaded value consists of the (symbolic) index and the memory
                    index *)
-                   let nv = Eval_symbolic.eval_load ty final_addr (smemlen frame.inst) in
+                   let nv =
+                     (* (try *)
+                     (match sz with
+                      | None -> Eval_symbolic.eval_load ty final_addr
+                                  (smemlen frame.inst) (Types.size ty) None
+                      | Some (sz, ext) ->
+                         assert (packed_size sz <= Types.size ty);
+                         let n = packed_size sz in 
+                         Eval_symbolic.eval_load ty final_addr
+                           (smemlen frame.inst) n (Some ext)
+                     )
+                   (* with exn ->
+                    *    let vs', es' = vs', [Trapped (memory_error e.at exn) @@ e.at] in 
+                    *    [{c with code = vs', es' @ List.tl es}]
+                    * ) *)
+                   in
+
                    let vs', es' =  nv :: vs', [] in 
                    let res = if Z3_solver.is_sat pc' mem then(
                                [{c with code = vs', es' @ List.tl es;
@@ -839,7 +855,18 @@ let rec step (c : config) : config list =
 
               let c = {c with observations = CT_V_UNSAT(pc, si, mem, c.observations)} in
               let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
-              let nv = Eval_symbolic.eval_load ty final_addr (smemlen frame.inst) in
+              let nv =
+                (match sz with
+                 | None -> Eval_symbolic.eval_load ty final_addr
+                             (smemlen frame.inst) (Types.size ty) (None)
+                 | Some (sz, ext) ->
+                    assert (packed_size sz <= Types.size ty);
+                    let n = packed_size sz in 
+                    Eval_symbolic.eval_load ty final_addr
+                      (smemlen frame.inst) n (Some ext)
+                )
+              in
+              (* let nv = Eval_symbolic.eval_load ty final_addr (smemlen frame.inst) 4 in *)
               let vs', es' =  nv :: vs', [] in 
               let res = [{c with code = vs', es' @ List.tl es;
                                  frame = frame;
@@ -876,7 +903,20 @@ let rec step (c : config) : config list =
                  (* print_endline "c.msecrets";
                   * List.length msec |> string_of_int |> print_endline; *)
                  let pc', pc'' = split_msec final_addr msec pc in
-                 let nv = Eval_symbolic.eval_store ty final_addr sv (smemlen frame.inst) in
+                 let nv =
+                   (match sz with
+                    | None -> Eval_symbolic.eval_store ty final_addr sv
+                                (smemlen frame.inst) (Types.size ty)
+                    | Some (sz) ->
+                       assert (packed_size sz <= Types.size ty);
+                       let n = packed_size sz in
+                       Eval_symbolic.eval_store ty final_addr sv
+                         (smemlen frame.inst) n
+                   )
+                 in
+
+                 (* let nv = Eval_symbolic.eval_store ty final_addr sv
+                  *            (smemlen frame.inst) 4 in *)
                  let mem' = Smemory.store_sind_value mem nv in
                  let vs', es' = vs', [] in
                  (* Update memory with a store *)
@@ -920,7 +960,8 @@ let rec step (c : config) : config list =
 
               (* if (Z3_solver.is_v_ct_unsat pc si mems) then *)
               let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
-              let nv = Eval_symbolic.eval_store ty final_addr sv (smemlen frame.inst) in
+              let nv = Eval_symbolic.eval_store ty final_addr sv
+                         (smemlen frame.inst) 4 in
 
               (* Update possible collecting variables for loops *)
               (* TODO(Romy): FIX need to add the actual condition - I need to move 
@@ -1313,8 +1354,8 @@ let init_smemory (secret : bool) (inst : module_inst) (sec : security) =
   let hi_list = List.init ((hi-lo+1)/4) (fun x-> 4*x + lo) in
   let stores =
     match secret with
-    | true -> List.map Eval_symbolic.create_new_hstore hi_list
-    | false -> List.map Eval_symbolic.create_new_lstore hi_list
+    | true -> List.map (Eval_symbolic.create_new_hstore 4) hi_list
+    | false -> List.map (Eval_symbolic.create_new_lstore 4) hi_list
   in
 
   (* let inst' =

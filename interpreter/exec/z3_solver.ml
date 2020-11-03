@@ -82,12 +82,70 @@ let propagate_list f es =
   let h,l,is_h = propagate_list_i es [] [] false in
   if is_h then H (f h, f l) else L (f l)
 
+
+let increase_one ctx ind =
+    let bv = Expr.get_sort ind in
+    let one = Expr.mk_numeral_int ctx 1 bv in
+    BitVector.mk_add ctx ind one
+
+(* let decrease_one ctx ind =
+ *     let bv = Expr.get_sort ind in
+ *     let one = Expr.mk_numeral_int ctx 1 bv in
+ *     BitVector.mk_sub ctx ind one *)
+
+
+let rec split_to_bytes ctx a ind value sz lo hi =
+  if (sz == 0) then a
+  else 
+    (
+      let val' = propagate_policy_one (BitVector.mk_extract ctx hi lo) value in
+      let a' = propagate_policy_three (Z3Array.mk_store ctx) a ind val' in
+      let ind' = propagate_policy_one (increase_one ctx) ind in
+      split_to_bytes ctx a' ind' value (sz - 1) (lo+8) (hi+8)
+    )
+
+let merge_bytes ctx a ind sz =
+  let rec merge_bytes_i ctx a ind sz value =
+    if (sz == 0) then value
+    else 
+      (
+        let lv = propagate_policy (Z3Array.mk_select ctx) a ind in
+        let ind' = propagate_policy_one (increase_one ctx) ind in
+        let value' = propagate_policy (BitVector.mk_concat ctx) lv value in
+        merge_bytes_i ctx a ind' (sz - 1) value'
+      )
+  in
+  let lv = propagate_policy (Z3Array.mk_select ctx) a ind in
+  let ind' = propagate_policy_one (increase_one ctx) ind in
+  merge_bytes_i ctx a ind' (sz - 1) lv
+
+let get_ext_size size = function
+  | L v -> 
+     let bv_size = BitVector.get_size (Expr.get_sort v) in
+     size - bv_size
+  | H (v1,v2) ->
+     let bv_size1 = BitVector.get_size (Expr.get_sort v1) in
+     let bv_size2 = BitVector.get_size (Expr.get_sort v2) in
+     assert(bv_size1 == bv_size2);
+     size - bv_size1
+
+let extend ctx size v' = function
+  | None -> v'
+  | Some (Types.ZX) ->
+     (* propagate_policy_one (BitVector.mk_zero_ext ctx 4) v' *)
+     let size' = get_ext_size size v' in
+     propagate_policy_one (BitVector.mk_zero_ext ctx  size') v'
+  | Some (Types.SX) ->
+     let size' = get_ext_size size v' in
+     propagate_policy_one (BitVector.mk_sign_ext ctx  size') v'
+
+
 let rec update_mem size ctx mem a s =
   (match s with
-   | SI32 Store (ad, v, i) ->
+   | SI32 Store (ad, v, i, sz) ->
       let index = si_to_expr true size ctx mem ad in
       let value = si_to_expr true size ctx mem v in
-      propagate_policy_three (Z3Array.mk_store ctx) a index value
+      split_to_bytes ctx a index value sz 0 7
    | _ -> failwith "Unexpected store - not implemented f64/32 i64"
   )
 
@@ -104,18 +162,22 @@ and si_to_expr is_value size ctx mem si: rel_type  =
      L (BitVector.mk_const_s ctx ("l_" ^ string_of_int i) size )
   | App (f, ts) ->
      app_to_expr is_value ts size ctx mem f
-  | Load (i, memi) -> 
-     let bv = BitVector.mk_sort ctx size in
-     let arr1 = Z3Array.mk_const_s ctx  "mem1" bv bv in
-     let arr2 = Z3Array.mk_const_s ctx  "mem2" bv bv in     
+  | Load (i, memi, sz, ext) -> 
+     let bva = BitVector.mk_sort ctx 32 in
+     let bvd = BitVector.mk_sort ctx 8 in
+     let arr1 = Z3Array.mk_const_s ctx  "mem1" bva bvd in
+     let arr2 = Z3Array.mk_const_s ctx  "mem2" bva bvd in     
      let smem, memlen = mem in
      let tmem = Lib.List32.nth smem (Int32.of_int (memlen - memi)) in
      let stores = Smemory.get_stores tmem in
-     let fmem = List.fold_left (update_mem size ctx mem) (H (arr1,arr2)) (List.rev stores) in
+     let fmem = List.fold_left (update_mem size ctx mem)
+                  (H (arr1,arr2)) (List.rev stores) in
      let index = si_to_expr is_value size ctx mem i in
-     propagate_policy (Z3Array.mk_select ctx) fmem index
+     let v' = merge_bytes ctx fmem index sz in
+     extend ctx size v' ext
+  (* propagate_policy (Z3Array.mk_select ctx) fmem index *)
      (* index *)
-  | _ -> failwith "String, Int, Float, Let, Multi, Load, Store are not implemented yet."
+  | _ -> failwith "String, Int, Float, Let, Multi are not implemented yet."
 
 and app_to_expr is_value ts size ctx mem f =
   match f, ts with

@@ -22,7 +22,6 @@ type func =
   | BvSle | BvSlt 
   | BvUge | BvUgt
   | BvSge | BvSgt
-
                            
 type sort = 
   | Sort of identifier
@@ -37,8 +36,8 @@ type term =
   | Const of identifier
   | Multi of term list * identifier * int (* term list, high/low, number_of_elements *)
   (* index in memory and index of memory - because we cannot have the memory here*)
-  | Load of term * int
-  | Store of term * term * int (* address, value, memory *) 
+  | Load of term * int * int * Types.extension option
+  | Store of term * term * int * int (* address, value, memory, size *) 
   (* | Load of Smemory.t * term (\* memory, index *\) *)
   | App of func * term list
   | Let of string * term * term
@@ -124,8 +123,8 @@ let bool_to_term b =  if b then BitVec (1, 1) else BitVec (0, 1)
    *   | t, App(Eq, ts) -> App(Eq, t::ts)
    * | _, _-> App(Eq, [t1;t2]) *)
 
-let load t i = Load(t, i)
-let store t vt i = Store(t, vt, i) 
+let load t i sz ext = Load(t, i, sz, ext)
+let store t vt i sz = Store(t, vt, i, sz) 
 
 let and_ t1 t2 =
   match t1, t2 with
@@ -299,8 +298,10 @@ let func_to_string func =
            
 let rec term_to_string (t : term) : string =
   match t with
-  | Load (i, index) -> "Mem[" ^ term_to_string i ^ "]"
-  | Store (i, v, index) -> "Mem[" ^ term_to_string i ^ "] = " ^ term_to_string v
+  | Load (i, index, sz, ext) -> "Mem[" ^ term_to_string i ^ "]"
+                           ^ "(" ^ string_of_int sz ^ ")" 
+  | Store (i, v, index, sz) -> "Mem[" ^ term_to_string i ^ "] = "
+                               ^ term_to_string v ^ "(" ^ string_of_int sz ^ ")" 
   | String s -> s
   | Int i -> string_of_int i
   | Float f ->  string_of_float f

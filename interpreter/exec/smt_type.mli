@@ -35,8 +35,8 @@ type term =
   | BitVec of int * int (* bool + number of bits *)
   | Const of identifier
   | Multi of term list * identifier * int (* term list, high/low, number_of_elements *)
-  | Load of  term * int (* index, memory *)
-  | Store of  term * term * int (* index, value, memory *)
+  | Load of  term * int * int * Types.extension option (* index, memory, size, ext *)
+  | Store of  term * term * int * int (* index, value, memory, size *)
   | App of func * term list
   | Let of string * term * term
 
@@ -70,8 +70,8 @@ val bool_to_term : bool -> term
 val list_to_term : term list -> term
 (* val const : identifier -> term *)
 val equals : term -> term -> term
-val load : term -> int -> term
-val store : term -> term -> int -> term 
+val load : term -> int -> int -> Types.extension option -> term
+val store : term -> term -> int -> int -> term 
 val and_ : term -> term -> term
 val or_ : term -> term -> term
 val not_ : term -> term

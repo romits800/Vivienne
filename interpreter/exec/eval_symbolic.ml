@@ -25,7 +25,9 @@ struct
       | Clz -> IXX.clz
       | Ctz -> IXX.ctz
       | Popcnt -> IXX.popcnt
-      | ExtendS sz -> failwith "Eval_symbolic: Not implemented"
+      | ExtendS sz -> failwith "Not implemented yet"
+                        (* IXX.extend_s (8 * packed_size sz) *)
+      (* | ExtendZ sz -> IXX.extend_z (8 * packed_size sz) *)
       (* IXX.extend_s (8 * packed_size sz) *)
     in fun v -> to_value (f (of_value 1 v))
 
@@ -224,30 +226,31 @@ let eval_cvtop = op I32CvtOp.cvtop I64CvtOp.cvtop F32CvtOp.cvtop F64CvtOp.cvtop
 
 
 
-let eval_load ty ad i =
+let eval_load ty ad i sz ext =
   match ty,ad with 
-  | I32Type, SI32 a -> SI32 (Si32.load a i)
-  | I64Type, SI32 a -> SI64 (Si64.load a i)
+  | I32Type, SI32 a -> SI32 (Si32.load a i sz ext)
+  
+  | I64Type, SI32 a -> SI64 (Si64.load a i sz ext)
   | _ -> failwith "Floats not implemented."
 
 
-let eval_store ty ad sv i =
+let eval_store ty ad sv i sz =
   match ty,ad,sv with 
-  | I32Type, SI32 a, SI32 v -> SI32 (Si32.store a v i)
-  | I64Type, SI32 a, SI64 v -> SI64 (Si64.store a v i)
+  | I32Type, SI32 a, SI32 v -> SI32 (Si32.store a v i sz)
+  | I64Type, SI32 a, SI64 v -> SI64 (Si64.store a v i sz)
   | _ -> failwith "Floats not implemented."
 
 
-let create_new_hstore a =
+let create_new_hstore sz a =
   let value = Si32.of_high() in
   let index = Si32.bv_of_int a 32 in
-  let st = SI32 (Si32.store index value 0) in
+  let st = SI32 (Si32.store index value 0 sz) in
   st
 
-let create_new_lstore a =
+let create_new_lstore sz a =
   let value = Si32.of_low() in
   let index = Si32.bv_of_int a 32 in
-  let st = SI32 (Si32.store index value 0) in
+  let st = SI32 (Si32.store index value 0 sz) in
   st
 
     (* match ty,ad,sv with 
