@@ -1,0 +1,29 @@
+#!/bin/bash
+
+SCRIPT_PATH="`dirname \"$0\"`"
+pushd $SCRIPT_PATH
+WASM="/home/romi/didaktoriko/repo/wasm/test/symb_wasm/relsymb/interpreter/wasm"
+
+check () {
+    $2 &> /dev/null
+    if [ $? -eq 0 ]; then 
+        echo "passed: $1" 
+    else
+        echo "failed: $1"
+    fi
+}
+
+check 1 "$WASM -i script_if.wast"
+check 2 "$WASM -i script_mem_store.wast"
+check 3 "$WASM -i script_mem_operations_nonfailure.wast"
+check 4 "$WASM -i script_mem_operations_failure.wast"
+check 5 "$WASM -i script_mem_loop.wast"
+check 6 "$WASM -i script_mem_loop_pass.wast"
+check 7 "$WASM -i script_mem_loop_if.wast"
+check 8 "$WASM -i script_mem_loop_if_3.wast"
+check 9 "$WASM -i script_mem_stores.wast"
+check 10 "$WASM -i script_call.wast"
+check 11 "$WASM -i script_mem_operations_char_nonfailure.wast"
+check 12 "$WASM -i script_mem_operations_char_failure.wast"
+
+popd

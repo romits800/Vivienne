@@ -115,7 +115,10 @@ $(WINMAKE):	clean
 
 # Executing test suite
 
-.PHONY:		test debugtest
+.PHONY:		test debugtest test-symb
+
+test-symb:	$(OPT)
+		../test/symb/run.sh --wasm `pwd`/$(OPT)
 
 test:		$(OPT)
 		../test/core/run.py --wasm `pwd`/$(OPT) $(if $(JS),--js '$(JS)',)
