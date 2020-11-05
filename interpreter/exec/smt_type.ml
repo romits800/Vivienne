@@ -22,7 +22,11 @@ type func =
   | BvSle | BvSlt 
   | BvUge | BvUgt
   | BvSge | BvSgt
-                           
+
+  | Rotli of int | Rotri of int
+  | Rotl | Rotr
+
+          
 type sort = 
   | Sort of identifier
   | SortApp of identifier * sort list
@@ -233,6 +237,12 @@ let bvslt t1 t2 = App (BvSlt, [t1;t2])
 let bvsge t1 t2 = App (BvSge, [t1;t2])
 let bvsgt t1 t2 = App (BvSgt, [t1;t2])
 
+let rotl t1 t2 = App (Rotl, [t1;t2])
+let rotr t1 t2 = App (Rotr, [t1;t2])
+
+let rotli t i = App (Rotli(i), [t])
+let rotri t i = App (Rotri(i), [t])
+
 
 
 (* Not accounting for overflows *)
@@ -294,7 +304,10 @@ let func_to_string func =
   | BvSlt -> "BvSlt"
   | BvSge -> "BvSge"
   | BvSgt -> "BvSgt"
-
+  | Rotl -> "Rotl"
+  | Rotr -> "Rotr"
+  | Rotli i -> "Rotl" ^ string_of_int i
+  | Rotri i -> "Rotr" ^ string_of_int i
            
 let rec term_to_string (t : term) : string =
   match t with

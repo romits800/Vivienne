@@ -22,6 +22,9 @@ type func =
   | BvSle | BvSlt 
   | BvUge | BvUgt
   | BvSge | BvSgt
+          
+  | Rotli of int | Rotri of int
+  | Rotl | Rotr
 
 type sort = 
   | Sort of identifier
@@ -115,6 +118,12 @@ val bvsle : term -> term -> term
 val bvslt : term -> term -> term
 val bvsge : term -> term -> term
 val bvsgt : term -> term -> term
+
+val rotl : term -> term -> term
+val rotr : term -> term -> term
+
+val rotli : term -> int -> term
+val rotri : term -> int -> term
 
 val merge : solv_type -> term -> term -> (mergetype * mergetype) option
 val merge_to_string :  mergetype -> string

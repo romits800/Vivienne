@@ -83,6 +83,11 @@ sig
   val bvneg : term -> term
   val bvnot : term -> term
 
+  val rotl : term -> term -> term
+  val rotli : term -> int -> term
+  val rotr : term -> term -> term
+  val rotri : term -> int -> term
+
   (* Not implemented *)
   val bvule : term -> term -> term
   val bvult : term -> term -> term
@@ -270,15 +275,25 @@ struct
    *   Rep.to_int (Rep.logand n (Rep.of_int (Rep.bitwidth - 1))) *)
 
   let rotl x y =
-    let s = (Rep.bvsub (Rep.int_to_intterm Rep.size) y) in 
-    Rep.bvor (Rep.bvshl x y) (Rep.bvlshr x s)
+    if Rep.is_int y then
+      Rep.rotli x (Rep.term_to_int y)
+    else
+      Rep.rotl x y
+ 
+    (* let s = (Rep.bvsub (Rep.int_to_intterm Rep.size) y) in 
+     * Rep.bvor (Rep.bvshl x y) (Rep.bvlshr x s) *)
 
     (* let n = clamp_rotate_count y in
      * or_ (Rep.shift_left x n) (Rep.shift_right_logical x (Rep.bitwidth - n)) *)
 
-  let rotr x y =
-    let s = (Rep.bvsub (Rep.int_to_intterm Rep.size) y) in 
-    Rep.bvor (Rep.bvlshr x y) (Rep.bvshl x s)
+  let rotr x y = (* Rep.rotr x y *)
+    if Rep.is_int y then
+      Rep.rotri x (Rep.term_to_int y)
+    else
+      Rep.rotr x y
+
+  (* let s = (Rep.bvsub (Rep.int_to_intterm Rep.size) y) in 
+     * Rep.bvor (Rep.bvlshr x y) (Rep.bvshl x s) *)
     (* let n = clamp_rotate_count y in
      * or_ (Rep.shift_right_logical x n) (Rep.shift_left x (Rep.bitwidth - n)) *)
 

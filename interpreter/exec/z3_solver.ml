@@ -346,6 +346,29 @@ and app_to_expr is_value ts size ctx mem f =
      propagate_policy (BitVector.mk_ashr ctx) e1 e2
   | BvAShr, _ -> failwith "Not valid bitwise sremainder."
 
+  (*TODO(Romy): special cases for constant shift *)
+  | Rotl, t1::t2::[] ->
+     let e1 = si_to_expr is_value size ctx mem t1 in
+     let e2 = si_to_expr is_value size ctx mem t2 in
+     propagate_policy (BitVector.mk_ext_rotate_left ctx) e1 e2
+  | Rotl, _ -> failwith "Not valid bitwise rotl."
+
+  | Rotr, t1::t2::[] ->
+     let e1 = si_to_expr is_value size ctx mem t1 in
+     let e2 = si_to_expr is_value size ctx mem t2 in
+     propagate_policy (BitVector.mk_ext_rotate_right ctx) e1 e2
+  | Rotr, _ -> failwith "Not valid bitwise rotr."
+
+  | Rotli(i), t::[] ->
+     let e = si_to_expr is_value size ctx mem t in
+     propagate_policy_one (BitVector.mk_rotate_left ctx i) e
+  | Rotli _, _ -> failwith "Not valid bitwise rotl."
+
+  | Rotri(i), t::[] ->
+     let e = si_to_expr is_value size ctx mem t in
+     propagate_policy_one (BitVector.mk_rotate_right ctx i) e
+  | Rotri _, _ -> failwith "Not valid bitwise rotl."
+
   (* | BvDiv, t1::t2::[] ->
    *    let e1 = si_to_expr is_value size ctx mem t1 in
    *    let e2 = si_to_expr is_value size ctx mem t2 in
