@@ -101,6 +101,7 @@ sig
   val term_to_string : term -> string
   val merge : solv_type -> term -> term -> (mergetype * mergetype) option
   val merge_to_string : mergetype -> string
+  val count_depth : term -> int
 end
 
 module type S =
@@ -177,6 +178,7 @@ sig
 
   val merge : stype -> t -> t-> (mtype * mtype) option
   val merge_to_string : mtype -> string
+  val count_depth : t -> int
 end
 
 module Make (Rep : SmtType) : S with type bits = Rep.term and type stype = Rep.solv_type and
@@ -377,6 +379,7 @@ struct
 
   let merge = Rep.merge
   let merge_to_string = Rep.merge_to_string
+  let count_depth = Rep.count_depth
 (* let to_int_s = Rep.to_int
    * let to_int_u i = Rep.to_int i land (Rep.to_int Rep.max_int lsl 1) lor 1
    * 

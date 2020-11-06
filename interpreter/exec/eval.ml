@@ -502,6 +502,12 @@ let rec check_run_normal_loops loops =
 let rec step (c : config) : config list =
   let {frame; code = vs, es; pc; _} = c in
   let e = List.hd es in
+  print_endline "step:";
+  (if List.length frame.locals > 1 then
+    svalue_to_string (local frame (1l @@ e.at)) |> print_endline
+  else
+    print_endline "No six"
+  );
   (* let vs', es' = *)
   let res =
     match e.it, vs with
@@ -511,7 +517,7 @@ let rec step (c : config) : config list =
            let vs', es' = vs, [Trapping "unreachable executed" @@ e.at] in
            [{c with code = vs', es' @ List.tl es}]
         | Nop, vs ->
-           (* print_endline "nop"; *)
+           print_endline "nop";
            let vs', es' = vs, [] in
            [{c with code = vs', es' @ List.tl es}]
         | Block (bt, es'), vs ->
@@ -523,11 +529,12 @@ let rec step (c : config) : config list =
            let vs', es' = vs', [Label (n2, [], (args, List.map plain es')) @@ e.at] in
            [{c with code = vs', es' @ List.tl es}]
         | Loop (bt, es'), vs ->
-           (* print_endline "loop"; *)
+           print_endline "loop";
            (* List.length c.abstract_loops |> string_of_int |> print_endline;
             * List.length c.loops |> string_of_int |> print_endline; *)
            if !Flags.loop_invar then 
-              (if (List.fold_left (fun b ei -> (is_loop_equal e.it ((List.hd (snd ei.code)).it)) || b)
+             (
+               if (List.fold_left (fun b ei -> (is_loop_equal e.it ((List.hd (snd ei.code)).it)) || b)
                      false c.loops) then
                  (print_endline "Loop: Second time";
                   let newc,nloops = Lib.List32.pop_if
@@ -603,7 +610,7 @@ let rec step (c : config) : config list =
               }]
             )
         | If (bt, es1, es2), v :: vs' ->
-           (* print_endline "if"; *)
+           print_endline "if";
            (match c.loops with
             | []
               | _ when check_run_normal_loops c.loops ->
@@ -660,7 +667,7 @@ let rec step (c : config) : config list =
            [{c with code = vs', es' @ List.tl es}]
            
         | BrIf x, v :: vs' ->
-           (* print_endline "br_if"; *)
+           print_endline "br_if";
            (match c.loops with
             | [] 
               | _ when check_run_normal_loops c.loops ->
@@ -718,7 +725,7 @@ let rec step (c : config) : config list =
            [{c with code = vs', es' @ List.tl es}]
 
         | Call x, vs ->
-           (* print_endline "call"; *)
+           print_endline "call";
            let vs', es' = vs, [Invoke (func frame.inst x) @@ e.at] in
            [{c with code = vs', es' @ List.tl es}]
 
@@ -730,7 +737,7 @@ let rec step (c : config) : config list =
          *     vs, [Invoke func @@ e.at] *)
 
         | Drop, v :: vs' ->
-           (* print_endline "drop"; *)
+           print_endline "drop";
            let vs', es' = vs', [] in
            [{c with code = vs', es' @ List.tl es}]
            
@@ -742,12 +749,35 @@ let rec step (c : config) : config list =
            [{c with code = vs', es' @ List.tl es }]
            
         | LocalGet x, vs ->
-           (* print_endline "localget"; *)
+           print_endline "localget";
+           string_of_int (Int32.to_int x.it) |> print_endline;
            let vs', es' = (local frame x) :: vs, [] in
+           svalue_to_string (local frame x) |> print_endline;
+           (* svalue_depth (local frame x) |> string_of_int |> print_endline; *)
+           (* svalue_to_string (local frame x) |> print_endline; *)
+           (* print_endline "localget end"; *)
            [{c with code = vs', es' @ List.tl es}]
 
         | LocalSet x, v :: vs' ->
-           (* print_endline "localset"; *)
+           print_endline "localset";
+           svalue_to_string v |> print_endline;
+           string_of_int (Int32.to_int x.it) |> print_endline;
+
+           (* svalue_depth v |> string_of_int |> print_endline; *)
+           (* svalue_to_string v |> print_endline; *)
+           (* print_endline "localset end"; *)
+           let v, c =
+             if svalue_depth v > 20 then (
+               print_endline "Depth greater than 100";
+               let nv = svalue_newhigh v in
+               svalue_to_string nv |> print_endline;
+               let eq = svalue_eq nv v in
+               let c = {c with pc = PCAnd (eq, pc)} in 
+               nv,c)
+             else
+               v, c
+           in
+           
            (match c.loops with
            | [] ->
               let frame' = update_local c.frame x v in
@@ -761,7 +791,9 @@ let rec step (c : config) : config list =
                        loops = nloops}]
            )
         | LocalTee x, v :: vs' ->
-           (* print_endline "localtee"; *)
+           print_endline "localtee";
+           string_of_int (Int32.to_int x.it) |> print_endline;
+           svalue_to_string v |> print_endline;
            (match c.loops with
            | [] ->
               let frame' = update_local c.frame x v in
@@ -793,6 +825,7 @@ let rec step (c : config) : config list =
          *        | Global.Type -> Crash.error e.at "type mismatch at global write") *)
 
         | Load {offset; ty; sz; _}, si :: vs' ->
+           print_endline "load";
            let imem = smemory frame.inst (0l @@ e.at) in
 
            let frame = {frame with
@@ -878,9 +911,13 @@ let rec step (c : config) : config list =
        (* ) *)
            
         | Store {offset; ty; sz; _}, sv :: si :: vs' ->
-           (* print_endline "store"; *)
+           print_endline "store";
            (match c.loops with
             | [] ->
+               (* print_endline "printing_vals";
+                * svalue_to_string si |> print_endline;
+                * svalue_to_string sv |> print_endline; *)
+               
                (* Pc_type.print_pc pc |> print_endline; *)
                let mem = smemory frame.inst (0l @@ e.at) in
                let frame = {frame with
@@ -931,14 +968,19 @@ let rec step (c : config) : config list =
                  in
                  (* Path2: we store the value in non secret memory *)
                  let res = if Z3_solver.is_sat pc'' mems then
-                             (let c = {c with observations =
-                                                CT_V_UNSAT(pc'', sv, mems, c.observations)} in
+                             (let c =
+                                {c with observations =
+                                          CT_V_UNSAT(pc'', sv, mems, c.observations)} in
+                              print_endline "path2.";
+                              svalue_to_string sv |> print_endline;
+                              svalue_to_string si |> print_endline;
                               if Z3_solver.is_v_ct_unsat pc'' sv mems then
                                 {c with code = vs', es' @ List.tl es;
                                         frame = nframe;
                                         pc = pc''}:: res
                               else failwith "Trying to write high values in low memory")
-                           else res in
+                           else res
+                 in
                  res
                else failwith "The index does not satisfy CT."
            | loops ->
@@ -955,13 +997,22 @@ let rec step (c : config) : config list =
               let mems = (frame.inst.smemories, smemlen frame.inst) in
 
 
-              let c = {c with observations = CT_V_UNSAT(pc, si, mems, c.observations)} in
+              let c = {c with observations = CT_V_UNSAT(pc, sv, mems, c.observations)} in
                
 
               (* if (Z3_solver.is_v_ct_unsat pc si mems) then *)
               let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
-              let nv = Eval_symbolic.eval_store ty final_addr sv
-                         (smemlen frame.inst) 4 in
+              let nv =
+                (match sz with
+                 | None -> Eval_symbolic.eval_store ty final_addr sv
+                             (smemlen frame.inst) (Types.size ty)
+                 | Some (sz) ->
+                    assert (packed_size sz <= Types.size ty);
+                    let n = packed_size sz in
+                    Eval_symbolic.eval_store ty final_addr sv
+                      (smemlen frame.inst) n
+                )
+              in
 
               (* Update possible collecting variables for loops *)
               (* TODO(Romy): FIX need to add the actual condition - I need to move 
@@ -1006,7 +1057,7 @@ let rec step (c : config) : config list =
 
         (*TODO(Romy): Implement Const*)
         | Const v, vs ->
-           (* print_endline "const"; *)
+           print_endline "const";
            let va = 
              match v.it with
              | Values.I32 i ->
@@ -1074,60 +1125,63 @@ let rec step (c : config) : config list =
        Crash.error e.at "undefined label"
 
     | Label (n, es0, (vs', [])), vs ->
-       (* print_endline "lab"; *)
+       print_endline "lab";
        let vs', es' = vs' @ vs, [] in
        [{c with code = vs', es' @ List.tl es}]
+       
     | Label (n, es0, (vs', {it = Trapping msg; at} :: es')), vs ->
-       (* print_endline "lab2"; *)
+       print_endline "lab2";
        let vs', es' = vs, [Trapping msg @@ at] in
        [{c with code = vs', es' @ List.tl es}]
 
     | Label (n, es0, (vs', {it = Returning vs0; at} :: es')), vs ->
-       (* print_endline "lab3"; *)
+       print_endline "lab3";
        let vs', es' = vs, [Returning vs0 @@ at] in
        [{c with code = vs', es' @ List.tl es}]
 
     | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es')), vs ->
-       (* print_endline "lab4"; *)
+       print_endline "lab4";
        let vs', es' = take n vs0 e.at @ vs, List.map plain es0 in
        [{c with code = vs', es' @ List.tl es}]
 
     | Label (n, es0, (vs', {it = Breaking (k, vs0); at} :: es')), vs ->
-       (* print_endline "lab5"; *)
+       print_endline "lab5";
        let vs', es' = vs, [Breaking (Int32.sub k 1l, vs0) @@ at] in
        [{c with code = vs', es' @ List.tl es}]
 
     | Label (n, es0, code'), vs ->
-       (* print_endline "lab6"; *)
+       print_endline "lab6";
        let c' = step {c with code = code'} in
        List.map (fun ci -> {ci with code = vs, [Label (n, es0, ci.code) @@ e.at]
                                                @ List.tl es}) c'
 
     | Frame (n, frame', (vs', [])), vs ->
-       (* print_endline "frame1"; *)
+       print_endline "frame1";
        let vs', es' = vs' @ vs, [] in
        [{c with code = vs', es' @ List.tl es}]
 
     | Frame (n, frame', (vs', {it = Trapping msg; at} :: es')), vs ->
-       (* print_endline "frame2"; *)
+       print_endline "frame2";
        let vs', es' = vs, [Trapping msg @@ at] in
        [{c with code = vs', es' @ List.tl es}]
 
     | Frame (n, frame', (vs', {it = Returning vs0; at} :: es')), vs ->
-       (* print_endline "frame3"; *)
+       print_endline "frame3";
        let vs', es' = take n vs0 e.at @ vs, [] in
        [{c with code = vs', es' @ List.tl es}]
 
     | Frame (n, frame', code'), vs ->
-       (* print_endline "frame4"; *)
+       print_endline "frame4";
        let c' = step {c with frame = frame'; code = code'; budget = c.budget - 1} in
-       List.map (fun ci -> {ci with code = vs, [Frame (n, ci.frame, ci.code) @@ e.at] @ List.tl es}) c'
+       print_endline "frame4_end";
+       List.map (fun ci ->
+           {ci with code = vs, [Frame (n, ci.frame, ci.code) @@ e.at] @ List.tl es}) c'
 
     | Invoke func, vs when c.budget = 0 ->
        Exhaustion.error e.at "call stack exhausted"
 
     | Invoke func, vs ->
-       (* print_endline "inv2"; *)
+       print_endline "inv2";
        let FuncType (ins, out) = func_type_of func in
        let n1, n2 = Lib.List32.length ins, Lib.List32.length out in
        let args, vs' = take n1 vs e.at, drop n1 vs e.at in

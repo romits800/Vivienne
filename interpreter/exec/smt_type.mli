@@ -41,7 +41,7 @@ type term =
   | Load of  term * int * int * Types.extension option (* index, memory, size, ext *)
   | Store of  term * term * int * int (* index, value, memory, size *)
   | App of func * term list
-  | Let of string * term * term
+  | Let of term * term
 
 type mergetype = PLUS_INF | MINUS_INF | Integer of int | Term of term
 
@@ -128,3 +128,5 @@ val rotri : term -> int -> term
 val merge : solv_type -> term -> term -> (mergetype * mergetype) option
 val merge_to_string :  mergetype -> string
 val term_to_string : term -> string
+
+val count_depth : term -> int

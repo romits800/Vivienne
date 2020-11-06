@@ -43,6 +43,7 @@ let print_exp exp =
       | H (e1, e2) ->
          print_endline "print_exp: H (e1,e2)";
          print_endline (Expr.to_string e1);
+         print_endline "e1";
          print_endline (Expr.to_string e2);
   )
 
@@ -114,8 +115,9 @@ let merge_bytes ctx a ind sz =
         let value' = propagate_policy (BitVector.mk_concat ctx) lv value in
         merge_bytes_i ctx a ind' (sz - 1) value'
       )
-  in
+  in  
   let lv = propagate_policy (Z3Array.mk_select ctx) a ind in
+  (* print_endline "after_select"; *)
   let ind' = propagate_policy_one (increase_one ctx) ind in
   merge_bytes_i ctx a ind' (sz - 1) lv
 
@@ -140,17 +142,42 @@ let extend ctx size v' = function
      propagate_policy_one (BitVector.mk_sign_ext ctx  size') v'
 
 
-let rec update_mem size ctx mem a s =
-  (match s with
-   | SI32 Store (ad, v, i, sz) ->
-      let index = si_to_expr true size ctx mem ad in
-      let value = si_to_expr true size ctx mem v in
-      split_to_bytes ctx a index value sz 0 7
-   | _ -> failwith "Unexpected store - not implemented f64/32 i64"
-  )
+module ExprMem = Map.Make(struct
+                  type t = int
+                  let compare = compare
+                end)
+let memmap = ref ExprMem.empty
 
+(* let rec test_si count si =
+ *   (\* print_endline (string_of_int count); *\)
+ *   match si with
+ *   | BitVec (i,n) -> count + 1
+ *   | Const (_) -> count + 1
+ *   | App (f, ts) ->
+ *      List.fold_left (fun x y -> test_si (x+1) y) (count + 1) ts
+ *   | Load (i, memi, sz, ext) ->
+ *      test_si (count+1) i
+ *   | _ -> failwith "Not supported." *)
+
+let rec update_mem ctx mem a s =
+  (* print_endline "update_mem"; *)
+  match s with
+  | SI32 Store (ad, v, i, sz) ->
+     let size = 32 in
+     let index = si_to_expr true size ctx mem ad in
+     let value = si_to_expr true size ctx mem v in
+     split_to_bytes ctx a index value sz 0 7
+  | SI64 Store (ad, v, i, sz) ->
+     let size = 64 in
+     let index = si_to_expr true size ctx mem ad in
+     let value = si_to_expr true size ctx mem v in
+     split_to_bytes ctx a index value sz 0 7
+   | _ -> failwith "Unexpected store - not implemented f64/32"
 
 and si_to_expr is_value size ctx mem si: rel_type  = 
+  (* print_endline "si_to_expr"; *)
+  (* let _ = test_si 0 si in *)
+  (* Smt_type.term_to_string si |> print_endline; *)
   match si with
   | BitVec (i,n) ->
      let bv = BitVector.mk_sort ctx n  in
@@ -162,18 +189,35 @@ and si_to_expr is_value size ctx mem si: rel_type  =
      L (BitVector.mk_const_s ctx ("l_" ^ string_of_int i) size )
   | App (f, ts) ->
      app_to_expr is_value ts size ctx mem f
-  | Load (i, memi, sz, ext) -> 
-     let bva = BitVector.mk_sort ctx 32 in
-     let bvd = BitVector.mk_sort ctx 8 in
-     let arr1 = Z3Array.mk_const_s ctx  "mem1" bva bvd in
-     let arr2 = Z3Array.mk_const_s ctx  "mem2" bva bvd in     
+  | Load (i, memi, sz, ext) ->
      let smem, memlen = mem in
-     let tmem = Lib.List32.nth smem (Int32.of_int (memlen - memi)) in
-     let stores = Smemory.get_stores tmem in
-     let fmem = List.fold_left (update_mem size ctx mem)
-                  (H (arr1,arr2)) (List.rev stores) in
+     let arr =
+       (try
+          (* print_endline "found"; *)
+          ExprMem.find (memlen - memi) !memmap
+        with Not_found -> 
+          (* print_endline "Not_found"; *)
+          (* string_of_int (memlen-memi) |> print_endline; *)
+          let bva = BitVector.mk_sort ctx 32 in
+          let bvd = BitVector.mk_sort ctx 8 in
+          let arr1 = Z3Array.mk_const_s ctx  "mem1" bva bvd in
+          let arr2 = Z3Array.mk_const_s ctx  "mem2" bva bvd in
+          let newmem = H (arr1, arr2) in
+          let tmem = Lib.List32.nth smem (Int32.of_int (memlen - memi)) in
+          let stores = Smemory.get_stores tmem in
+          (* print_endline "STores"; *)
+          (* string_of_int (List.length stores) |> print_endline; *)
+        
+          let fmem = List.fold_left (update_mem ctx mem)
+                       newmem (List.rev stores) in
+          memmap := ExprMem.add (memlen - memi) fmem !memmap;
+          fmem
+       )
+     in
+     (* print_endline "beforeindex"; (\*  *\) *)
      let index = si_to_expr is_value size ctx mem i in
-     let v' = merge_bytes ctx fmem index sz in
+     (* print_exp index; *)
+     let v' = merge_bytes ctx arr index sz in
      extend ctx size v' ext
   (* propagate_policy (Z3Array.mk_select ctx) fmem index *)
      (* index *)
@@ -295,7 +339,7 @@ and app_to_expr is_value ts size ctx mem f =
      let e2 = si_to_expr is_value size ctx mem t2 in
      propagate_policy (BitVector.mk_add ctx) e1 e2
   | BvAdd, ts ->
-     List.iter (fun t -> print_endline (Smt_type.term_to_string t)) ts; 
+     (* List.iter (fun t -> print_endline (Smt_type.term_to_string t)) ts; *) 
      failwith "Not valid bitwise addition." 
 
   | BvSub, t1::t2::[] ->
@@ -419,13 +463,13 @@ let create_mem ctx size =
 
 
 let is_unsat (pc : pc) (sv : svalue) (mem: Smemory.t list * int) =
-  (* print_endline "is_unsat";
-   * Pc_type.print_pc pc |> print_endline;
+  (* print_endline "is_unsat"; *)
+  (* Pc_type.print_pc pc |> print_endline;
    * svalue_to_string sv |> print_endline; *)
 
   let cfg = [("model", "true"); ("proof", "false")] in
   let ctx = mk_context cfg in
-
+  memmap := ExprMem.empty;
   let v = sv_to_expr false sv ctx mem in
   let pc = pc_to_expr pc ctx mem in
 
@@ -459,13 +503,13 @@ let is_unsat (pc : pc) (sv : svalue) (mem: Smemory.t list * int) =
 
   
 let is_ct_unsat (pc : pc) (sv : svalue) (mem: Smemory.t list * int) =
-  (* print_endline "is_ct_unsat";
-   * Pc_type.print_pc pc |> print_endline;
+  (* print_endline "is_ct_unsat"; *)
+  (* Pc_type.print_pc pc |> print_endline;
    * svalue_to_string sv |> print_endline; *)
 
   let cfg = [("model", "true"); ("proof", "false")] in
   let ctx = mk_context cfg in
-
+  memmap := ExprMem.empty;
   let v = sv_to_expr false sv ctx mem in
   let pc = pc_to_expr pc ctx mem in
   let g = Goal.mk_goal ctx true false false in
@@ -498,15 +542,17 @@ let is_ct_unsat (pc : pc) (sv : svalue) (mem: Smemory.t list * int) =
 
   
 let is_v_ct_unsat (pc : pc) (sv : svalue) (mem: Smemory.t list * int) : bool =
-  (* print_endline "is_v_ct_unsat";
-   * Pc_type.print_pc pc |> print_endline; *)
-  (* svalue_to_string sv |> print_endline; *)
+  print_endline "is_v_ct_unsat"; 
+  Pc_type.print_pc pc |> print_endline;
+  svalue_to_string sv |> print_endline;
   let cfg = [("model", "true"); ("proof", "false")] in
   let ctx = mk_context cfg in
+  memmap := ExprMem.empty;
   
   let g = Goal.mk_goal ctx true false false in
-
+  print_endline "is_v_ct_unsat3";
   let v = sv_to_expr false sv ctx mem in
+  print_endline "is_v_ct_unsat2";
   match v with
    | L v -> true 
    | H (v1,v2) ->
@@ -520,13 +566,24 @@ let is_v_ct_unsat (pc : pc) (sv : svalue) (mem: Smemory.t list * int) : bool =
       in
       Goal.add g [v'];
       Goal.add g [pcexp'];
-      (* Printf.printf "Goal: %s\n" (Goal.to_string g); *)
+      Printf.printf "Goal v_ct: %s\n" (Goal.to_string g);
       let solver = Solver.mk_solver ctx None in
+      
       List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
+      print_endline "is_v_ct_unsat2-bef solv";
       match (Solver.check solver []) with
-      | Solver.UNSATISFIABLE -> true
+      | Solver.UNSATISFIABLE -> print_endline "is_v_ct_unsat2-aft solv";
+                                true
       (* | Solver.UNKNOWN  -> false *)    
-      | _ -> false
+      | _ ->
+         let model = Solver.get_model solver in
+         (match model with
+          | None -> print_endline "None"
+          | Some m -> print_endline "Model"; print_endline (Model.to_string m)
+         );
+
+         print_endline "is_v_ct_unsat2-aft solv";
+         false
 
 
 
@@ -536,6 +593,8 @@ let is_sat (pc : pc) (mem: Smemory.t list * int) : bool =
   (* print_endline "is_sat"; *)
   let cfg = [("model", "true"); ("proof", "false")] in
   let ctx = mk_context cfg in
+  memmap := ExprMem.empty;
+  
   (* print_endline (print_pc pc); *)
   let v = pc_to_expr pc ctx mem in
   let g = Goal.mk_goal ctx true false false in
