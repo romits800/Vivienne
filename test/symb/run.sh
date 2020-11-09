@@ -25,5 +25,7 @@ check 9 "$WASM -i script_mem_stores.wast"
 check 10 "$WASM -i script_call.wast"
 check 11 "$WASM -i script_mem_operations_char_nonfailure.wast"
 check 12 "$WASM -i script_mem_operations_char_failure.wast"
+check 13 "$WASM -i script_salsa20_pass.wast"
+check 14 "$WASM -i script_salsa20_fail.wast"
 
 popd

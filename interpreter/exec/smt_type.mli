@@ -37,12 +37,13 @@ type term =
   | Float of float
   | BitVec of int * int (* bool + number of bits *)
   | Const of identifier
-  | Multi of term list * identifier * int (* term list, high/low, number_of_elements *)
+  (* | Multi of term list * identifier * int (\* term list, high/low, number_of_elements *\) *)
   | Load of  term * int * int * Types.extension option (* index, memory, size, ext *)
   | Store of  term * term * int * int (* index, value, memory, size *)
   | App of func * term list
-  | Let of term * term
-
+  (* | Let of term * term *)
+  | Let of int
+         
 type mergetype = PLUS_INF | MINUS_INF | Integer of int | Term of term
 
 type solv_type = TGT | TGE | TLT | TLE | TNONE
@@ -70,7 +71,7 @@ val low_to_term : unit -> term
 val term_to_int : term -> int
 val bool_to_term : bool -> term
 
-val list_to_term : term list -> term
+(* val list_to_term : term list -> term *)
 (* val const : identifier -> term *)
 val equals : term -> term -> term
 val load : term -> int -> int -> Types.extension option -> term
@@ -130,3 +131,5 @@ val merge_to_string :  mergetype -> string
 val term_to_string : term -> string
 
 val count_depth : term -> int
+
+val let_ : int -> term

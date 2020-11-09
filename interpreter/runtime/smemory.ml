@@ -30,7 +30,10 @@ type t = memory
 
 let get_secrets mem =
   mem.secrets
-  
+
+let get_public mem =
+  mem.nonsecrets
+
 let get_stores mem =
   (* let create_hstores (lo,hi) =
    *   let lo,hi = Int32.to_int lo, Int32.to_int hi in
@@ -118,25 +121,25 @@ let grow mem delta =
 
 (* fix to create high values *)
 
-let rec is_high a = function
-  | [] -> false
-  | (lo, hi)::_ when a >= lo && a <= hi -> true
-  | h::tl -> is_high a tl 
+(* let rec is_high a = function
+ *   | [] -> false
+ *   | (lo, hi)::_ when a >= lo && a <= hi -> true
+ *   | h::tl -> is_high a tl *) 
 
          
-let load_byte (mem: memory) (a:int) =
-  try
-    (mem, Smem.find a mem.content)
-  with Not_found ->
-    let nval =
-      if (is_high a mem.secrets) then
-        Si8.of_high()
-      else
-        Si8.of_low()
-    in
-    let mem = {mem with content = Smem.add a nval mem.content} in
-    (mem, nval)
-  (* try Array1_64.get mem.content a with Invalid_argument _ -> raise Bounds *)
+(* let load_byte (mem: memory) (a:int) =
+ *   try
+ *     (mem, Smem.find a mem.content)
+ *   with Not_found ->
+ *     let nval =
+ *       if (is_high a mem.secrets) then
+ *         Si8.of_high()
+ *       else
+ *         Si8.of_low()
+ *     in
+ *     let mem = {mem with content = Smem.add a nval mem.content} in
+ *     (mem, nval)
+ *   (\* try Array1_64.get mem.content a with Invalid_argument _ -> raise Bounds *\) *)
 
 let store_byte (mem: memory) a b =
   {mem with content = Smem.add a b mem.content }
@@ -160,24 +163,24 @@ let store_byte (mem: memory) a b =
  *   apply_policy_i buf [] [] a *)
 
           
-let load_bytes mem a n =
-  let ind = List.init n (fun i -> i) in
-  (* let buf = List.map (fun i -> load_byte mem (a+ i)) ind in *)
-  let (mem,buf) = List.fold_left
-              (fun (memi,lst) i ->
-                let memn, v = load_byte memi (a + i) in
-                (memn,v::lst)
-              ) (mem,[]) ind in
-  (mem,buf)
-  (* let buf = Buffer.create n in *)
+(* let load_bytes mem a n =
+ *   let ind = List.init n (fun i -> i) in
+ *   (\* let buf = List.map (fun i -> load_byte mem (a+ i)) ind in *\)
+ *   let (mem,buf) = List.fold_left
+ *               (fun (memi,lst) i ->
+ *                 let memn, v = load_byte memi (a + i) in
+ *                 (memn,v::lst)
+ *               ) (mem,[]) ind in
+ *   (mem,buf)
+ *   (\* let buf = Buffer.create n in *\) *)
 
-let store_bytes mem a bs =
-  let mem,_ = List.fold_left
-              (fun (memi,i) bi ->
-                let memn = store_byte memi (a + i) bi in
-                (memn, i+1)
-              ) (mem,0) bs
-  in mem
+(* let store_bytes mem a bs =
+ *   let mem,_ = List.fold_left
+ *               (fun (memi,i) bi ->
+ *                 let memn = store_byte memi (a + i) bi in
+ *                 (memn, i+1)
+ *               ) (mem,0) bs
+ *   in mem *)
   
 
 let effective_address a o =
@@ -185,9 +188,9 @@ let effective_address a o =
   if ea < a then raise Bounds;
   ea
 
-let loadn mem a o n =
-  assert (n > 0 && n <= 8);
-  load_bytes mem (effective_address a o) n
+(* let loadn mem a o n =
+ *   assert (n > 0 && n <= 8);
+ *   load_bytes mem (effective_address a o) n *)
   
 
   (* let rec loop a n =
@@ -200,8 +203,8 @@ let loadn mem a o n =
 let storen mem a o n x =
   assert (n > 0 && n <= 8);
   match x with
-  | Smt_type.Multi (ts, id, n) ->
-     store_bytes mem (effective_address a o) ts
+  (* | Smt_type.Multi (ts, id, n) ->
+   *    store_bytes mem (effective_address a o) ts *)
   | Smt_type.BitVec (i, bn) ->
      assert (n == bn);
      let sz = n/8 in
@@ -214,22 +217,22 @@ let storen mem a o n x =
            store_i (a+1) (sz-1) (Int64.shift_right i 8) mem'
        ) in
      store_i (effective_address a o) sz (Int64.of_int i) mem
-  | Smt_type.Const (Smt_type.High i ) as v ->
-     let rec store_i a n mem res =
-       (match n with
-        | 0 -> res,mem
-        | _ ->
-           let v8 =  Smt_type.high_to_term() in
-           let mem' = store_byte mem a v8  in
-           let res = v8::res in
-           store_i (a+1) (n-1) mem' res
-       ) in
-     let res, mem = 
-       store_i (effective_address a o) n mem [] in
-     let id = Smt_type.get_high() in
-     (* TODO(Romy) : return this + some relation to the old one, v *)
-     let _ = Smt_type.App(Smt_type.Eq, [Smt_type.Multi (res, id, List.length res); v]) in
-     mem
+  (* | Smt_type.Const (Smt_type.High i ) as v ->
+   *    let rec store_i a n mem res =
+   *      (match n with
+   *       | 0 -> res,mem
+   *       | _ ->
+   *          let v8 =  Smt_type.high_to_term() in
+   *          let mem' = store_byte mem a v8  in
+   *          let res = v8::res in
+   *          store_i (a+1) (n-1) mem' res
+   *      ) in
+   *    let res, mem = 
+   *      store_i (effective_address a o) n mem [] in
+   *    let id = Smt_type.get_high() in
+   *    (\* TODO(Romy) : return this + some relation to the old one, v *\)
+   *    let _ = Smt_type.App(Smt_type.Eq, [Smt_type.Multi (res, id, List.length res); v]) in
+   *    mem *)
   | _ -> mem
 
 (*TODO(Romy): add other types *)
@@ -242,18 +245,20 @@ let storen mem a o n x =
    * in loop (effective_address a o) n x *)
 
 let load_value mem a o t =
-  let mem,buf = loadn mem a o (Types.ssize t) in
-  (* let id = if is_high buf then Smt_type.get_high () else Smt_type.get_low() in
-   * (\* update for parts *\)
-   * let buf = Smt_type.Multi(buf, id, List.length buf) in *)
-  let res = 
-    match t with
-    | SI32Type -> SI32 (Si32.of_list buf)
-    | SI64Type -> SI64 (Si64.of_list buf)
-    | SF32Type 
-      | SF64Type -> failwith "Float: Not implemented."
-  in (mem, res)
-   
+  failwith "not implemented"
+  (* let mem,buf = loadn mem a o (Types.ssize t) in
+   * (\* let id = if is_high buf then Smt_type.get_high () else Smt_type.get_low() in
+   *  * (\\* update for parts *\\)
+   *  * let buf = Smt_type.Multi(buf, id, List.length buf) in *\)
+   * (\* let res = 
+   *  *   match t with
+   *  *   | SI32Type -> SI32 (Si32.of_list buf)
+   *  *   | SI64Type -> SI64 (Si64.of_list buf)
+   *  *   | SF32Type 
+   *  *     | SF64Type -> failwith "Float: Not implemented."
+   *  * in (mem, res) *\)
+   * mem,buf *)
+  
 let store_value mem a o v =
     match v with
     | SI32 x ->

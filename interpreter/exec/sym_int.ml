@@ -40,7 +40,7 @@ sig
   val term_to_int : term -> int
   val bool_to_term : bool -> term
 
-  val list_to_term : term list  -> term
+  (* val list_to_term : term list  -> term *)
   (* val const : string -> term *)
   val equals : term -> term -> term
 
@@ -102,6 +102,7 @@ sig
   val merge : solv_type -> term -> term -> (mergetype * mergetype) option
   val merge_to_string : mergetype -> string
   val count_depth : term -> int
+  val let_ : int -> term
 end
 
 module type S =
@@ -169,7 +170,7 @@ sig
   val of_string_s : string -> t
   val of_string_u : string -> t
   val of_string : string -> t
-  val of_list : t list -> t
+  (* val of_list : t list -> t *)
   val to_int_s : t -> int
   val to_int_u : t -> int
   val to_string_s : t -> string
@@ -179,6 +180,7 @@ sig
   val merge : stype -> t -> t-> (mtype * mtype) option
   val merge_to_string : mtype -> string
   val count_depth : t -> int
+  val let_ : int -> t
 end
 
 module Make (Rep : SmtType) : S with type bits = Rep.term and type stype = Rep.solv_type and
@@ -369,7 +371,7 @@ struct
   let of_string_s str = Rep.zero
   let of_string_u str = Rep.zero
   let of_string  str = Rep.zero
-  let of_list = Rep.list_to_term
+  (* let of_list = Rep.list_to_term *)
   let to_int_s  t  = Rep.term_to_int t
   let to_int_u  t  = Rep.term_to_int t
   let to_string_s  t = Rep.term_to_string t
@@ -380,6 +382,7 @@ struct
   let merge = Rep.merge
   let merge_to_string = Rep.merge_to_string
   let count_depth = Rep.count_depth
+  let let_ = Rep.let_
 (* let to_int_s = Rep.to_int
    * let to_int_u i = Rep.to_int i land (Rep.to_int Rep.max_int lsl 1) lor 1
    * 

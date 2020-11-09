@@ -17,6 +17,7 @@ exception OutOfMemory
 val page_size : int64
 
 val get_secrets : memory -> (int * int) list
+val get_public : memory -> (int * int) list
 val get_stores : memory -> svalue list
 
 val alloc : smemory_type -> memory 

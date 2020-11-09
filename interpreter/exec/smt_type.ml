@@ -38,14 +38,14 @@ type term =
   | Float of float
   | BitVec of int * int (* bool + number of bits *)
   | Const of identifier
-  | Multi of term list * identifier * int (* term list, high/low, number_of_elements *)
+  (* | Multi of term list * identifier * int (\* term list, high/low, number_of_elements *\) *)
   (* index in memory and index of memory - because we cannot have the memory here*)
   | Load of term * int * int * Types.extension option
   | Store of term * term * int * int (* address, value, memory, size *) 
   (* | Load of Smemory.t * term (\* memory, index *\) *)
   | App of func * term list
-  | Let of term * term
-
+  (* | Let of term * term *)
+  | Let of int
 
 type mergetype = PLUS_INF | MINUS_INF | Integer of int | Term of term
 
@@ -73,10 +73,9 @@ let float_to_term f = Float f
   
 let rec is_high =
   function
-  | Const (High _)
-    | Multi(_, High _, _) -> true
+  | Const (High _) -> true
   | App (f, t::ts) -> is_high_all ts
-  | Let (t1, t2) -> is_high t1 || is_high t2
+  (* | Let (t1, t2) -> is_high t1 || is_high t2 *)
   | _ -> false
 
 and is_high_all = function
@@ -107,9 +106,9 @@ let high_to_term () =
 let low_to_term () =
   Const (get_low())
                    
-let list_to_term ts =
-  let id = if is_high_all ts then get_high () else get_low () in
-  Multi(ts, id, List.length ts)
+(* let list_to_term ts =
+ *   let id = if is_high_all ts then get_high () else get_low () in
+ *   Multi(ts, id, List.length ts) *)
   
 let term_to_int i =
   match i with
@@ -149,7 +148,6 @@ let not_ t1 =
   match t1 with
   | App (Not, [ts]) -> ts
   | _ -> App(Not, [t1])
-
 (* val not_ : term -> term *)
 
 
@@ -328,11 +326,9 @@ let rec term_to_string (t : term) : string =
   | Const id ->  identifier_to_string id
   | App (f, ts) -> func_to_string f ^ " (" ^
                      List.fold_left (fun acc -> fun t -> acc ^ term_to_string t ^ ",") "" ts ^ ")" 
-  | Let (t1, t2) -> "let " ^ term_to_string t1 ^ "=" ^ term_to_string t2
-  | Multi (ts, id, n) ->
-     let terms = List.fold_left (fun acc -> fun t -> acc ^ term_to_string t ^ ",") "" ts in
-     "Multi( " ^ terms ^ "," ^ identifier_to_string id ^ "," ^ string_of_int n ^ ")"
-
+  (* | Let (t1, t2) -> "let " ^ term_to_string t1 ^ "=" ^ term_to_string t2 *)
+  | Let (i) -> "Let(" ^ string_of_int i ^ ")"
+             
      (* type mergetype = PLUS_INF | MINUS_INF | ZERO | Term of term *)
 let merge_to_string (m : mergetype) : string =
   match m with
@@ -351,6 +347,9 @@ let count_depth si =
        List.fold_left (fun x y -> count_depth_i (x+1) y) (count + 1) ts
     | Load (i, memi, sz, ext) ->
        count_depth_i (count+1) i
+    | Let i -> count + 1
     | _ -> failwith "Not supported."
   in
   count_depth_i 0 si
+
+let let_ (i : int) = Let i
