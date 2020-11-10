@@ -532,8 +532,8 @@ let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) =
   
 let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool =
   (* print_endline "is_v_ct_unsat"; *) 
-  (* Pc_type.print_pc pc |> print_endline;
-   * svalue_to_string sv |> print_endline; *)
+  (* Pc_type.print_pc pc |> print_endline; *)
+  (* svalue_to_string sv |> print_endline; *)
   let cfg = [("model", "true"); ("proof", "false")] in
   let ctx = mk_context cfg in
   Params.set_print_mode ctx Z3enums.PRINT_SMTLIB2_COMPLIANT;
@@ -560,9 +560,9 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
        * let sv' = Expr.simplify v' (Some par) in
        * let spcexp' = Expr.simplify pcexp' (Some par) in *)
       (* print_endline "sv";
-       * Expr.to_string v' |> print_endline;
+       * Expr.to_string sv' |> print_endline;
        * print_endline "pc";
-       * Expr.to_string pcexp' |> print_endline; *)
+       * Expr.to_string spcexp' |> print_endline; *)
       Goal.add g [v'];
       Goal.add g [pcexp'];
       (* Printf.printf "Goal v_ct: %s\n" (Goal.to_string g); *)

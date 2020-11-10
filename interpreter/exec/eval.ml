@@ -233,7 +233,7 @@ let split_msec (sv : svalue)
   match sv with
   | SI32 vi32 ->
      let hrange = within_hrange vi32 msec in
-     let lrange = within_hrange vi32 mpub in (* Si32.not_ hrange in *)
+     let lrange = Si32.not_ hrange in (* within_hrange vi32 mpub in *) (* Si32.not_ hrange in *)
      (PCAnd (SI32 hrange, pc), PCAnd (SI32 lrange, pc))
   | _ -> failwith "Address should be 32bit integer"
 
@@ -980,9 +980,9 @@ let rec step (c : config) : config list =
                                 {c with observations =
                                           CT_V_UNSAT((pclet,pc''), sv, mems, c.observations)} in
                               (* print_endline "path2."; *)
-                              (* svalue_to_string sv |> print_endline;
-                               * svalue_to_string si |> print_endline;
-                               * print_pc pc'' |> print_endline; *)
+                              (* svalue_to_string sv |> print_endline; *)
+                              (* svalue_to_string si |> print_endline; *)
+                              (* print_pc pc'' |> print_endline; *)
                               if Z3_solver.is_v_ct_unsat (pclet, pc'') sv mems then
                                 {c with code = vs', es' @ List.tl es;
                                         frame = nframe;
