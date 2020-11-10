@@ -1,6 +1,8 @@
 (module $js 
    (memory $memory (export "memory") 1)
-   (secret (i32.const 0) (i32.const 707)) ;; 640+bytes
+   (secret (i32.const 0) (i32.const 351)) ;; state + m (w) + data
+   (public (i32.const 352) (i32.const 607)) ;; k
+   (secret (i32.const 608) (i32.const 703)) ;; hash + input
    )
 (register "js" $js)
 
