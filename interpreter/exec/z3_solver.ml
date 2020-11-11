@@ -447,16 +447,20 @@ let create_mem ctx size =
   let bv = BitVector.mk_sort ctx size in
   Z3Array.mk_const_s ctx  "mem" bv bv
 
-
+let init_solver () = 
+  let cfg = [("model", "true"); ("proof", "false")] in
+  let ctx = mk_context cfg in
+  Params.set_print_mode ctx Z3enums.PRINT_SMTLIB2_COMPLIANT;
+  memmap := ExprMem.empty;
+  letmap := LetMap.empty;
+  ctx
+  
 let is_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) =
   (* print_endline "is_unsat"; *)
   (* Pc_type.print_pc pc |> print_endline;
    * svalue_to_string sv |> print_endline; *)
+  let ctx = init_solver() in
 
-  let cfg = [("model", "true"); ("proof", "false")] in
-  let ctx = mk_context cfg in
-  memmap := ExprMem.empty;
-  letmap := LetMap.empty;
   let v = sv_to_expr pc sv ctx mem in
   let pc = pc_to_expr pc ctx mem in
 
@@ -493,11 +497,8 @@ let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) =
   (* print_endline "is_ct_unsat"; *)
   (* Pc_type.print_pc pc |> print_endline;
    * svalue_to_string sv |> print_endline; *)
+  let ctx = init_solver() in
 
-  let cfg = [("model", "true"); ("proof", "false")] in
-  let ctx = mk_context cfg in
-  memmap := ExprMem.empty;
-  letmap := LetMap.empty;
   let v = sv_to_expr pc sv ctx mem in
   let pc = pc_to_expr pc ctx mem in
   let g = Goal.mk_goal ctx true false false in
@@ -534,11 +535,7 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
   (* print_endline "is_v_ct_unsat"; *) 
   (* Pc_type.print_pc pc |> print_endline; *)
   (* svalue_to_string sv |> print_endline; *)
-  let cfg = [("model", "true"); ("proof", "false")] in
-  let ctx = mk_context cfg in
-  Params.set_print_mode ctx Z3enums.PRINT_SMTLIB2_COMPLIANT;
-  memmap := ExprMem.empty;
-  letmap := LetMap.empty;
+  let ctx = init_solver() in
   
   let g = Goal.mk_goal ctx true false false in
   (* print_endline "is_v_ct_unsat3"; *)
@@ -560,20 +557,24 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
        * let sv' = Expr.simplify v' (Some par) in
        * let spcexp' = Expr.simplify pcexp' (Some par) in *)
       (* print_endline "sv";
-       * Expr.to_string sv' |> print_endline;
+       * Expr.to_string v' |> print_endline;
        * print_endline "pc";
-       * Expr.to_string spcexp' |> print_endline; *)
+       * Expr.to_string pcexp' |> print_endline; *)
+
       Goal.add g [v'];
       Goal.add g [pcexp'];
-      (* Printf.printf "Goal v_ct: %s\n" (Goal.to_string g); *)
+
+      (* let gasex = Goal.as_expr g in
+       * let ast = Expr.ast_of_expr gasex in
+       * Printf.printf "Ast v_ct: %s\n" (AST.to_string ast); *)
+      (* Printf.printf "Goal v_ct: %s\n" (Goal.to_string g); (\*  *\) *)
       let solver = Solver.mk_solver ctx None in
       
       List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
       (* print_endline "is_v_ct_unsat2-bef solv"; *)
+      Printf.printf "Solver v_ct: %s\n" (Solver.to_string solver);
       match (Solver.check solver []) with
       | Solver.UNSATISFIABLE ->
-         (* print_endline "is_v_ct_unsat2-aft solv"; *)
-         (* Printf.printf "Goal v_ct: %s\n" (Goal.to_string g); *)
          true
       (* | Solver.UNKNOWN  -> false *)    
       | _ ->
@@ -582,7 +583,6 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
           *  | None -> print_endline "None"
           *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
           * ); *)
-         (* print_endline "is_v_ct_unsat2-aft solv"; *)
          false
 
 
@@ -591,10 +591,7 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
 let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
   (* check only satisfiability *)
   (* print_endline "is_sat"; *)
-  let cfg = [("model", "true"); ("proof", "false")] in
-  let ctx = mk_context cfg in
-  memmap := ExprMem.empty;
-  letmap := LetMap.empty;
+  let ctx = init_solver() in
   
   (* print_endline (print_pc pc); *)
   let v = pc_to_expr pc ctx mem in
