@@ -26,6 +26,8 @@ type func =
   | Rotli of int | Rotri of int
   | Rotl | Rotr
 
+  | ExtendS of int
+  | ExtendU of int
           
 type sort = 
   | Sort of identifier
@@ -246,6 +248,9 @@ let rotr t1 t2 = App (Rotr, [t1;t2])
 let rotli t i = App (Rotli(i), [t])
 let rotri t i = App (Rotri(i), [t])
 
+let extsi t i = App (ExtendS(i), [t])
+let extui t i = App (ExtendU(i), [t])
+
 
 
 (* Not accounting for overflows *)
@@ -311,6 +316,8 @@ let func_to_string func =
   | Rotr -> "Rotr"
   | Rotli i -> "Rotl" ^ string_of_int i
   | Rotri i -> "Rotr" ^ string_of_int i
+  | ExtendS i -> "ExtendS" ^ string_of_int i
+  | ExtendU i -> "ExtendU" ^ string_of_int i
            
 let rec term_to_string (t : term) : string =
   match t with

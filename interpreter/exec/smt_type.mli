@@ -26,6 +26,9 @@ type func =
   | Rotli of int | Rotri of int
   | Rotl | Rotr
 
+  | ExtendS of int
+  | ExtendU of int
+
 type sort = 
   | Sort of identifier
   | SortApp of identifier * sort list
@@ -125,6 +128,9 @@ val rotr : term -> term -> term
 
 val rotli : term -> int -> term
 val rotri : term -> int -> term
+
+val extsi : term -> int -> term
+val extui : term -> int -> term
 
 val merge : solv_type -> term -> term -> (mergetype * mergetype) option
 val merge_to_string :  mergetype -> string

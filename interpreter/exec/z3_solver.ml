@@ -398,6 +398,16 @@ and app_to_expr pc ts size ctx mem f =
      propagate_policy_one (BitVector.mk_rotate_right ctx i) e
   | Rotri _, _ -> failwith "Not valid bitwise rotl."
 
+  | ExtendS(i), t::[] ->
+     let e = si_to_expr pc size ctx mem t in
+     propagate_policy_one (BitVector.mk_sign_ext ctx i) e
+  | ExtendS _, _ -> failwith "Not valid bitwise rotl."
+
+  | ExtendU(i), t::[] ->
+     let e = si_to_expr pc size ctx mem t in
+     propagate_policy_one (BitVector.mk_zero_ext ctx i) e
+  | ExtendU _, _ -> failwith "Not valid bitwise rotl."
+
   (* | BvDiv, t1::t2::[] ->
    *    let e1 = si_to_expr pc size ctx mem t1 in
    *    let e2 = si_to_expr pc size ctx mem t2 in

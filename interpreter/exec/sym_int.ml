@@ -97,6 +97,9 @@ sig
   val bvslt : term -> term -> term
   val bvsge : term -> term -> term
   val bvsgt : term -> term -> term
+    
+  val extsi : term -> int -> term
+  val extui : term -> int -> term
 
   val term_to_string : term -> string
   val merge : solv_type -> term -> term -> (mergetype * mergetype) option
@@ -141,6 +144,7 @@ sig
   val ctz : t -> t
   val popcnt : t -> t
   val extend_s : int -> t -> t
+  val extend_u : int -> t -> t
   val eqz : t -> t
   val eq : t -> t -> t
   val ne : t -> t -> t
@@ -269,41 +273,27 @@ struct
     (* shift Rep.shift_left x y  *)
 
   let shr_s = Rep.bvashr
-    (* shift Rep.shift_right x y *)
+ 
 
   let shr_u = Rep.bvlshr
-    (* shift Rep.shift_right_logical x y *)
+ 
 
-  (* We must mask the count to implement rotates via shifts. *)
-  (* let clamp_rotate_count n =
-   *   Rep.to_int (Rep.logand n (Rep.of_int (Rep.bitwidth - 1))) *)
-
-  let rotl x y =
+   let rotl x y =
     if Rep.is_int y then
       Rep.rotli x (Rep.term_to_int y)
     else
       Rep.rotl x y
  
-    (* let s = (Rep.bvsub (Rep.int_to_intterm Rep.size) y) in 
-     * Rep.bvor (Rep.bvshl x y) (Rep.bvlshr x s) *)
-
-    (* let n = clamp_rotate_count y in
-     * or_ (Rep.shift_left x n) (Rep.shift_right_logical x (Rep.bitwidth - n)) *)
-
   let rotr x y = (* Rep.rotr x y *)
     if Rep.is_int y then
       Rep.rotri x (Rep.term_to_int y)
     else
       Rep.rotr x y
-
-  (* let s = (Rep.bvsub (Rep.int_to_intterm Rep.size) y) in 
-     * Rep.bvor (Rep.bvlshr x y) (Rep.bvshl x s) *)
-    (* let n = clamp_rotate_count y in
-     * or_ (Rep.shift_right_logical x n) (Rep.shift_left x (Rep.bitwidth - n)) *)
-
-  (* clz is defined for all values, including all-zeros. *)
+    
+  (* clz: count leading zeros 
+     is defined for all values, including all-zeros. *)
   (* TODO(Romy) *)
-  let clz x = x
+  let clz x = failwith "not implemented clz"
     (* let rec loop acc n =
      *   if n = Rep.zero then
      *     Rep.bitwidth
@@ -313,9 +303,10 @@ struct
      *     acc
      * in Rep.of_int (loop 0 x) *)
 
-  (* ctz is defined for all values, including all-zeros. *)
+  (* ctz: count trailing zeros
+     is defined for all values, including all-zeros. *)
   (* TODO(Romy) *)
-  let ctz x = x
+  let ctz x = failwith "not implemented ctz"
     (* let rec loop acc n =
      *   if n = Rep.zero then
      *     Rep.bitwidth
@@ -325,7 +316,7 @@ struct
      *     loop (1 + acc) (Rep.shift_right_logical n 1)
      * in Rep.of_int (loop 0 x) *)
   (* TODO(Romy) *)
-  let popcnt x = x
+  let popcnt x = failwith "not implemented popcnt"
     (* let rec loop acc i n =
      *   if n = Rep.zero then
      *     acc
@@ -334,8 +325,9 @@ struct
      *     loop acc' (i - 1) (Rep.shift_right_logical n 1)
      * in Rep.of_int (loop 0 Rep.bitwidth x) *)
 
-  (* TODO(Romy) *)
-  let extend_s n x = x
+
+  let extend_s n x = Rep.extsi x n
+  let extend_u n x = Rep.extui x n
     (* let shift = Rep.bitwidth - n in
      * Rep.shift_right (Rep.shift_left x shift) shift *)
 
@@ -383,93 +375,4 @@ struct
   let merge_to_string = Rep.merge_to_string
   let count_depth = Rep.count_depth
   let let_ = Rep.let_
-(* let to_int_s = Rep.to_int
-   * let to_int_u i = Rep.to_int i land (Rep.to_int Rep.max_int lsl 1) lor 1
-   * 
-   * let of_int_s = Rep.of_int
-   * let of_int_u i = and_ (Rep.of_int i) (or_ (shl (Rep.of_int max_int) one) one) *)
-
-  (* String conversion that allows leading signs and unsigned values *)
-
-  (* let require b = if not b then failwith "of_string"
-   * 
-   * let dec_digit = function
-   *   | '0' .. '9' as c -> Char.code c - Char.code '0'
-   *   | _ -> failwith "of_string"
-   * 
-   * let hex_digit = function
-   *   | '0' .. '9' as c ->  Char.code c - Char.code '0'
-   *   | 'a' .. 'f' as c ->  0xa + Char.code c - Char.code 'a'
-   *   | 'A' .. 'F' as c ->  0xa + Char.code c - Char.code 'A'
-   *   | _ ->  failwith "of_string"
-   * 
-   * let max_upper, max_lower = divrem_u Rep.minus_one ten
-   * 
-   * let of_string s =
-   *   let open Rep in
-   *   let len = String.length s in
-   *   let rec parse_hex i num =
-   *     if i = len then num else
-   *     if s.[i] = '_' then parse_hex (i + 1) num else
-   *     let digit = of_int (hex_digit s.[i]) in
-   *     require (le_u num (shr_u minus_one (of_int 4)));
-   *     parse_hex (i + 1) (logor (shift_left num 4) digit)
-   *   in
-   *   let rec parse_dec i num =
-   *     if i = len then num else
-   *     if s.[i] = '_' then parse_dec (i + 1) num else
-   *     let digit = of_int (dec_digit s.[i]) in
-   *     require (lt_u num max_upper || num = max_upper && le_u digit max_lower);
-   *     parse_dec (i + 1) (add (mul num ten) digit)
-   *   in
-   *   let parse_int i =
-   *     require (len - i > 0);
-   *     if i + 2 <= len && s.[i] = '0' && s.[i + 1] = 'x'
-   *     then parse_hex (i + 2) zero
-   *     else parse_dec i zero
-   *   in
-   *   require (len > 0);
-   *   match s.[0] with
-   *   | '+' -> parse_int 1
-   *   | '-' ->
-   *     let n = parse_int 1 in
-   *     require (ge_s (sub n one) minus_one);
-   *     Rep.neg n
-   *   | _ -> parse_int 0
-   * 
-   * let of_string_s s =
-   *   let n = of_string s in
-   *   require (s.[0] = '-' || ge_s n Rep.zero);
-   *   n
-   * 
-   * let of_string_u s =
-   *   let n = of_string s in
-   *   require (s.[0] != '+' && s.[0] != '-');
-   *   n *)
-
-  (* String conversion that groups digits for readability *)
-
-  (* let rec add_digits buf s i j k n =
-   *   if i < j then begin
-   *     if k = 0 then Buffer.add_char buf '_';
-   *     Buffer.add_char buf s.[i];
-   *     add_digits buf s (i + 1) j ((k + n - 1) mod n) n
-   *   end
-   * 
-   * let group_digits n s =
-   *   let len = String.length s in
-   *   let num = if s.[0] = '-' then 1 else 0 in
-   *   let buf = Buffer.create (len*(n+1)/n) in
-   *   Buffer.add_substring buf s 0 num;
-   *   add_digits buf s num len ((len - num) mod n + n) n;
-   *   Buffer.contents buf
-   * 
-   * let to_string_s i = group_digits 3 (Rep.to_string i)
-   * let to_string_u i =
-   *   if i >= Rep.zero then
-   *     group_digits 3 (Rep.to_string i)
-   *   else
-   *     group_digits 3 (Rep.to_string (div_u i ten) ^ Rep.to_string (rem_u i ten))
-   * 
-   * let to_hex_string i = "0x" ^ group_digits 4 (Rep.to_hex_string i) *)
 end

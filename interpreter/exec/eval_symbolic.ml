@@ -134,14 +134,16 @@ module SF64Op = FloatOp (F64) (Svalues.SF64Value)
 
 (* Conversion operators *)
 
-module I32CvtOp =
+module SI32CvtOp =
 struct
-  (* open Ast.IntOp *)
+  open Ast.IntOp
 
   let cvtop op v =
-    raise (TypeError (1, v, SI32Type))
-    (* match op with
-     * | WrapI64 -> I32 (I32_convert.wrap_i64 (I64Op.of_value 1 v))
+    match op with
+    | ExtendSI32 -> raise (TypeError (1, v, SI32Type))
+    | ExtendUI32 -> raise (TypeError (1, v, SI32Type))
+    | _ ->     raise (TypeError (1, v, SI32Type))
+    (* | WrapI64 -> I32 (I32_convert.wrap_i64 (I64Op.of_value 1 v))
      * | TruncSF32 -> I32 (I32_convert.trunc_f32_s (F32Op.of_value 1 v))
      * | TruncUF32 -> I32 (I32_convert.trunc_f32_u (F32Op.of_value 1 v))
      * | TruncSF64 -> I32 (I32_convert.trunc_f64_s (F64Op.of_value 1 v))
@@ -150,21 +152,19 @@ struct
      * | TruncSatUF32 -> I32 (I32_convert.trunc_sat_f32_u (F32Op.of_value 1 v))
      * | TruncSatSF64 -> I32 (I32_convert.trunc_sat_f64_s (F64Op.of_value 1 v))
      * | TruncSatUF64 -> I32 (I32_convert.trunc_sat_f64_u (F64Op.of_value 1 v))
-     * | ReinterpretFloat -> I32 (I32_convert.reinterpret_f32 (F32Op.of_value 1 v))
-     * | ExtendSI32 -> raise (TypeError (1, v, I32Type))
-     * | ExtendUI32 -> raise (TypeError (1, v, I32Type)) *)
+     * | ReinterpretFloat -> I32 (I32_convert.reinterpret_f32 (F32Op.of_value 1 v)) *)
 end
 
-module I64CvtOp =
+module SI64CvtOp =
 struct
-  (* open Ast.IntOp *)
+  open Ast.IntOp
 
   let cvtop op v =
-    raise (TypeError (1, v, SI64Type))
-    (* match op with
-     * | ExtendSI32 -> I64 (I64_convert.extend_i32_s (I32Op.of_value 1 v))
-     * | ExtendUI32 -> I64 (I64_convert.extend_i32_u (I32Op.of_value 1 v))
-     * | TruncSF32 -> I64 (I64_convert.trunc_f32_s (F32Op.of_value 1 v))
+
+    match op,v with
+    | ExtendSI32, SI32 v -> SI64 (Si32.extend_s 64 v) 
+    | ExtendUI32, SI32 v -> SI64 (Si32.extend_u 64 v) 
+    (* | TruncSF32 -> I64 (I64_convert.trunc_f32_s (F32Op.of_value 1 v))
      * | TruncUF32 -> I64 (I64_convert.trunc_f32_u (F32Op.of_value 1 v))
      * | TruncSF64 -> I64 (I64_convert.trunc_f64_s (F64Op.of_value 1 v))
      * | TruncUF64 -> I64 (I64_convert.trunc_f64_u (F64Op.of_value 1 v))
@@ -172,8 +172,9 @@ struct
      * | TruncSatUF32 -> I64 (I64_convert.trunc_sat_f32_u (F32Op.of_value 1 v))
      * | TruncSatSF64 -> I64 (I64_convert.trunc_sat_f64_s (F64Op.of_value 1 v))
      * | TruncSatUF64 -> I64 (I64_convert.trunc_sat_f64_u (F64Op.of_value 1 v))
-     * | ReinterpretFloat -> I64 (I64_convert.reinterpret_f64 (F64Op.of_value 1 v))
-     * | WrapI64 -> raise (TypeError (1, v, I64Type)) *)
+     * | ReinterpretFloat -> I64 (I64_convert.reinterpret_f64 (F64Op.of_value 1 v)) *)
+    | WrapI64,_ -> raise (TypeError (1, v, SI64Type))
+    | _ ->     raise (TypeError (1, v, SI64Type))
 end
 
 module F32CvtOp =
@@ -221,7 +222,7 @@ let eval_unop = op SI32Op.unop SI64Op.unop SF32Op.unop SF64Op.unop
 let eval_binop = op SI32Op.binop SI64Op.binop SF32Op.binop SF64Op.binop
 let eval_testop = op SI32Op.testop SI64Op.testop SF32Op.testop SF64Op.testop
 let eval_relop = op SI32Op.relop SI64Op.relop SF32Op.relop SF64Op.relop
-let eval_cvtop = op I32CvtOp.cvtop I64CvtOp.cvtop F32CvtOp.cvtop F64CvtOp.cvtop
+let eval_cvtop = op SI32CvtOp.cvtop SI64CvtOp.cvtop F32CvtOp.cvtop F64CvtOp.cvtop
 
 
 
