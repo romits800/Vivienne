@@ -31,8 +31,8 @@ let argspec = Arg.align
   "-h", Arg.Clear Flags.harness, " exclude harness for JS conversion";
   "-d", Arg.Set Flags.dry, " dry, do not run program";
   "-t", Arg.Set Flags.trace, " trace execution";
-  "-b", Arg.Set Flags.bfs, "Run Breadth First Search instead of default DFS";
-  "-l", Arg.Set Flags.loop_invar, "Use loop invariant";
+  "-b", Arg.Set Flags.bfs, " run breadth first Search instead of default DFS";
+  "-l", Arg.Set Flags.loop_invar, " use loop invariant";
   "-v", Arg.Unit banner, " show version"
 ]
 
