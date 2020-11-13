@@ -913,7 +913,7 @@ let simplify (sv: svalue) (pc : pc_ext)
 
 
 let is_unsat (pc : pc_ext) (mem: Smemory.t list * int) =
-
+  print_endline "is_unsat";
   let ctx = init_solver() in
 
   let pc = pc_to_expr pc ctx mem in
@@ -929,7 +929,8 @@ let is_unsat (pc : pc_ext) (mem: Smemory.t list * int) =
   List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
 
   let filename = write_formula_to_file solver in
-  let res = not (run_solvers filename (read_sat "yices") (read_sat "z3") (read_sat "cvc4")) in
+  let res = not (run_solvers filename (read_sat "yices")
+                   (read_sat "z3") (read_sat "cvc4")) in
   remove filename;
   res
   
@@ -973,27 +974,27 @@ let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) =
      let solver = Solver.mk_solver ctx None in
      List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
 
-     let filename = write_formula_to_file solver in
-     let res = not (run_solvers filename (read_sat "yices") (read_sat "z3") (read_sat "cvc4")) in
-     remove filename;
-     res
+     (* let filename = write_formula_to_file solver in
+      * let res = not (run_solvers filename (read_sat "yices") (read_sat "z3") (read_sat "cvc4")) in
+      * remove filename;
+      * res *)
 
-     (* match (Solver.check solver []) with
-      * | Solver.UNSATISFIABLE -> true
-      * | _ ->
-      *    (\* Printf.printf "Goal v_ct: %s\n" (Goal.to_string g); *\)
-      *    let model = Solver.get_model solver in
-      *    (match model with
-      *     | None -> print_endline "None"
-      *     | Some m -> print_endline "Model"; print_endline (Model.to_string m)
-      *    );
-      *    false *)
+     match (Solver.check solver []) with
+     | Solver.UNSATISFIABLE -> true
+     | _ ->
+        (* Printf.printf "Goal v_ct: %s\n" (Goal.to_string g); *)
+        (* let model = Solver.get_model solver in *)
+        (* (match model with
+         *  | None -> print_endline "None"
+         *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
+         * ); *)
+        false
 
   
 let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool =
-  (* print_endline "is_v_ct_unsat"; *) 
-  (* Pc_type.print_pc pc |> print_endline; *)
-  (* svalue_to_string sv |> print_endline; *)
+  (* print_endline "is_v_ct_unsat"; 
+   * Pc_type.print_pc (snd pc) |> print_endline;
+   * svalue_to_string sv |> print_endline; *)
 
   let ctx = init_solver() in
   
@@ -1001,7 +1002,7 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
   let v = sv_to_expr pc sv ctx mem in
   (* print_exp v; *)
   match v with
-   | L v -> true 
+  | L v -> true 
    | H (v1,v2) ->
       let v' = Boolean.mk_eq ctx v1 v2 in
       let v' = Boolean.mk_not ctx v' in
@@ -1027,11 +1028,11 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
       | Solver.UNSATISFIABLE ->
          true
       | Solver.SATISFIABLE ->
-         let model = Solver.get_model solver in
-        (match model with
-         | None -> print_endline "None"
-         | Some m -> print_endline "Model"; print_endline (Model.to_string m)
-        );
+         (* let model = Solver.get_model solver in
+          * (match model with
+          *  | None -> print_endline "None"
+          *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
+          * ); *)
          false
       | _ -> false
 

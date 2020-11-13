@@ -59,8 +59,13 @@ type frame =
   locals : svalue list;
 }
 
-type code = svalue stack * admin_instr list
 
+
+type loopvar_t = LocalVar of int32 Source.phrase * bool
+               | GlobalVar of int32 Source.phrase * bool
+               | StoreVar of svalue * Types.value_type * Types.pack_size option * bool
+
+type code = svalue stack * admin_instr list          
 and admin_instr = admin_instr' phrase
 and admin_instr' =
   | Plain of instr'
@@ -70,7 +75,10 @@ and admin_instr' =
   | Breaking of int32 * svalue stack
   | Label of int32 * instr list * code * pc_ext
   | Frame of int32 * frame * code * pc_ext
-
+  | Assert of loopvar_t list
+  | Havoc of loopvar_t list
+  | FirstPass of int32 * instr list * code
+  | SecondPass of int32 * instr list * code 
            
 type obs_type =
   | CT_UNSAT of pc_ext * svalue * (Smemory.t list * int) * obs_type
@@ -78,7 +86,6 @@ type obs_type =
   (* | CT_SAT of pc * obs_type *)
   | OBSTRUE
 
-                                              
 type config =
 {
   frame : frame;
@@ -96,6 +103,14 @@ and
 secret_type = int * int
 
 
+let print_loopvar = function
+  | LocalVar (i,tf) ->
+     "Local" ^ (Int32.to_int i.it |> string_of_int) |> print_endline
+  | GlobalVar (i,tf) ->
+     "Local" ^ (Int32.to_int i.it |> string_of_int) |> print_endline
+  | StoreVar (sv, ty, sz, tf) ->
+     "Store" ^ (svalue_to_string sv) |> print_endline
+     
 (* type configs =
  *   {
  *     cs : config list;
@@ -219,7 +234,7 @@ let split_msec (sv : svalue)
       (mpub : (int * int) list ) (pc : pc) : pc * pc =  
   (* let pc' = PCAnd (sv, pc) in
    * let pc'' = *)
-  let rec within_hrange sv msec =
+  let rec within_range sv msec =
     match msec with
     | [] -> Si32.ne Si32.zero Si32.zero
     | (lo, hi)::[] ->
@@ -231,18 +246,15 @@ let split_msec (sv : svalue)
        let hrange = Si32.le_s sv (Si32.of_int_s hi) in
        let lrange = Si32.ge_s sv (Si32.of_int_s lo) in
        let hl = Si32.and_ hrange lrange in
-       Si32.or_ hl (within_hrange sv msecs)
+       Si32.or_ hl (within_range sv msecs)
   in
   match sv with
   | SI32 vi32 ->
-     let lrange = within_hrange vi32 mpub in (* Si32.not_ hrange in *)
+     let lrange = within_range vi32 mpub in (* Si32.not_ hrange in *)
      let hrange = Si32.not_ lrange in (* within_hrange vi32 msec in *)
      (PCAnd (SI32 hrange, pc), PCAnd (SI32 lrange, pc))
   | _ -> failwith "Address should be 32bit integer"
 
-
-(* in *)
-  (* (pc', pc'') *)
 
 let select_condition v0 v1 v2 = (* (v0: svalue  v1: svalue): svalue = *)
   match v0, v1, v2 with
@@ -259,6 +271,615 @@ let select_condition v0 v1 v2 = (* (v0: svalue  v1: svalue): svalue = *)
    * | SF64 vf64, SF64 vf64_1, SF64 vf64_2 -> SF64 vf64 *)
   | _ -> failwith "Type problem select"
 
+let match_policy b1 b2 =
+  match b1,b2 with
+  | true, true | false, false -> true
+  | _ -> false
+
+(* Assert invariant *)
+let rec assert_invar (lv: loopvar_t list) (c : config) : bool =
+  match lv with
+  | LocalVar (x, is_low) :: lvs ->
+     (* print_endline "localvar"; *)
+     let v = local c.frame x in
+     let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
+     let is_low_new = Z3_solver.is_v_ct_unsat c.pc v mem in
+     if match_policy is_low is_low_new then assert_invar lvs c
+     else false
+
+  | GlobalVar (x, is_low) :: lvs ->
+     (* print_endline "globalvar"; *)
+     let v = Sglobal.load (sglobal c.frame.inst x) in
+     let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
+     let is_low_new = Z3_solver.is_v_ct_unsat c.pc v mem in
+     if match_policy is_low is_low_new then assert_invar lvs c
+     else false
+
+  | StoreVar (addr, ty, sz, is_low) :: lvs ->
+     (* print_endline "storevar"; *)
+     let nv =
+       (match sz with
+        | None ->
+           Eval_symbolic.eval_load ty addr (smemlen c.frame.inst)
+             (Types.size ty) None
+        | Some (sz) ->
+           assert (packed_size sz <= Types.size ty);
+           let n = packed_size sz in
+           Eval_symbolic.eval_load ty addr (smemlen c.frame.inst) n None 
+       )
+     in
+     (* let mem = smemory c.frame.inst (0l @@ Source.no_region) in *)
+
+     let memtuple = (c.frame.inst.smemories, smemlen c.frame.inst) in
+     let is_low_new = Z3_solver.is_v_ct_unsat c.pc nv memtuple in
+
+     if match_policy is_low is_low_new then assert_invar lvs c
+     else false
+  | [] -> true
+
+       
+(* Havoc new variables *)
+let rec havoc_vars (lv: loopvar_t list) (c : config) : config =
+
+    match lv with
+    | LocalVar (x, is_low) :: lvs ->
+       let v = local c.frame x in
+       (* let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in *)
+       (* let is_low = Z3_solver.is_v_ct_unsat c.pc v mem in *)
+       let newv =
+         (match v with
+          | SI32 _ -> SI32 (if is_low then Si32.of_low() else Si32.of_high())
+          | SI64 _ -> SI64 (if is_low then Si64.of_low() else Si64.of_high())
+          | _ -> failwith "not implemented floated numbers"
+         )
+       in
+       let c' = { c with frame = update_local c.frame x newv } in
+       havoc_vars lvs c'
+    | GlobalVar (x, is_low) :: lvs ->
+       let v = Sglobal.load (sglobal c.frame.inst x) in
+       (* let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in *)
+       (* let is_low = Z3_solver.is_v_ct_unsat c.pc v mem in *)
+       let newv =
+         (match v with
+          | SI32 _ -> SI32 (if is_low then Si32.of_low() else Si32.of_high())
+          | SI64 _ -> SI64 (if is_low then Si64.of_low() else Si64.of_high())
+          | _ -> failwith "not implemented floated numbers"
+         )
+       in
+       let newg = 
+         (try Sglobal.store (sglobal c.frame.inst x) newv
+          with Sglobal.NotMutable -> Crash.error x.at "write to immutable global"
+             | Sglobal.Type -> Crash.error x.at "type mismatch at global write")
+       in
+       
+       let c' = { c with frame = {c.frame with inst = update_sglobal c.frame.inst newg x } } in
+       havoc_vars lvs c'
+    | StoreVar (addr, ty, sz, is_low) :: lvs ->
+
+       let sv =
+           (match ty with
+            |Types.I32Type ->
+              SI32 (if is_low then Si32.of_low() else Si32.of_high())
+            |Types.I64Type ->
+              SI64 (if is_low then Si64.of_low() else Si64.of_high())
+            | _ -> failwith "not implemented float types"
+           )
+       in          
+       let nv =
+         (match sz with
+          | None ->
+             Eval_symbolic.eval_store ty addr sv
+               (smemlen c.frame.inst) (Types.size ty)
+          | Some (sz) ->
+             assert (packed_size sz <= Types.size ty);
+             let n = packed_size sz in
+             Eval_symbolic.eval_store ty addr sv
+               (smemlen c.frame.inst) n 
+         )
+       in
+       let mem = smemory c.frame.inst (0l @@ Source.no_region) in
+       let mem' = Smemory.store_sind_value mem nv in
+       
+       let c' = {  c with frame = {c.frame with inst = insert_smemory c.frame.inst mem'}} in
+       havoc_vars lvs c'
+    | [] -> c
+                
+
+module LoopVarMap = Map.Make(struct
+                   type t = string
+                   let compare = compare
+                 end)
+
+(* Merge new variables *)
+let  merge_vars (lv: loopvar_t list) : loopvar_t list =
+  let rec merge_vars_i (lv: loopvar_t list) (acc: loopvar_t list) mp : loopvar_t list =
+    match lv with
+    | (LocalVar (x,_) as lvh) :: lvs ->
+       let str = "Local" ^ string_of_int (Int32.to_int x.it) in
+       (try
+          let _ = LoopVarMap.find str mp in
+          merge_vars_i lvs acc mp
+        with Not_found ->
+          let mp' = LoopVarMap.add str true mp in
+          merge_vars_i lvs (lvh::acc) mp'
+            
+       )
+    | (GlobalVar (x,_) as lvh) :: lvs ->
+       let str = "Global" ^ string_of_int (Int32.to_int x.it) in
+       (try
+          let _ = LoopVarMap.find str mp in
+          merge_vars_i lvs acc mp
+        with Not_found ->
+          let mp' = LoopVarMap.add str true mp in
+          merge_vars_i lvs (lvh::acc) mp'
+       )
+
+    | (StoreVar (sv, ty, sz, is_low) as lvh) :: lvs ->
+       let str = "Store" ^ svalue_to_string sv in
+       (try
+          let _ = LoopVarMap.find str mp in
+          merge_vars_i lvs acc mp
+       with Not_found ->
+         let mp' = LoopVarMap.add str true mp in
+         merge_vars_i lvs (lvh::acc) mp'
+            
+       )
+    | [] -> acc
+         
+  in
+  let mp = LoopVarMap.empty in
+  merge_vars_i lv [] mp
+  
+(* Find variants that get updated in a loop *)
+
+let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config list =
+  let {frame; code = vs, es; pc = pclet, pc; _} = c in
+  (* let s1 = Svalues.string_of_values (List.rev vs) in *)
+  (* print_endline s1; *)
+
+
+  match es with
+  | e::est -> 
+     (match e.it, vs with
+      | Plain e', vs ->
+         (* let no = Arrange.instr (e'@@e.at) in
+          * (match no with | Sexpr.Node(h,inner) -> print_endline h
+          *                | _ -> print_endline "no node"); *)
+
+         (match e', vs with
+          | Unreachable, vs ->
+             let vs', es' = vs, [Trapping "unreachable executed" @@ e.at] in
+             find_vars lv {c with code = vs', es' @ List.tl es}
+          | Nop, vs ->
+             (* print_endline "nop"; *)
+             let vs', es' = vs, [] in
+             find_vars lv {c with code = vs', es' @ List.tl es}
+          | Block (bt, es'), vs ->
+             (* print_endline "block"; *)
+             let FuncType (ts1, ts2) = block_type frame.inst bt in
+             let n1 = Lib.List32.length ts1 in
+             let n2 = Lib.List32.length ts2 in
+             let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+             let vs', es' = vs', [Label (n2, [], (args, List.map plain es'), (pclet,pc)) @@ e.at] in
+             find_vars lv {c with code = vs', es' @ List.tl es}
+          | Loop (bt, es'), vs ->
+             (* print_endline "Loop find_vars"; *)
+             let FuncType (ts1, ts2) = block_type frame.inst bt in
+             let n1 = Lib.List32.length ts1 in
+             let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+             let vs', es' = vs', [Label (n1, [],
+                                         (args, List.map plain es'), (pclet,pc)) @@ e.at] in
+             find_vars lv {c with code = vs', es' @ List.tl es}
+          | If (bt, es1, es2), v :: vs' ->
+             (* print_endline "if"; *)
+             let pc', pc'' = split_condition v pc in
+             let vs'', es'' = vs', [Plain (Block (bt, es1)) @@ e.at] in (* True *)
+             let vs', es' = vs', [Plain (Block (bt, es2)) @@ e.at] in (* False *)
+             (* Don't check sat *)
+             
+             let lv1,c1 = find_vars lv {c with code = vs', es' @ est; pc = (pclet,pc')} in
+             let lv2,c2 = find_vars lv1 {c with code = vs'', es'' @ est; pc = (pclet,pc'')} in
+             lv2,c1 @ c2
+
+          | Br x, vs ->
+             (* print_endline "br"; *)
+             let vs', es' = [], [Breaking (x.it, vs) @@ e.at] in
+             lv, [{c with code = vs', es' @ List.tl es}]
+             
+          | BrIf x, v :: vs' ->
+             (* print_endline "br_if"; *)
+             let pc', pc'' = split_condition v pc in
+             let vs'', es'' = vs', [Plain (Br x) @@ e.at] in
+             let vs', es' = vs', [] in
+             
+             let lv1, c1 = find_vars lv {c with code = vs', es' @ est; pc = (pclet,pc')} in
+             find_vars lv1 {c with code = vs'', es'' @ est; pc = (pclet,pc'')}
+
+             
+          (* | BrTable (xs, x), I32 i :: vs' when I32.ge_u i (Lib.List32.length xs) ->
+           *   vs', [Plain (Br x) @@ e.at]
+           * 
+           * | BrTable (xs, x), I32 i :: vs' ->
+           *   vs', [Plain (Br (Lib.List32.nth xs i)) @@ e.at] *)
+
+          | Return, vs ->
+             (* print_endline "return"; *)
+             let vs', es' = [], [Returning vs @@ e.at] in
+             find_vars lv {c with code = vs', es' @ List.tl es}
+
+          | Call x, vs ->
+             (* print_endline "call"; *)
+             let vs', es' = vs, [Invoke (func frame.inst x) @@ e.at] in
+             find_vars lv {c with code = vs', es' @ List.tl es}
+
+          (* | CallIndirect x, I32 i :: vs ->
+           *   let func = func_elem frame.inst (0l @@ e.at) i e.at in
+           *   if type_ frame.inst x <> Func.type_of func then
+           *     vs, [Trapping "indirect call type mismatch" @@ e.at]
+           *   else
+           *     vs, [Invoke func @@ e.at] *)
+
+          | Drop, v :: vs' ->
+             (* print_endline "drop"; *)
+             let vs', es' = vs', [] in
+             find_vars lv {c with code = vs', es' @ List.tl es}
+             
+          | Select, v0 :: v2 :: v1 :: vs' ->
+             (* print_endline "select"; *)
+             let vselect = select_condition v0 v1 v2 in
+             (* let pc' = PCAnd(cond, pc) in *)
+             let vs', es' = vselect :: vs', [] in
+             find_vars lv {c with code = vs', es' @ List.tl es}
+             
+          | LocalGet x, vs ->
+             (* print_endline "local get"; *)
+             let vs', es' = (local frame x) :: vs, [] in
+             find_vars lv {c with code = vs', es' @ List.tl es}
+
+          | LocalSet x, v :: vs' ->
+             (* print_endline "local set"; *)
+             let vv = local frame x in
+             let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
+             let is_low = Z3_solver.is_v_ct_unsat c.pc vv mem in
+
+             (* print_loopvar (LocalVar (x, is_low)); *)
+             let lv = (LocalVar (x, is_low))::lv in
+             let v, c =
+               if svalue_depth v 10 then (
+                 let nl, pc' = add_let (pclet, pc) (Sv v) in
+                 let nv = svalue_newlet (Sv v) nl in
+                 (* let eq = svalue_eq nv v in *)
+                 let c = {c with pc = pc'} in 
+                 nv,c)
+               else
+                 v, c
+             in
+             let frame' = update_local c.frame x v in
+             let vs', es' = vs', [] in
+             find_vars lv {c with code = vs', es' @ List.tl es; frame = frame'}
+
+          | LocalTee x, v :: vs' ->
+             (* print_endline "local tee"; *)
+             let vv = local frame x in
+             let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
+             let is_low = Z3_solver.is_v_ct_unsat c.pc vv mem in
+
+             let lv = (LocalVar (x,is_low))::lv in
+             (* print_loopvar (LocalVar (x,is_low)); *)
+             let frame' = update_local c.frame x v in
+             let vs', es' = v :: vs', [] in
+             find_vars lv {c with code = vs', es' @ List.tl es; frame = frame'}
+
+          | GlobalGet x, vs ->
+             let vs', es' = Sglobal.load (sglobal frame.inst x) :: vs, [] in
+             find_vars lv {c with code = vs', es' @ List.tl es}
+
+          | GlobalSet x, v :: vs' ->
+
+             let vv = Sglobal.load (sglobal c.frame.inst x) in
+             let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
+             let is_low = Z3_solver.is_v_ct_unsat c.pc vv mem in
+
+             let lv = (GlobalVar (x, is_low))::lv in
+             let newg, vs', es' =
+               (try Sglobal.store (sglobal frame.inst x) v, vs', []
+                with Sglobal.NotMutable -> Crash.error e.at "write to immutable global"
+                   | Sglobal.Type -> Crash.error e.at "type mismatch at global write")
+             in
+             let frame' = {frame with inst = update_sglobal c.frame.inst newg x} in
+             find_vars lv {c with code = vs', es' @ List.tl es; frame = frame'}
+
+          | Load {offset; ty; sz; _}, si :: vs' ->
+             (* print_endline "load"; *)
+             let addr =
+               (match si with
+                | SI32 v -> v
+                | _ -> failwith "Error: Address should be 32-bit integer"
+               ) in (* I64_convert.extend_i32_u i in *)
+             let offset = Int32.to_int offset in        
+             let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
+             let nv =
+               (match sz with
+                | None -> Eval_symbolic.eval_load ty final_addr
+                            (smemlen frame.inst) (Types.size ty) None
+                | Some (sz, ext) ->
+                   assert (packed_size sz <= Types.size ty);
+                   let n = packed_size sz in 
+                   Eval_symbolic.eval_load ty final_addr
+                     (smemlen frame.inst) n (Some ext)
+               )
+             in
+
+             let vs', es' =  nv :: vs', [] in 
+
+             find_vars lv {c with code = vs', est}
+             
+          | Store {offset; ty; sz; _}, sv :: si :: vs' ->
+             (* print_endline "store"; *)
+             let mem = smemory frame.inst (0l @@ e.at) in
+             let frame = {frame with
+                           inst = update_smemory frame.inst mem (0l @@ e.at)} in
+             let addr =
+               (match si with
+                | SI32 v -> v
+                | _ -> failwith "Error: Address should be 32-bit integer"
+               ) in (* I64_convert.extend_i32_u i in *)
+             let offset = Int32.to_int offset in
+             (* check if we satisfy CT  for the index *)
+
+             (* if (Z3_solver.is_v_ct_unsat (pclet, pc) si mems) then *)
+             let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
+
+             (* let lv = (StoreVar final_addr)::lv in *)
+             let nv, lvn =
+               (match sz with
+                | None ->
+                   let nv = Eval_symbolic.eval_store ty final_addr sv
+                              (smemlen frame.inst) (Types.size ty) in
+                   let lvn = (Eval_symbolic.eval_load ty final_addr
+                                (smemlen frame.inst) (Types.size ty) None) in
+                   nv,lvn
+                | Some (sz) ->
+                   assert (packed_size sz <= Types.size ty);
+                   let n = packed_size sz in
+                   let nv = Eval_symbolic.eval_store ty final_addr sv
+                              (smemlen frame.inst) n in
+                   let lvn = Eval_symbolic.eval_load ty final_addr
+                              (smemlen frame.inst) n None in
+                   nv, lvn)
+             in
+
+             let memtuple = (c.frame.inst.smemories, smemlen c.frame.inst) in
+             let is_low = Z3_solver.is_v_ct_unsat c.pc lvn memtuple in
+
+             let lv = (StoreVar (final_addr, ty, sz, is_low))::lv in
+
+             let mem' = Smemory.store_sind_value mem nv in
+             let vs', es' = vs', [] in
+             (* Update memory with a store *)
+             let nframe = {frame with inst = insert_smemory frame.inst mem'} in
+
+             find_vars lv {c with code = vs', es' @ est;
+                                  frame = nframe}
+
+          (*TODO(Romy): Implement Const*)
+          | Const v, vs ->
+             (* print_endline "const"; *)
+             let va = 
+               match v.it with
+               | Values.I32 i ->
+                  let ii = Int32.to_int i in
+                  let ii' = Int64.of_int ii in
+                  SI32 (Si32.bv_of_int ii' 32)
+               | Values.I64 i ->
+                  SI64 (Si64.bv_of_int i 64)
+               | Values.F32 i -> SF32 i
+               | Values.F64 i -> SF64 i
+             in
+             let vs', es' = va :: vs, [] in
+             find_vars lv {c with code = vs', es' @ List.tl es}
+             
+          (* | Const v, vs ->
+           *    v.it :: vs, [] *)
+
+          | Test testop, v :: vs' ->
+             (* print_endline "testop"; *)
+             let vs', es' =
+               (try (Eval_symbolic.eval_testop testop v) :: vs', []
+                with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
+             find_vars lv {c with code = vs', es' @ List.tl es}
+             
+          | Compare relop, v2 :: v1 :: vs' ->
+             (* print_endline "relop"; *)
+             let vs', es' =
+               (try (Eval_symbolic.eval_relop relop v1 v2) :: vs', []
+                with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
+             find_vars lv {c with code = vs', es' @ List.tl es}
+
+          | Unary unop, v :: vs' ->
+             (* print_endline "unop"; *)
+             let vs', es' = 
+               (try Eval_symbolic.eval_unop unop v :: vs', []
+                with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
+             find_vars lv {c with code = vs', es' @ List.tl es}
+
+          | Binary binop, v2 :: v1 :: vs' ->
+             (* print_endline "binop"; *)
+             let vs', es' = 
+               (try
+                  let nv = Eval_symbolic.eval_binop binop v1 v2 in
+                  (* "Printing binop" |> print_endline; *)
+                  (* Pc_type.svalue_to_string nv |> print_endline; *)
+                  nv :: vs', []
+                with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
+             find_vars lv {c with code = vs', es' @ List.tl es}
+          | Convert cvtop, v :: vs' ->
+             let vs', es' = 
+               (try Eval_symbolic.eval_cvtop cvtop v :: vs', []
+                with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at])
+             in
+             find_vars lv {c with code = vs', es' @ List.tl es}
+
+          | _ ->
+             let s1 = Svalues.string_of_values (List.rev vs) in
+             let s2 = Types.string_of_svalue_types (List.map Svalues.type_of (List.rev vs)) in
+             let no = Arrange.instr (e' @@ e.at) in
+             (match no with | Sexpr.Node(h,inner) -> print_endline h
+                            | _ -> print_endline "no node");
+
+             Crash.error e.at
+               ("missing or ill-typed operand on stack (" ^ s1 ^ " : " ^ s2 ^ ")")
+         )
+
+      | Trapping msg, vs ->
+         assert false
+
+      | Assert lvs, vs ->
+         failwith "Unexpected Assert in find_vars";
+      
+      | Havoc lvs, vs ->
+         failwith "Unexpected Havoc in find_vars";
+
+      | FirstPass _, vs ->
+         failwith "Unexpected FirstPass in find_vars";
+
+      | SecondPass _, vs ->
+         failwith "Unexpected SecondPass in find_vars";
+
+      (* assert false *)
+
+      | Returning vs', vs ->
+         Crash.error e.at "undefined frame"
+
+      | Breaking (k, vs'), vs ->
+         (* print_endline "breaking"; *)
+         lv, []
+         (* Crash.error e.at "undefined label" *)
+
+      | Label (n, es0, (vs', []), pc'), vs ->
+         (* print_endline "lab"; *)
+         let vs', es' = vs' @ vs, [] in
+         find_vars lv {c with code = vs', es' @ List.tl es}
+         
+      | Label (n, es0, (vs', {it = Trapping msg; at} :: es'), pc'), vs ->
+         (* print_endline "lab2"; *)
+         let vs', es' = vs, [Trapping msg @@ at] in
+         find_vars lv {c with code = vs', es' @ List.tl es}
+
+      | Label (n, es0, (vs', {it = Returning vs0; at} :: es'), pc'), vs ->
+         (* print_endline "lab3"; *)
+         let vs', es' = vs, [Returning vs0 @@ at] in
+         find_vars lv {c with code = vs', es' @ List.tl es}
+
+      | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es'), pc'), vs ->
+         (* print_endline "lab4"; *)
+         let vs', es' = take n vs0 e.at @ vs, List.map plain es0 in
+         find_vars lv {c with code = vs', es' @ List.tl es}
+
+      | Label (n, es0, (vs', {it = Breaking (k, vs0); at} :: es'), pc'), vs ->
+         (* print_endline "lab5"; *)
+         let vs', es' = vs, [Breaking (Int32.sub k 1l, vs0) @@ at] in
+         find_vars lv {c with code = vs', es' @ List.tl es}
+
+      | Label (n, es0, code', pc'), vs ->
+         (* print_endline "lab6"; *)
+         (* TODO(Romy): not sure if correct to change the pc *)
+         let lv', c' = find_vars lv {c with code = code'; pc = pc'} in
+         (* print_endline "lab6_back"; *)
+         let res =
+           List.fold_left (fun (lvi, cprev) ci ->
+             let lvi', ci' = find_vars lvi {c with code = vs,
+                                            [Label (n, es0, ci.code, ci.pc) @@ e.at]
+                                            @ List.tl es;
+                                     pc = ci.pc; 
+                                     frame = ci.frame}
+             in
+             lvi', ci' @ cprev
+             ) (lv', []) c'
+         in
+         (* print_endline "lab6_end"; *)
+         res
+
+      | Frame (n, frame', (vs', []), pc'), vs ->
+         (* print_endline ("frame1:" ^ (string_of_int c.counter)); *)
+         let vs', es' = vs' @ vs, [] in
+         let c = {c with code = vs', es' @ List.tl es;
+                         frame = {frame
+                                 with inst = {frame.inst
+                                             with smemories = frame'.inst.smemories;
+                                                  smemlen = frame'.inst.smemlen;
+                                                  sglobals = frame'.inst.sglobals
+                                             }
+                                 };
+                         pc = pc'
+                 } in
+         find_vars lv c
+      | Frame (n, frame', (vs', {it = Trapping msg; at} :: es'), _), vs ->
+         (* print_endline "frame2"; *)
+         let vs', es' = vs, [Trapping msg @@ at] in
+         find_vars lv {c with code = vs', es' @ List.tl es}
+
+      | Frame (n, frame', (vs', {it = Returning vs0; at} :: es'), pc'), vs ->
+         (* print_endline "frame returning"; *)
+         (* print_endline ("frame3:" ^ (string_of_int c.counter)); *)
+         let vs', es' = take n vs0 e.at @ vs, [] in
+         let c = {c with code = vs', es' @ List.tl es;
+                         frame = {frame
+                                 with inst = {frame.inst
+                                             with smemories = frame'.inst.smemories;
+                                                  smemlen = frame'.inst.smemlen;
+                                                  sglobals = frame'.inst.sglobals
+                                             }
+                               };
+                         pc = pc'} in
+         find_vars lv c
+
+      | Frame (n, frame', code', pc'), vs ->
+         (* print_endline "frame4"; *)
+         let lv', c' = find_vars lv {c with frame = frame'; code = code';
+                                            budget = c.budget - 1; pc = pc'} in
+         (* print_endline "frame4_end"; *)
+         (* TODO(Romy): the pc etc  should probably not be here *)
+         
+         List.fold_left
+           (fun (lvi,cprev) ci ->
+             let lvi', ci' =
+               find_vars lvi {c with code = vs, [Frame (n, ci.frame, ci.code, ci.pc)
+                                                 @@ e.at] @ List.tl es;}
+             in
+             lvi', ci' @ cprev) (lv',[]) c'
+         
+
+      | Invoke func, vs when c.budget = 0 ->
+         Exhaustion.error e.at "call stack exhausted"
+
+      | Invoke func, vs ->
+         (* print_endline "inv2"; *)
+         let FuncType (ins, out) = func_type_of func in
+         let n1, n2 = Lib.List32.length ins, Lib.List32.length out in
+         let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+         (match func with
+          | Func.AstFunc (t, inst', f) ->
+             let rest = List.map value_to_svalue_type f.it.locals in
+             (* let locals' = List.rev args @ List.map Svalues.default_value rest in *) 
+             let locals' = List.rev args @ List.map Svalues.default_value rest in
+             let frame' = {inst = !inst'; locals = locals'} in
+             let instr' = [Label (n2, [], ([], List.map plain f.it.body), c.pc) @@ f.at] in 
+             let vs', es' = vs', [Frame (n2, frame', ([], instr'), c.pc) @@ e.at] in
+             find_vars lv {c with code = vs', es' @ List.tl es}
+
+          (* | Func.HostFunc (t, f) ->
+           *   (try List.rev (f (List.rev args)) @ vs', []
+           *   with Crash (_, msg) -> Crash.error e.at msg) *)
+          | _ -> Crash.error e.at "Func.Hostfunc not implemented yet."
+         )
+     )
+  | [] -> lv, []
+
+
+
+
+       
 
 
 (* Evaluation *)
@@ -273,6 +894,8 @@ let select_condition v0 v1 v2 = (* (v0: svalue  v1: svalue): svalue = *)
  *)
 (*TODO(Romy): Implement debug flag etc*)
 
+let disable_ct = ref false
+               
 let rec step (c : config) : config list =
   (* print_endline ("step:" ^ (string_of_int c.counter)); *)
   let {frame; code = vs, es; pc = pclet, pc; _} = c in
@@ -283,9 +906,9 @@ let rec step (c : config) : config list =
        if svalue_depth v 5 then (
          let mem = (frame.inst.smemories, smemlen frame.inst) in
          (match Z3_solver.simplify v (pclet, pc) mem with
-          | (false as tf), v 
-            | (true as tf), (Z3Expr32 _ as v)
-            | (true as tf), (Z3Expr64 _ as v) -> 
+          | (false), v 
+            | (true), (Z3Expr32 _ as v)
+            | (true), (Z3Expr64 _ as v) -> 
              (* if tf then print_endline "true_expr"; *)
              let nl, pc' = add_let (pclet, pc) v in
              let nv = svalue_newlet v nl in
@@ -337,10 +960,48 @@ let rec step (c : config) : config list =
            let vs', es' = vs', [Label (n2, [], (args, List.map plain es'), (pclet,pc)) @@ e.at] in
            [{c with code = vs', es' @ List.tl es}]
         | Loop (bt, es'), vs ->
-           (* print_endline "loop"; *)
-           if !Flags.loop_invar then 
+           print_endline "loop";
+           if !Flags.loop_invar
+           then 
              (
-               failwith "Not implemented yet";
+               let FuncType (ts1, ts2) = block_type frame.inst bt in
+               let n1 = Lib.List32.length ts1 in
+               let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+
+               let vs'', es'' = vs', [Label (n1, [e' @@ e.at],
+                                           (args, List.map plain es'), (pclet,pc)) @@ e.at] in
+               (* let vs', es' = vs', [Label (n1, [],
+                *                             (args, List.map plain es'), (pclet,pc)) @@ e.at] in *)
+
+               let lvs, _ = find_vars [] {c with code = vs'', es'' @ List.tl es;} in
+               let lvs = merge_vars lvs in
+               print_endline "loop modified variables:";
+               print_endline (string_of_int (List.length lvs));
+               List.iter print_loopvar lvs;
+               
+               (* let havc = havoc_vars lvs c in *)
+               let first_pass = FirstPass (n1, [], (args, List.map plain es')) in
+                                  
+               let havoc = Havoc lvs in
+               let second_pass = SecondPass (n1, [], (args, List.map plain es')) in
+               let assrt = Assert lvs in
+               let vs'', es'' = vs', [
+                     havoc @@ e.at;
+                     first_pass @@ e.at; (* first pass *)
+                     second_pass @@ e.at;
+                     assrt @@ e.at
+                   ] in
+               [{c with code = vs'', es'' @ List.tl es;}]
+               (* let lvs = find_vars [] {c with code = vs'', es'' @ List.tl es;} in *)
+               (* assertX;
+                  havocv1; ... ;havocvn;
+                  assume X;
+                  if(c) {
+                        B;
+                        assertX;
+                        assumefalse;
+                  } *)
+               (* failwith "Loop invar Not implemented yet"; *)
              )
            else ( (* Not using loop invariants *)
              (* print_endline "Loop: first time"; *)
@@ -374,8 +1035,10 @@ let rec step (c : config) : config list =
                [{c with code = vs', es' @ List.tl es}]
             | _::[] -> res
             | _ ->
-               if Z3_solver.is_ct_unsat (pclet, pc) v mem then res
-               else failwith "If: Constant-time failure"
+               if (not !disable_ct) then (
+                 if Z3_solver.is_ct_unsat (pclet, pc) v mem then res
+                 else failwith "If: Constant-time failure"
+               ) else res
            )
 
         | Br x, vs ->
@@ -407,8 +1070,10 @@ let rec step (c : config) : config list =
                [{c with code = vs', es' @ List.tl es}]
             | _::[] -> res
             | _ ->
-               if Z3_solver.is_ct_unsat (pclet, pc) v mem then res
-               else failwith "BrIf: Constant-time failure"
+               if (not !disable_ct) then (
+                 if Z3_solver.is_ct_unsat (pclet, pc) v mem then res
+                 else failwith "BrIf: Constant-time failure")
+               else res
            )
 
         (* Must be unsat *)
@@ -475,9 +1140,9 @@ let rec step (c : config) : config list =
              if svalue_depth v 5 then (
                let mem = (frame.inst.smemories, smemlen frame.inst) in
                match Z3_solver.simplify v (pclet, pc) mem with
-               | (false as tf), v 
-                 | (true as tf), (Z3Expr32 _ as v)
-                 | (true as tf), (Z3Expr64 _ as v)-> 
+               | (false), v 
+                 | (true), (Z3Expr32 _ as v)
+                 | (true), (Z3Expr64 _ as v)-> 
                   (* if tf then print_endline "true_expr"; *)
                   let nl, pc' = add_let (pclet, pc) v in
                   let nv = svalue_newlet v nl in
@@ -535,9 +1200,8 @@ let rec step (c : config) : config list =
            let offset = Int32.to_int offset in        
            let mem = (frame.inst.smemories, smemlen frame.inst) in
            let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
-           
-           let c = {c with observations = CT_V_UNSAT((pclet, pc), final_addr,
-                                                     mem, c.observations)} in
+
+
 
            (* svalue_to_string si |> print_endline;
             * print_endline "printing_test_addr 37356";
@@ -545,47 +1209,68 @@ let rec step (c : config) : config list =
             * let load = Eval_symbolic.eval_load I32Type test_addr (smemlen frame.inst) (Types.size I32Type) None in
             * let i_sol = Z3_solver.find_solutions load (pclet, pc) mem  in
             * List.iter (fun x-> string_of_int x |> print_endline) i_sol; *)
-           if (Z3_solver.is_v_ct_unsat (pclet, pc) final_addr mem) then
-             (
-               let msec = Smemory.get_secrets imem in
-               let mpub = Smemory.get_public imem in
-               let pc', pc'' = split_msec final_addr msec mpub pc in
-               (* The loaded value consists of the (symbolic) index and the memory
-                   index *)
-               let nv =
-                 (* (try *)
-                 (match sz with
-                  | None ->
-                     Eval_symbolic.eval_load ty final_addr
-                              (smemlen frame.inst) (Types.size ty) None
-                  | Some (sz, ext) ->
-                     assert (packed_size sz <= Types.size ty);
-                     let n = packed_size sz in 
-                     Eval_symbolic.eval_load ty final_addr
-                       (smemlen frame.inst) n (Some ext)
-                 )
-               (* with exn ->
-                *    let vs', es' = vs', [Trapped (memory_error e.at exn) @@ e.at] in 
-                *    [{c with code = vs', es' @ List.tl es}]
-                * ) *)
-               in
-               let vs', es' =  nv :: vs', [] in 
-               let res = if Z3_solver.is_sat (pclet, pc') mem then(
-                           [{c with code = vs', es' @ List.tl es;
-                                    frame = frame;
-                                    pc = pclet,pc'}])
-                         else []
-               in
+           if (not !disable_ct) then (
+             
+             let c = {c with observations = CT_V_UNSAT((pclet, pc), final_addr,
+                                                       mem, c.observations)} in
 
-               let res = if Z3_solver.is_sat (pclet, pc'') mem then
-                           (* low values *)
-                           {c with code = vs', es' @ List.tl es;
-                                   frame = frame;
-                                   pc = pclet,pc''}:: res
-                         else res in
-               res)
-           else failwith "The index does not satisfy CT."
-        (* ) *)
+             if (Z3_solver.is_v_ct_unsat (pclet, pc) final_addr mem) then
+               (
+                 let msec = Smemory.get_secrets imem in
+                 let mpub = Smemory.get_public imem in
+                 let pc', pc'' = split_msec final_addr msec mpub pc in
+                 (* The loaded value consists of the (symbolic) index and the memory
+                   index *)
+                 let nv =
+                   (* (try *)
+                   (match sz with
+                    | None ->
+                       Eval_symbolic.eval_load ty final_addr
+                         (smemlen frame.inst) (Types.size ty) None
+                    | Some (sz, ext) ->
+                       assert (packed_size sz <= Types.size ty);
+                       let n = packed_size sz in 
+                       Eval_symbolic.eval_load ty final_addr
+                         (smemlen frame.inst) n (Some ext)
+                   )
+                 (* with exn ->
+                  *    let vs', es' = vs', [Trapped (memory_error e.at exn) @@ e.at] in 
+                  *    [{c with code = vs', es' @ List.tl es}]
+                  * ) *)
+                 in
+                 let vs', es' =  nv :: vs', [] in 
+                 let res = if Z3_solver.is_sat (pclet, pc') mem then(
+                             [{c with code = vs', es' @ List.tl es;
+                                      frame = frame;
+                                      pc = pclet,pc'}])
+                           else []
+                 in
+
+                 let res = if Z3_solver.is_sat (pclet, pc'') mem then
+                             (* low values *)
+                             {c with code = vs', es' @ List.tl es;
+                                     frame = frame;
+                                     pc = pclet,pc''}:: res
+                           else res in
+                 res)
+             else failwith "The index does not satisfy CT."
+           )
+           else (
+             let nv =
+               (match sz with
+                | None -> Eval_symbolic.eval_load ty final_addr
+                            (smemlen frame.inst) (Types.size ty) None
+                | Some (sz, ext) ->
+                   assert (packed_size sz <= Types.size ty);
+                   let n = packed_size sz in 
+                   Eval_symbolic.eval_load ty final_addr
+                     (smemlen frame.inst) n (Some ext)
+               )
+             in
+
+             let vs', es' =  nv :: vs', [] in 
+             [{c with code = vs', es' @ List.tl es}]
+           )
            
         | Store {offset; ty; sz; _}, sv :: si :: vs' ->
            (* print_endline "store"; *)
@@ -604,25 +1289,78 @@ let rec step (c : config) : config list =
            let mems = (frame.inst.smemories, smemlen frame.inst) in
 
            let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
+
+           (* print_endline "Store:";
+            * svalue_to_string sv |> print_endline;
+            * svalue_to_string final_addr |> print_endline; *)
+
+           if (not !disable_ct) then (
            
-           let c = {c with observations =
-                             CT_V_UNSAT((pclet,pc), final_addr, mems, c.observations)} in
+             let c = {c with observations =
+                               CT_V_UNSAT((pclet,pc), final_addr, mems, c.observations)} in
 
-           (* print_endline "printing_solutions";
-            * let i_sol = Z3_solver.find_solutions final_addr (pclet, pc) mems  in
-            * List.iter (fun x-> string_of_int x |> print_endline) i_sol; *)
+             (* print_endline "printing_solutions";
+              * let i_sol = Z3_solver.find_solutions final_addr (pclet, pc) mems  in
+              * List.iter (fun x-> string_of_int x |> print_endline) i_sol; *)
 
-           if (Z3_solver.is_v_ct_unsat (pclet, pc) final_addr mems) then
-             
-             let msec = Smemory.get_secrets mem in
-             let mpub = Smemory.get_public mem in
-             (* print_endline "c.msecrets";
-              * List.length msec |> string_of_int |> print_endline; *)
-             let pc', pc'' = split_msec final_addr msec mpub pc in
+             if (Z3_solver.is_v_ct_unsat (pclet, pc) final_addr mems) then
+               
+               let msec = Smemory.get_secrets mem in
+               let mpub = Smemory.get_public mem in
+               (* print_endline "c.msecrets";
+                * List.length msec |> string_of_int |> print_endline; *)
+               let pc', pc'' = split_msec final_addr msec mpub pc in
+               let nv =
+                 (match sz with
+                  | None -> Eval_symbolic.eval_store ty final_addr sv
+                              (smemlen frame.inst) (Types.size ty)
+                  | Some (sz) ->
+                     assert (packed_size sz <= Types.size ty);
+                     let n = packed_size sz in
+                     Eval_symbolic.eval_store ty final_addr sv
+                       (smemlen frame.inst) n
+                 )
+               in
+
+               (* let nv = Eval_symbolic.eval_store ty final_addr sv
+                *            (smemlen frame.inst) 4 in *)
+               let mem' = Smemory.store_sind_value mem nv in
+               let vs', es' = vs', [] in
+               (* Update memory with a store *)
+               let nframe = {frame with inst = insert_smemory frame.inst mem'} in
+               (* Path1: we store the value in secret memory *)
+               let res = if Z3_solver.is_sat (pclet, pc') mems then (
+                           (* print_endline "in is_sat1"; *)
+                           [{c with code = vs', es' @ List.tl es;
+                                    frame = nframe; 
+                                    pc = pclet,pc'}])
+                         else []
+               in
+               (* Path2: we store the value in non secret memory *)
+               let res = if Z3_solver.is_sat (pclet, pc'') mems then
+                           (let c =
+                              {c with observations =
+                                        CT_V_UNSAT((pclet,pc''), sv, mems, c.observations)} in
+                            (* print_endline "path2.";
+                             * svalue_to_string sv |> print_endline;
+                             * svalue_to_string final_addr |> print_endline; *)
+                            (* print_pc pc'' |> print_endline; *)
+                            if Z3_solver.is_v_ct_unsat (pclet, pc'') sv mems then
+                              {c with code = vs', es' @ List.tl es;
+                                      frame = nframe;
+                                      pc = pclet, pc''}:: res
+                            else failwith "Trying to write high values in low memory")
+                         else res
+               in
+               res
+             else failwith "The index does not satisfy CT."
+           )
+           else (
              let nv =
                (match sz with
-                | None -> Eval_symbolic.eval_store ty final_addr sv
-                            (smemlen frame.inst) (Types.size ty)
+                | None ->
+                   Eval_symbolic.eval_store ty final_addr sv
+                     (smemlen frame.inst) (Types.size ty)
                 | Some (sz) ->
                    assert (packed_size sz <= Types.size ty);
                    let n = packed_size sz in
@@ -631,39 +1369,14 @@ let rec step (c : config) : config list =
                )
              in
 
-             (* let nv = Eval_symbolic.eval_store ty final_addr sv
-              *            (smemlen frame.inst) 4 in *)
              let mem' = Smemory.store_sind_value mem nv in
              let vs', es' = vs', [] in
              (* Update memory with a store *)
              let nframe = {frame with inst = insert_smemory frame.inst mem'} in
-             (* Path1: we store the value in secret memory *)
-             let res = if Z3_solver.is_sat (pclet, pc') mems then (
-                         (* print_endline "in is_sat1"; *)
-                         [{c with code = vs', es' @ List.tl es;
-                                  frame = nframe; 
-                                  pc = pclet,pc'}])
-                       else []
-             in
-             (* Path2: we store the value in non secret memory *)
-             let res = if Z3_solver.is_sat (pclet, pc'') mems then
-                         (let c =
-                            {c with observations =
-                                      CT_V_UNSAT((pclet,pc''), sv, mems, c.observations)} in
-                          (* print_endline "path2.";
-                           * svalue_to_string sv |> print_endline;
-                           * svalue_to_string final_addr |> print_endline; *)
-                          (* print_pc pc'' |> print_endline; *)
-                          if Z3_solver.is_v_ct_unsat (pclet, pc'') sv mems then
-                            {c with code = vs', es' @ List.tl es;
-                                    frame = nframe;
-                                    pc = pclet, pc''}:: res
-                          else failwith "Trying to write high values in low memory")
-                       else res
-             in
-             res
-           else failwith "The index does not satisfy CT."
 
+             [{c with code = vs', es' @ List.tl es;
+                      frame = nframe }]
+           )
         (* | MemorySize, vs ->
          *   let mem = smemory frame.inst (0l @@ e.at) in
          *   let vs', es' = (Si32.of_int_s (Smemory.size mem)) :: vs, [] in
@@ -747,6 +1460,33 @@ let rec step (c : config) : config list =
     | Trapping msg, vs ->   
        print_endline "trapping";
        assert false
+
+    | Assert lvs, vs ->
+       print_endline "assert";
+       if assert_invar lvs c then
+         [{c with code = vs, List.tl es}]
+       else failwith "Assertion failed"
+    
+    | Havoc lvs, vs ->
+       print_endline "havoc";
+       let havc = havoc_vars lvs c in
+       [{havc with code = vs, List.tl es}]
+
+    | FirstPass  (n, es0, (vs', code')), vs ->
+       print_endline "first pass";
+       disable_ct := true;
+       let vs', es' = vs, [Label (n, es0, (vs', code'),
+                                  (pclet, pc)) @@ e.at] in
+       [{c with code = vs', es' @ List.tl es}]
+       (* failwith "FirstPass: not implemented" *)
+
+    | SecondPass  (n, es0, (vs', code')), vs ->
+       print_endline "second pass";
+       disable_ct := false;
+       let vs', es' = vs, [Label (n, es0, (vs', code'),
+                                  (pclet, pc)) @@ e.at] in
+       [{c with code = vs', es' @ List.tl es}]
+       (* failwith "SecondPass: not implemented" *)
 
     | Returning vs', vs ->
        Crash.error e.at "undefined frame"
