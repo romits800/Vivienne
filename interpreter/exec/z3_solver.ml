@@ -5,6 +5,25 @@ open Smt_type
 
 type rel_type = L of Expr.expr | H of Expr.expr * Expr.expr
 
+
+module ExprMem = Map.Make(struct
+                     type t = int
+                     let compare = compare
+                   end)
+let memmap = ref ExprMem.empty
+           
+module LetMap = Map.Make(struct
+                    type t = int
+                    let compare = compare
+                  end)
+let letmap = ref LetMap.empty
+
+module DefMap = Map.Make(struct
+                    type t = int
+                    let compare = compare
+                  end)
+let defmap = ref DefMap.empty
+
 let print_exp exp =
   (match exp with
       | L e ->
@@ -108,17 +127,6 @@ let extend ctx size v' = function
      propagate_policy_one (BitVector.mk_sign_ext ctx  size') v'
 
 
-module ExprMem = Map.Make(struct
-                  type t = int
-                  let compare = compare
-                end)
-let memmap = ref ExprMem.empty
-
-module LetMap = Map.Make(struct
-                    type t = int
-                    let compare = compare
-                  end)
-let letmap = ref LetMap.empty
 
 let get_size e =
   match e with
@@ -157,10 +165,22 @@ and si_to_expr pc size ctx mem si: rel_type  =
      let bv = BitVector.mk_sort ctx n  in
      L (Expr.mk_numeral_int ctx i bv)
   | Const (High i, size) ->
-     H (BitVector.mk_const_s ctx ("h1_" ^ string_of_int i) size,
-        BitVector.mk_const_s ctx ("h2_" ^ string_of_int i) size) 
+     (try
+        DefMap.find i !defmap
+      with Not_found -> 
+        let def = H (BitVector.mk_const_s ctx ("h1_" ^ string_of_int i) size,
+                     BitVector.mk_const_s ctx ("h2_" ^ string_of_int i) size) in
+        defmap := DefMap.add i def !defmap;
+        def
+     )
   | Const (Low i, size) ->
-     L (BitVector.mk_const_s ctx ("l_" ^ string_of_int i) size )
+     (try
+        DefMap.find i !defmap
+      with Not_found -> 
+        let def = L (BitVector.mk_const_s ctx ("l_" ^ string_of_int i) size ) in
+        defmap := DefMap.add i def !defmap;
+        def
+     )
   | App (f, ts) ->
      app_to_expr pc ts size ctx mem f
   | Let (i) ->
@@ -456,6 +476,7 @@ let init_solver () =
   Params.set_print_mode ctx Z3enums.PRINT_SMTLIB2_COMPLIANT;
   memmap := ExprMem.empty;
   letmap := LetMap.empty;
+  defmap := DefMap.empty;
   ctx
 
 
