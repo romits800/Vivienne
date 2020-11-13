@@ -2,7 +2,7 @@
 
 SCRIPT_PATH="`dirname \"$0\"`"
 pushd $SCRIPT_PATH
-WASM="/home/romi/didaktoriko/repo/wasm/test/symb_wasm/relsymb/interpreter/wasm"
+WASM="../../interpreter/wasm"
 
 check () {
     $2 &> /dev/null
@@ -30,4 +30,11 @@ check 14 "$WASM -i script_salsa20_fail.wast"
 check 15 "$WASM -i script_tea_pass.wast"
 check 16 "$WASM -i script_tea_fail.wast"
 check 17 "$WASM -i script_sha256.wast"
+check 18 "$WASM -i script_ext.wast"
+check 19 "$WASM -i script_wrap.wast"
+# tweetnacl
+check 20 "$WASM -i script_tweetnacl_core_hsalsa20.wast"
+check 21 "$WASM -i script_tweetnacl_core_salsa20.wast"
+check 22 "$WASM -i script_tweetnacl_poly1305.wast"
+
 popd
