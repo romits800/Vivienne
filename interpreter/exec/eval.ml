@@ -88,6 +88,7 @@ type config =
   abstract_loops: config list;
   stage : loop_stage;
   observations: obs_type;
+  counter : int;
 }
 and
 secret_type = int * int
@@ -104,7 +105,7 @@ let frame inst locals = {inst; locals}
 let config inst vs es =
   {frame = frame inst []; code = vs, es; budget = 300;
    pc = empty_pc(); msecrets = inst.secrets; loops = []; abstract_loops = [];
-   observations = OBSTRUE; stage = NONE }
+   observations = OBSTRUE; stage = NONE; counter = 0}
 
 let plain e = Plain e.it @@ e.at
 
@@ -118,7 +119,7 @@ let table (inst : module_inst) x = lookup "table" inst.tables x
 let memory (inst : module_inst) x = lookup "memory" inst.memories x
 let smemory (inst : module_inst) x = lookup "smemory" inst.smemories x
 let smemlen (inst : module_inst) =  inst.smemlen
-let global (inst : module_inst) x = lookup "global" inst.globals x
+(* let global (inst : module_inst) x = lookup "global" inst.globals x *)
 let sglobal (inst : module_inst) x = lookup "sglobal" inst.sglobals x
 let local (frame : frame) x = lookup "local" frame.locals x
 
@@ -503,6 +504,7 @@ let rec check_run_normal_loops loops =
 (*TODO(Romy): Implement debug flag etc*)
 
 let rec step (c : config) : config list =
+  (* print_endline ("step:" ^ (string_of_int c.counter)); *)
   let {frame; code = vs, es; pc = pclet, pc; _} = c in
   let e = List.hd es in
   (* print_endline "step:";
@@ -728,7 +730,7 @@ let rec step (c : config) : config list =
            [{c with code = vs', es' @ List.tl es}]
 
         | Call x, vs ->
-           (* print_endline "call"; *)
+           (* print_endline ("call:" ^ (string_of_int c.counter)); *)
            let vs', es' = vs, [Invoke (func frame.inst x) @@ e.at] in
            [{c with code = vs', es' @ List.tl es}]
 
@@ -740,7 +742,19 @@ let rec step (c : config) : config list =
          *     vs, [Invoke func @@ e.at] *)
 
         | Drop, v :: vs' ->
-           (* print_endline "drop"; *)
+           (* print_endline ("drop:" ^ (string_of_int c.counter));
+            * print_endline (string_of_int (List.length frame.inst.smemories));
+            * svalue_to_string v |> print_endline; *)
+           (* Pc_type.print_pc pc |> print_endline; *)
+           (* let mem = (frame.inst.smemories, smemlen frame.inst) in
+            * (match v with
+            *  | SI32 v -> 
+            *     let val0 = SI32 (Si32.ne v Si32.zero) in
+            *     let pc' = PCAnd( val0, pc) in
+            *     (if (Z3_solver.is_unsat (pclet, pc') mem) then
+            *        print_endline "unsat"
+            *      else print_endline "sat")
+            *  | _ -> print_endline "wrong type"); *)
            let vs', es' = vs', [] in
            [{c with code = vs', es' @ List.tl es}]
            
@@ -752,7 +766,7 @@ let rec step (c : config) : config list =
            [{c with code = vs', es' @ List.tl es }]
            
         | LocalGet x, vs ->
-           (* print_endline "localget"; *)
+           (* print_endline ("localget:" ^ (string_of_int c.counter)); *)
            (* string_of_int (Int32.to_int x.it) |> print_endline; *)
            let vs', es' = (local frame x) :: vs, [] in
            (* svalue_to_string (local frame x) |> print_endline; *)
@@ -762,7 +776,7 @@ let rec step (c : config) : config list =
            [{c with code = vs', es' @ List.tl es}]
 
         | LocalSet x, v :: vs' ->
-           (* print_endline "localset"; *)
+           (* print_endline ("localset:" ^ (string_of_int c.counter)); *)
            (* svalue_to_string v |> print_endline; *)
            (* string_of_int (Int32.to_int x.it) |> print_endline; *)
 
@@ -830,10 +844,12 @@ let rec step (c : config) : config list =
 
         | Load {offset; ty; sz; _}, si :: vs' ->
            (* print_endline "load"; *)
+           (* print_endline ("load:" ^ (string_of_int c.counter)); *)
            let imem = smemory frame.inst (0l @@ e.at) in
 
            let frame = {frame with
-                         inst = update_smemory frame.inst imem (0l @@ e.at)} in           
+                         inst = update_smemory frame.inst imem (0l @@ e.at)} in
+           
            let addr =
              (match si with
               | SI32 v -> v
@@ -841,6 +857,7 @@ let rec step (c : config) : config list =
              ) in (* I64_convert.extend_i32_u i in *)
            let offset = Int32.to_int offset in        
            let mem = (frame.inst.smemories, smemlen frame.inst) in
+
            (match c.loops with
             | [] -> (* Normal execution runs directly *)
                let c = {c with observations = CT_V_UNSAT((pclet, pc), si,
@@ -869,7 +886,6 @@ let rec step (c : config) : config list =
                     *    [{c with code = vs', es' @ List.tl es}]
                     * ) *)
                    in
-
                    let vs', es' =  nv :: vs', [] in 
                    let res = if Z3_solver.is_sat (pclet, pc') mem then(
                                [{c with code = vs', es' @ List.tl es;
@@ -877,6 +893,7 @@ let rec step (c : config) : config list =
                                         pc = pclet,pc'}])
                              else []
                    in
+
                    let res = if Z3_solver.is_sat (pclet, pc'') mem then
                                (* low values *)
                                {c with code = vs', es' @ List.tl es;
@@ -979,10 +996,10 @@ let rec step (c : config) : config list =
                              (let c =
                                 {c with observations =
                                           CT_V_UNSAT((pclet,pc''), sv, mems, c.observations)} in
-                              (* print_endline "path2."; *)
-                              (* svalue_to_string sv |> print_endline; *)
-                              (* svalue_to_string si |> print_endline; *)
-                              (* print_pc pc'' |> print_endline; *)
+                              (* print_endline "path2.";
+                               * svalue_to_string sv |> print_endline;
+                               * svalue_to_string final_addr |> print_endline;
+                               * print_pc pc'' |> print_endline; *)
                               if Z3_solver.is_v_ct_unsat (pclet, pc'') sv mems then
                                 {c with code = vs', es' @ List.tl es;
                                         frame = nframe;
@@ -1117,13 +1134,18 @@ let rec step (c : config) : config list =
                 nv :: vs', []
               with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
            [{c with code = vs', es' @ List.tl es}]
-        (* | Convert cvtop, v :: vs' ->
-         *   (try Eval_numeric.eval_cvtop cvtop v :: vs', []
-         *   with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) *)
-
+        | Convert cvtop, v :: vs' ->
+           let vs', es' = 
+             (try Eval_symbolic.eval_cvtop cvtop v :: vs', []
+              with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at])
+           in [{c with code = vs', es' @ List.tl es}]
+           
         | _ ->
            let s1 = Svalues.string_of_values (List.rev vs) in
            let s2 = Types.string_of_svalue_types (List.map Svalues.type_of (List.rev vs)) in
+           let no = Arrange.instr (e' @@ e.at) in
+           (match no with | Sexpr.Node(h,inner) -> print_endline h
+                          | _ -> print_endline "no node");
            Crash.error e.at
              ("missing or ill-typed operand on stack (" ^ s1 ^ " : " ^ s2 ^ ")")
        )
@@ -1138,7 +1160,8 @@ let rec step (c : config) : config list =
        Crash.error e.at "undefined label"
 
     | Label (n, es0, (vs', []), pc'), vs ->
-       (* print_endline "lab"; *)
+       (* print_endline ("lab:" ^ (string_of_int c.counter));
+        * print_endline (string_of_int (List.length frame.inst.smemories)); *)
        let vs', es' = vs' @ vs, [] in
        [{c with code = vs', es' @ List.tl es}]
        
@@ -1148,24 +1171,26 @@ let rec step (c : config) : config list =
        [{c with code = vs', es' @ List.tl es}]
 
     | Label (n, es0, (vs', {it = Returning vs0; at} :: es'), pc'), vs ->
-       (* print_endline "lab3"; *)
+       (* print_endline ("lab3:" ^ (string_of_int c.counter)); *)
        let vs', es' = vs, [Returning vs0 @@ at] in
        [{c with code = vs', es' @ List.tl es}]
 
     | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es'), pc'), vs ->
-       (* print_endline "lab4"; *)
+       (* print_endline ("lab4:" ^ (string_of_int c.counter)); *)
        let vs', es' = take n vs0 e.at @ vs, List.map plain es0 in
        [{c with code = vs', es' @ List.tl es}]
 
     | Label (n, es0, (vs', {it = Breaking (k, vs0); at} :: es'), pc'), vs ->
-       (* print_endline "lab5"; *)
+       (* print_endline ("lab5:" ^ (string_of_int c.counter)); *)
        let vs', es' = vs, [Breaking (Int32.sub k 1l, vs0) @@ at] in
        [{c with code = vs', es' @ List.tl es}]
 
     | Label (n, es0, code', pc'), vs ->
-       (* print_endline "lab6"; *)
+       (* print_endline ("lab6:" ^ (string_of_int c.counter)); *)
+       (* print_endline (string_of_int (List.length frame.inst.smemories)); *)
        (*TODO(Romy): not sure if correct to change the pc *)
-       let c' = step {c with code = code'; pc = pc'} in
+       let c' = step {c with code = code'; pc = pc'; counter = c.counter + 1} in
+       (* print_endline ("lab6_end:" ^ (string_of_int c.counter)); *)
        List.map (fun ci -> {c with code = vs,
                                           [Label (n, es0, ci.code, ci.pc) @@ e.at]
                                           @ List.tl es;
@@ -1175,9 +1200,19 @@ let rec step (c : config) : config list =
          }) c'
 
     | Frame (n, frame', (vs', []), pc), vs ->
-       (* print_endline "frame1"; *)
+       (* print_endline ("frame1:" ^ (string_of_int c.counter));
+        * print_endline (string_of_int (List.length frame.inst.smemories));
+        * print_endline (string_of_int (List.length frame'.inst.smemories)); *)
        let vs', es' = vs' @ vs, [] in
-       [{c with code = vs', es' @ List.tl es}]
+       [{c with code = vs', es' @ List.tl es;
+                frame = {frame
+                        with inst = {frame.inst
+                                    with smemories = frame'.inst.smemories;
+                                         smemlen = frame'.inst.smemlen
+                                    }
+                        };
+                pc = pc
+       }]
 
     | Frame (n, frame', (vs', {it = Trapping msg; at} :: es'), _), vs ->
        (* print_endline "frame2"; *)
@@ -1186,17 +1221,23 @@ let rec step (c : config) : config list =
 
     | Frame (n, frame', (vs', {it = Returning vs0; at} :: es'), _), vs ->
        (* print_endline "frame3"; *)
+       (* print_endline ("frame3:" ^ (string_of_int c.counter)); *)
        let vs', es' = take n vs0 e.at @ vs, [] in
        [{c with code = vs', es' @ List.tl es}]
 
     | Frame (n, frame', code', pc'), vs ->
-       (* print_endline "frame4"; *)
+       (* print_endline ("frame4:" ^ (string_of_int c.counter));
+        * print_endline (string_of_int (List.length frame.inst.smemories));
+        * print_endline (string_of_int (List.length frame'.inst.smemories)); *)
        let c' = step {c with frame = frame'; code = code';
-                             budget = c.budget - 1; pc = pc'} in
+                             budget = c.budget - 1; pc = pc';
+                             counter = c.counter + 1} in
+       (* print_endline ("frame4_end:" ^ (string_of_int c.counter)); *)
        (* print_endline "frame4_end"; *)
        (* TODO(Romy): the pc etc  should probably not be here *)
        List.map (fun ci ->
-           {c with code = vs, [Frame (n, ci.frame, ci.code, ci.pc) @@ e.at] @ List.tl es;
+           {c with code = vs, [Frame (n, ci.frame,
+                                      ci.code, ci.pc) @@ e.at] @ List.tl es;
                    (* pc = ci.pc; *)
                    observations = ci.observations;
                    (* frame = ci.frame *)
@@ -1207,15 +1248,26 @@ let rec step (c : config) : config list =
 
     | Invoke func, vs ->
        (* print_endline "inv2"; *)
+       (* print_endline ("inv:" ^ (string_of_int c.counter)); *)
        let FuncType (ins, out) = func_type_of func in
        let n1, n2 = Lib.List32.length ins, Lib.List32.length out in
        let args, vs' = take n1 vs e.at, drop n1 vs e.at in
        (match func with
         | Func.AstFunc (t, inst', f) ->
            let rest = List.map value_to_svalue_type f.it.locals in
-           (* let locals' = List.rev args @ List.map Svalues.default_value rest in *) 
+
            let locals' = List.rev args @ List.map Svalues.default_value rest in
-           let frame' = {inst = !inst'; locals = locals'} in
+           (* TODO(Romy): check if this is correct - 
+              using current memory instead of old *)
+           let nsmem = if (List.length frame.inst.smemories == 0) then !inst'.smemories
+                       else frame.inst.smemories
+           in
+           let nmemlen = List.length nsmem in
+           let inst' = {!inst' with smemories = nsmem;
+                                    smemlen =  nmemlen;
+                       } in
+                                    (* sglobals = frame.inst.sglobals} in *)
+           let frame' = {inst = inst'; locals = locals'} in
            let instr' = [Label (n2, [], ([], List.map plain f.it.body), c.pc) @@ f.at] in 
            let vs', es' = vs', [Frame (n2, frame', ([], instr'), c.pc) @@ e.at] in
            [{c with code = vs', es' @ List.tl es}]
@@ -1238,7 +1290,7 @@ let filter_step (c: config) : config list option =
   | vs, {it = Trapping msg; at } :: _ ->
      Trap.error at msg
   | vs, es ->
-     let st = step c in
+     let st = step {c with counter = c.counter + 1} in
      Some st
 
 let filter_done (c: config) : pc_ext option = 
@@ -1284,7 +1336,7 @@ let eval_dfs (cs : config list) : pc_ext list =
         | vs, [] -> eval_dfs_i cs' (c.pc::acc)
         | vs, {it = Trapping msg; at} :: _ -> Trap.error at msg
         | vs, es -> (
-           let ncs = step c in
+           let ncs = step {c with counter = c.counter + 1} in
            eval_dfs_i (ncs @ cs') acc
         )
        )
@@ -1393,7 +1445,7 @@ let create_export (inst : module_inst) (ex : export) : export_inst =
     | TableExport x -> ExternTable (table inst x)
     | MemoryExport x -> ExternMemory (memory inst x)
     | SmemoryExport x -> ExternSmemory (smemory inst x)
-    | GlobalExport x -> ExternGlobal (global inst x)
+    | GlobalExport x -> ExternSglobal (sglobal inst x)
   in name, ext
 
 
@@ -1497,15 +1549,18 @@ let init (m : module_) (exts : extern list) : module_inst =
       memories = inst0.memories @ List.map (create_memory inst0) memories;
       smemories = inst0.smemories @ List.map (create_smemory inst0) smemories;
       smemlen = List.length  (inst0.smemories) + List.length(smemories);
-      globals = inst0.globals;
+      globals = inst0.globals; (* @ List.map (create_global inst0) globals; *)
       sglobals = inst0.sglobals @ List.map (create_sglobal inst0) globals;
       (* msecrets = inst0.msecrets @ List.map (create_secrets inst0) secrets; *)
                   (* @ List.map (create_global inst0) globals; *)
     }
   in
+
   let inst1 = List.fold_left (init_smemory true) inst1 secrets in
   let inst1 = List.fold_left (init_smemory false) inst1 public in
+  
   let inst = {inst1 with exports = List.map (create_export inst1) exports} in
+
   List.iter (init_func inst) fs;
   
   let init_elems = List.map (init_table inst) elems in

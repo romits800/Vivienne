@@ -135,6 +135,19 @@ let letmap = ref LetMap.empty
  *      test_si (count+1) i
  *   | _ -> failwith "Not supported." *)
 
+let get_size e =
+  match e with
+  | L e ->
+     let sort = Expr.get_sort e in
+     BitVector.get_size sort
+  | H (e1,e2) ->
+     let sort1 = Expr.get_sort e1 in
+     let sort2 = Expr.get_sort e1 in
+     let size1 = BitVector.get_size sort1 in
+     let size2 = BitVector.get_size sort2 in
+     assert(size1 == size2);
+     size1
+     
 let rec update_mem pc ctx mem a s =
   (* print_endline "update_mem"; *)
   match s with
@@ -158,10 +171,12 @@ and si_to_expr pc size ctx mem si: rel_type  =
   | BitVec (i,n) ->
      let bv = BitVector.mk_sort ctx n  in
      L (Expr.mk_numeral_int ctx i bv)
-  | Const (High i) ->
+  | Const (High i, size) ->
      H (BitVector.mk_const_s ctx ("h1_" ^ string_of_int i) size,
         BitVector.mk_const_s ctx ("h2_" ^ string_of_int i) size) 
-  | Const (Low i) ->
+  | Const (Low i, size) ->
+     (* print_endline "const low"; *)
+     (* print_endline ((string_of_int size) ^ " " ^ ("l_" ^ string_of_int i)); *)
      L (BitVector.mk_const_s ctx ("l_" ^ string_of_int i) size )
   | App (f, ts) ->
      app_to_expr pc ts size ctx mem f
@@ -188,7 +203,12 @@ and si_to_expr pc size ctx mem si: rel_type  =
           let arr1 = Z3Array.mk_const_s ctx  "mem1" bva bvd in
           let arr2 = Z3Array.mk_const_s ctx  "mem2" bva bvd in
           let newmem = H (arr1, arr2) in
+          (* print_endline "loadnth";
+           * print_endline (string_of_int  (memlen));
+           * print_endline (string_of_int  (memi));
+           * print_endline (string_of_int  (List.length smem)); *)
           let tmem = Lib.List32.nth smem (Int32.of_int (memlen - memi)) in
+          (* print_endline "loadnth3"; *)
           let stores = Smemory.get_stores tmem in
           (* print_endline "STores"; *)
           (* string_of_int (List.length stores) |> print_endline; *)
@@ -400,13 +420,22 @@ and app_to_expr pc ts size ctx mem f =
 
   | ExtendS(i), t::[] ->
      let e = si_to_expr pc size ctx mem t in
-     propagate_policy_one (BitVector.mk_sign_ext ctx i) e
-  | ExtendS _, _ -> failwith "Not valid bitwise rotl."
+     let size = get_size e in
+     propagate_policy_one (BitVector.mk_sign_ext ctx (i-size)) e
+  | ExtendS _, _ -> failwith "Not valid bitwise extsl."
 
   | ExtendU(i), t::[] ->
      let e = si_to_expr pc size ctx mem t in
-     propagate_policy_one (BitVector.mk_zero_ext ctx i) e
-  | ExtendU _, _ -> failwith "Not valid bitwise rotl."
+     let size = get_size e in
+     propagate_policy_one (BitVector.mk_zero_ext ctx (i-size)) e
+  | ExtendU _, _ -> failwith "Not valid bitwise extul."
+
+  (* Should be *)
+  | Wrap(i), t::[] ->
+     let e = si_to_expr pc size ctx mem t in
+     (* let size = get_size e in   (\*  *\) *)
+     propagate_policy_one (BitVector.mk_extract ctx 31 0) e
+  | Wrap _, _ -> failwith "Not valid bitwise rotl."
 
   (* | BvDiv, t1::t2::[] ->
    *    let e1 = si_to_expr pc size ctx mem t1 in
@@ -464,42 +493,73 @@ let init_solver () =
   memmap := ExprMem.empty;
   letmap := LetMap.empty;
   ctx
-  
-let is_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) =
-  (* print_endline "is_unsat"; *)
-  (* Pc_type.print_pc pc |> print_endline;
-   * svalue_to_string sv |> print_endline; *)
+
+
+let is_unsat (pc : pc_ext) (mem: Smemory.t list * int) =
+
   let ctx = init_solver() in
 
-  let v = sv_to_expr pc sv ctx mem in
   let pc = pc_to_expr pc ctx mem in
 
   let g = Goal.mk_goal ctx true false false in
   
-  (match v with
-  | L v ->
-     (match pc with
-      | L p ->  Goal.add g [p; v ]
-      | H (pc1,pc2) ->  Goal.add g [pc1; v ]
-     )
-  | H (v1,v2) ->
-     (match pc with
-      | L p ->  Goal.add g [p; v1 ]
-      | H (pc1,pc2) ->  Goal.add g [pc1; v1 ]
-     )
+  (match pc with
+   | L p ->  Goal.add g [p ]
+   | H (pc1,pc2) ->  Goal.add g [pc1 ]
   );
   (* Printf.printf "Goal: %s\n" (Goal.to_string g); *)
+
   let solver = Solver.mk_solver ctx None in
   List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
   match (Solver.check solver []) with
-  | Solver.UNSATISFIABLE -> true
+  | Solver.UNSATISFIABLE ->
+     true
   | _ ->
-     let model = Solver.get_model solver in
-     (match model with
-      | None -> print_endline "None"
-      | Some m -> print_endline "Model"; print_endline (Model.to_string m)
-     );
+     (* let model = Solver.get_model solver in
+      * (match model with
+      *  | None -> print_endline "None"
+      *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
+      * ); *)
      false
+
+
+
+
+(* let is_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) =
+ *   (\* print_endline "is_unsat"; *\)
+ *   (\* Pc_type.print_pc pc |> print_endline;
+ *    * svalue_to_string sv |> print_endline; *\)
+ *   let ctx = init_solver() in
+ * 
+ *   let v = sv_to_expr pc sv ctx mem in
+ *   let pc = pc_to_expr pc ctx mem in
+ * 
+ *   let g = Goal.mk_goal ctx true false false in
+ *   
+ *   (match v with
+ *   | L v ->
+ *      (match pc with
+ *       | L p ->  Goal.add g [p; v ]
+ *       | H (pc1,pc2) ->  Goal.add g [pc1; v ]
+ *      )
+ *   | H (v1,v2) ->
+ *      (match pc with
+ *       | L p ->  Goal.add g [p; v1 ]
+ *       | H (pc1,pc2) ->  Goal.add g [pc1; v1 ]
+ *      )
+ *   );
+ *   (\* Printf.printf "Goal: %s\n" (Goal.to_string g); *\)
+ *   let solver = Solver.mk_solver ctx None in
+ *   List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
+ *   match (Solver.check solver []) with
+ *   | Solver.UNSATISFIABLE -> true
+ *   | _ ->
+ *      let model = Solver.get_model solver in
+ *      (match model with
+ *       | None -> print_endline "None"
+ *       | Some m -> print_endline "Model"; print_endline (Model.to_string m)
+ *      );
+ *      false *)
 
 
   
@@ -582,9 +642,10 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
       
       List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
       (* print_endline "is_v_ct_unsat2-bef solv"; *)
-      Printf.printf "Solver v_ct: %s\n" (Solver.to_string solver);
+      (* Printf.printf "Solver v_ct: %s\n" (Solver.to_string solver); *)
       match (Solver.check solver []) with
       | Solver.UNSATISFIABLE ->
+         (* print_endline "Unsat after"; *)
          true
       (* | Solver.UNKNOWN  -> false *)    
       | _ ->
@@ -600,11 +661,12 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
 
 let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
   (* check only satisfiability *)
-  (* print_endline "is_sat"; *)
+  
   let ctx = init_solver() in
   
   (* print_endline (print_pc pc); *)
   let v = pc_to_expr pc ctx mem in
+
   let g = Goal.mk_goal ctx true false false in
   (match v with
    | L v -> Goal.add g [v]
@@ -613,10 +675,10 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
   (* Printf.printf "Goal: %s\n" (Goal.to_string g); *)
   let solver = Solver.mk_solver ctx None in
   List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
+  (* Printf.printf "Solver is_sat: %s\n" (Solver.to_string solver); *)
   let check_solver = Solver.check solver [] in
   match check_solver with
-  | Solver.SATISFIABLE
-    | Solver.UNKNOWN  -> true  
+  | Solver.SATISFIABLE -> true
   | _ -> false
 
 

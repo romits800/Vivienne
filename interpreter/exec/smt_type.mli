@@ -28,6 +28,7 @@ type func =
 
   | ExtendS of int
   | ExtendU of int
+  | Wrap of int
 
 type sort = 
   | Sort of identifier
@@ -39,7 +40,7 @@ type term =
   | Int of int
   | Float of float
   | BitVec of int * int (* bool + number of bits *)
-  | Const of identifier
+  | Const of identifier * int
   (* | Multi of term list * identifier * int (\* term list, high/low, number_of_elements *\) *)
   | Load of  term * int * int * Types.extension option (* index, memory, size, ext *)
   | Store of  term * term * int * int (* index, value, memory, size *)
@@ -68,8 +69,8 @@ val is_low : term -> bool
 val is_high : term -> bool
 val is_int : term -> bool
 
-val high_to_term : unit -> term
-val low_to_term : unit -> term
+val high_to_term : int -> term
+val low_to_term : int -> term
 
 val term_to_int : term -> int
 val bool_to_term : bool -> term
@@ -131,6 +132,7 @@ val rotri : term -> int -> term
 
 val extsi : term -> int -> term
 val extui : term -> int -> term
+val wrap : term -> int -> term
 
 val merge : solv_type -> term -> term -> (mergetype * mergetype) option
 val merge_to_string :  mergetype -> string

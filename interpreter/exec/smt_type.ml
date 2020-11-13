@@ -28,6 +28,7 @@ type func =
 
   | ExtendS of int
   | ExtendU of int
+  | Wrap of int
           
 type sort = 
   | Sort of identifier
@@ -39,7 +40,7 @@ type term =
   | Int of int
   | Float of float
   | BitVec of int * int (* bool + number of bits *)
-  | Const of identifier
+  | Const of identifier * int
   (* | Multi of term list * identifier * int (\* term list, high/low, number_of_elements *\) *)
   (* index in memory and index of memory - because we cannot have the memory here*)
   | Load of term * int * int * Types.extension option
@@ -75,7 +76,7 @@ let float_to_term f = Float f
   
 let rec is_high =
   function
-  | Const (High _) -> true
+  | Const (High _, _) -> true
   | App (f, t::ts) -> is_high_all ts
   (* | Let (t1, t2) -> is_high t1 || is_high t2 *)
   | _ -> false
@@ -102,11 +103,11 @@ let get_low () =
   let newc = new_const() in
   Low newc
                     
-let high_to_term () =
-  Const (get_high())
+let high_to_term size =
+  Const (get_high(), size)
   
-let low_to_term () =
-  Const (get_low())
+let low_to_term size =
+  Const (get_low(), size)
                    
 (* let list_to_term ts =
  *   let id = if is_high_all ts then get_high () else get_low () in
@@ -250,6 +251,8 @@ let rotri t i = App (Rotri(i), [t])
 
 let extsi t i = App (ExtendS(i), [t])
 let extui t i = App (ExtendU(i), [t])
+              
+let wrap t i = App (Wrap(i), [t])
 
 
 
@@ -314,10 +317,11 @@ let func_to_string func =
   | BvSgt -> "BvSgt"
   | Rotl -> "Rotl"
   | Rotr -> "Rotr"
-  | Rotli i -> "Rotl" ^ string_of_int i
-  | Rotri i -> "Rotr" ^ string_of_int i
-  | ExtendS i -> "ExtendS" ^ string_of_int i
-  | ExtendU i -> "ExtendU" ^ string_of_int i
+  | Rotli i -> "Rotl " ^ string_of_int i
+  | Rotri i -> "Rotr " ^ string_of_int i
+  | ExtendS i -> "ExtendS " ^ string_of_int i
+  | ExtendU i -> "ExtendU " ^ string_of_int i
+  | Wrap i -> "Wrap " ^ string_of_int i
            
 let rec term_to_string (t : term) : string =
   match t with
@@ -330,7 +334,7 @@ let rec term_to_string (t : term) : string =
   | Int i -> string_of_int i
   | Float f ->  string_of_float f
   | BitVec (i, n) -> "BitVec(" ^ string_of_int i ^ ", " ^ string_of_int n ^ ")"
-  | Const id ->  identifier_to_string id
+  | Const (id, size) ->  identifier_to_string id ^ "(" ^ string_of_int size ^ ")"
   | App (f, ts) -> func_to_string f ^ " (" ^
                      List.fold_left (fun acc -> fun t -> acc ^ term_to_string t ^ ",") "" ts ^ ")" 
   (* | Let (t1, t2) -> "let " ^ term_to_string t1 ^ "=" ^ term_to_string t2 *)

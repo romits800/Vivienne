@@ -30,8 +30,8 @@ sig
   val int_to_intterm : int -> term
   val int_to_bvterm : int -> int -> term
   val float_to_term : float -> term
-  val high_to_term : unit -> term
-  val low_to_term : unit -> term
+  val high_to_term : int -> term
+  val low_to_term : int -> term
 
   val is_high : term -> bool
   val is_low : term -> bool
@@ -44,48 +44,48 @@ sig
   (* val const : string -> term *)
   val equals : term -> term -> term
 
-  val load : term -> int -> int -> Types.extension option -> term
+  val load  : term -> int -> int -> Types.extension option -> term
   val store : term -> term -> int -> int -> term
     
   val and_ : term -> term -> term
-  val or_ : term -> term -> term
+  val or_  : term -> term -> term
   val not_ : term -> term
-  val ite : term -> term -> term -> term
+  val ite  : term -> term -> term -> term
   val implies : term -> term -> term
-  val add : term -> term -> term
-  val sub : term -> term -> term
-  val mul : term -> term -> term
-  val div : term -> term -> term
-  val lt : term -> term -> term
-  val gt : term -> term -> term
-  val lte : term -> term -> term
-  val gte : term -> term -> term
+  val add  : term -> term -> term
+  val sub  : term -> term -> term
+  val mul  : term -> term -> term
+  val div  : term -> term -> term
+  val lt   : term -> term -> term
+  val gt   : term -> term -> term
+  val lte  : term -> term -> term
+  val gte  : term -> term -> term
 
   (* val bv_sort : int -> sort *)
 
-  val bv : int -> int -> term
-  val bvadd : term -> term -> term
-  val bvsub : term -> term -> term
-  val bvmul : term -> term -> term
+  val bv     : int -> int -> term
+  val bvadd  : term -> term -> term
+  val bvsub  : term -> term -> term
+  val bvmul  : term -> term -> term
   val bvurem : term -> term -> term
   val bvsrem : term -> term -> term
   val bvsmod : term -> term -> term
-  val bvdiv: term -> term -> term (* doesn't exist *)
-  val bvshl : term -> term -> term
+  val bvdiv  : term -> term -> term (* doesn't exist *)
+  val bvshl  : term -> term -> term
   val bvlshr : term -> term -> term
   val bvashr : term -> term -> term
-  val bvor : term -> term -> term
-  val bvand : term -> term -> term
-  val bvxor : term -> term -> term
+  val bvor   : term -> term -> term
+  val bvand  : term -> term -> term
+  val bvxor  : term -> term -> term
   val bvnand : term -> term -> term
-  val bvnor : term -> term -> term
+  val bvnor  : term -> term -> term
   val bvxnor : term -> term -> term
-  val bvneg : term -> term
-  val bvnot : term -> term
+  val bvneg  : term -> term
+  val bvnot  : term -> term
 
-  val rotl : term -> term -> term
+  val rotl  : term -> term -> term
   val rotli : term -> int -> term
-  val rotr : term -> term -> term
+  val rotr  : term -> term -> term
   val rotri : term -> int -> term
 
   (* Not implemented *)
@@ -100,6 +100,7 @@ sig
     
   val extsi : term -> int -> term
   val extui : term -> int -> term
+  val wrap  : term -> int -> term
 
   val term_to_string : term -> string
   val merge : solv_type -> term -> term -> (mergetype * mergetype) option
@@ -145,6 +146,7 @@ sig
   val popcnt : t -> t
   val extend_s : int -> t -> t
   val extend_u : int -> t -> t
+  val wrap : int -> t -> t
   val eqz : t -> t
   val eq : t -> t -> t
   val ne : t -> t -> t
@@ -328,6 +330,7 @@ struct
 
   let extend_s n x = Rep.extsi x n
   let extend_u n x = Rep.extui x n
+  let wrap n x = Rep.wrap x n
     (* let shift = Rep.bitwidth - n in
      * Rep.shift_right (Rep.shift_left x shift) shift *)
 
@@ -348,8 +351,10 @@ struct
   let int_of_int = Rep.int_to_intterm
   let bv_of_int = Rep.int_to_bvterm
   let of_float = Rep.float_to_term
-  let of_high = Rep.high_to_term
-  let of_low = Rep.low_to_term
+  let of_high () =
+    Rep.high_to_term Rep.size
+  let of_low () =
+    Rep.low_to_term Rep.size
 
   let is_high = Rep.is_high
   let is_low = Rep.is_low
