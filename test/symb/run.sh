@@ -25,16 +25,21 @@ check 9 "$WASM -i script_mem_stores.wast"
 check 10 "$WASM -i script_call.wast"
 check 11 "$WASM -i script_mem_operations_char_nonfailure.wast"
 check 12 "$WASM -i script_mem_operations_char_failure.wast"
+
+# ctwasm examples
 check 13 "$WASM -i script_salsa20_pass.wast"
 check 14 "$WASM -i script_salsa20_fail.wast"
 check 15 "$WASM -i script_tea_pass.wast"
 check 16 "$WASM -i script_tea_fail.wast"
 check 17 "$WASM -i script_sha256.wast"
+
 check 18 "$WASM -i script_ext.wast"
 check 19 "$WASM -i script_wrap.wast"
+
 # tweetnacl
 check 20 "$WASM -i script_tweetnacl_core_hsalsa20.wast"
 check 21 "$WASM -i script_tweetnacl_core_salsa20.wast"
 check 22 "$WASM -i script_tweetnacl_poly1305.wast"
 
+check 23 "$WASM -i script_else.wast"
 popd
