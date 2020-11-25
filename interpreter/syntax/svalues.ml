@@ -33,7 +33,11 @@ let value_to_svalue_type = function
               
 (* Conversion *)
 
-let value_of_bool b = SI32 (if b then 1l else 0l)
+let svalue32_of_bool v =
+  match v with
+  | SI32 _ -> v  
+  | SI64 v -> SI32 (Si64.wrap 32 v)
+  | _ -> failwith "not expected float in condition"
 
 let string_of_value = function
   | SI32 i -> Si32.to_string_s i

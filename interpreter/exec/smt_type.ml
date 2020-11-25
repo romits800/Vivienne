@@ -66,8 +66,8 @@ let new_const () =
  * 
  * val array_sort : sort -> sort -> sort *)
 
-let zero = BitVec (0, 32)
-let one = BitVec (1, 32)
+let zero size = BitVec (0, size)
+let one size = BitVec (1, size)
          
 let int_to_intterm i = Int i
 let int_to_bvterm i n = BitVec (i,n)

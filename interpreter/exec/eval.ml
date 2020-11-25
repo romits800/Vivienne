@@ -41,6 +41,10 @@ let numeric_error at = function
     Crash.error at
       ("type error, expected " ^ Types.string_of_value_type t ^ " as operand " ^
        string_of_int i ^ ", got " ^ Types.string_of_value_type (Values.type_of v))
+  | Eval_symbolic.TypeError (i, v, t) ->
+    Crash.error at
+      ("type error, expected " ^ Types.string_of_svalue_type t ^ " as operand " ^
+       string_of_int i ^ ", got " ^ Types.string_of_svalue_type (Svalues.type_of v))
   | exn -> raise exn
 
 
@@ -615,14 +619,14 @@ let rec step (c : config) : config list =
         | Test testop, v :: vs' ->
            (* print_endline "testop"; *)
            let vs', es' =
-             (try (Eval_symbolic.eval_testop testop v) :: vs', []
+             (try (svalue32_of_bool (Eval_symbolic.eval_testop testop v)) :: vs', []
               with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
            [{c with code = vs', es' @ List.tl es}]
            
         | Compare relop, v2 :: v1 :: vs' ->
            (* print_endline "relop"; *)
            let vs', es' =
-             (try (Eval_symbolic.eval_relop relop v1 v2) :: vs', []
+             (try (svalue32_of_bool (Eval_symbolic.eval_relop relop v1 v2)) :: vs', []
               with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
            [{c with code = vs', es' @ List.tl es}]
         | Unary unop, v :: vs' ->
@@ -657,7 +661,7 @@ let rec step (c : config) : config list =
              ("missing or ill-typed operand on stack (" ^ s1 ^ " : " ^ s2 ^ ")")
        )
 
-    | Trapping msg, vs ->
+    | Trapping msg, vs ->   
        assert false
 
     | Returning vs', vs ->

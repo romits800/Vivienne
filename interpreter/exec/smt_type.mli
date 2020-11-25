@@ -56,8 +56,8 @@ type solv_type = TGT | TGE | TLT | TLE | TNONE
 (* val int_sort : sort
  * val bool_sort : sort
  * val array_sort : sort -> sort -> sort *)
-val zero: term
-val one: term
+val zero: int -> term
+val one: int -> term
 
 val int_to_intterm : int -> term
 val int_to_bvterm : int -> int -> term

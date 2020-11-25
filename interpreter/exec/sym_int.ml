@@ -24,8 +24,8 @@ sig
    * val array_sort : sort -> sort -> sort *)
   
   val size: int
-  val zero: term
-  val one: term
+  val zero: int -> term
+  val one: int -> term
     
   val int_to_intterm : int -> term
   val int_to_bvterm : int -> int -> term
@@ -221,8 +221,8 @@ struct
   (* let of_bits x = x
    * let to_bits x = x *)
 
-  let zero = Rep.zero
-  let one = Rep.one
+  let zero = Rep.zero Rep.size
+  let one = Rep.one Rep.size
   let ite = Rep.ite
   (* let one = Rep.bv  1 Rep.size
    * let ten = Rep.bv 10 Rep.size *)
@@ -237,7 +237,7 @@ struct
 
   (* result is truncated toward zero *)
   let div_s x y =
-    Rep.and_ ( Rep.not_ (Rep.equals y Rep.zero) ) (Rep.bvdiv x y)
+    Rep.and_ ( Rep.not_ (Rep.equals y (Rep.zero Rep.size) ) ) (Rep.bvdiv x y)
 
   (* result is floored (which is the same as truncating for unsigned values) *)
   (* TODO(Romy): fix *)
@@ -247,14 +247,14 @@ struct
 
   (* result has the sign of the dividend *)
   let rem_s x y =
-    Rep.and_ ( Rep.not_ (Rep.equals y Rep.zero) ) (Rep.bvsrem x y)
+    Rep.and_ ( Rep.not_ (Rep.equals y (Rep.zero Rep.size)) ) (Rep.bvsrem x y)
     (* if y = Rep.zero then
      *   raise Numeric_error.IntegerDivideByZero
      * else
      *   Rep.rem x y *)
   
   let rem_u x y =
-    Rep.and_ ( Rep.not_ (Rep.equals y Rep.zero) ) (Rep.bvurem x y)
+    Rep.and_ ( Rep.not_ (Rep.equals y (Rep.zero Rep.size)) ) (Rep.bvurem x y)
     (* let q, r = divrem_u x y in r *)
 
   let and_ = Rep.and_
@@ -334,7 +334,7 @@ struct
     (* let shift = Rep.bitwidth - n in
      * Rep.shift_right (Rep.shift_left x shift) shift *)
 
-  let eqz x = Rep.equals x Rep.zero  (* x = Rep.zero *)
+  let eqz x = Rep.equals x (Rep.zero Rep.size)  (* x = Rep.zero *)
 
   let eq = Rep.equals
   let ne x y = Rep.not_ (Rep.equals x y) 
@@ -365,9 +365,9 @@ struct
   let of_int_u i = Rep.int_to_bvterm i Rep.size
   let of_int32 i = Rep.int_to_bvterm (I32.to_int_s i) Rep.size
   (*TODO(Romy) *)(* Unimplemented *)
-  let of_string_s str = Rep.zero
-  let of_string_u str = Rep.zero
-  let of_string  str = Rep.zero
+  let of_string_s str = Rep.zero Rep.size
+  let of_string_u str = Rep.zero Rep.size
+  let of_string  str = Rep.zero Rep.size
   (* let of_list = Rep.list_to_term *)
   let to_int_s  t  = Rep.term_to_int t
   let to_int_u  t  = Rep.term_to_int t

@@ -15,10 +15,10 @@ type pc_ext = pc_let * pc
 
 let svalue_to_string sv =
    match sv with
-     | SI32 sv -> Si32.to_string_s sv
-     | SI64 sv -> Si64.to_string_s sv
-     | SF32 sv -> F32.to_string sv
-     | SF64 sv -> F64.to_string sv
+     | SI32 sv -> "Si32 " ^ Si32.to_string_s sv
+     | SI64 sv -> "Si64 " ^ Si64.to_string_s sv
+     | SF32 sv -> "F32 " ^ F32.to_string sv
+     | SF64 sv -> "F64 " ^ F64.to_string sv
 
 let svalue_depth sv =
    match sv with
