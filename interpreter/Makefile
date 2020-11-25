@@ -52,7 +52,6 @@ comma =		,
 _tags:
 		echo >$@ "true: bin_annot"
 		echo >>$@ "true: debug"
-		echo >>$@ "true: package(z3)"
 		echo >>$@ "<{$(subst $(space),$(comma),$(DIRS))}/*.cmx>: for-pack($(PACK))"
 
 $(UNOPT):	main.byte
