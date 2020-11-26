@@ -95,3 +95,9 @@ let value_to_svalue = function
   | Values.I64 i64 -> SI64 (Si64.bv_of_int (Int64.to_int i64) 64)
   | Values.F32 f32 -> SF32 f32
   | Values.F64 f64 -> SF64 f64
+
+let size_of = function
+  | SI32 _ -> 32
+  | SI64 _ -> 64
+  | SF32 _ -> 32
+  | SF64 _ -> 64

@@ -152,18 +152,18 @@ let update_sglobal (inst : module_inst) (glob : Instance.sglobal_inst)
   with Failure _ ->
     Crash.error x.at ("undefined smemory " ^ Int32.to_string x.it)
 
-(* let elem inst x i at =
- *   match Table.load (table inst x) i with
- *   | Table.Uninitialized ->
- *     Trap.error at ("uninitialized element " ^ Int32.to_string i)
- *   | f -> f
- *   | exception Table.Bounds ->
- *     Trap.error at ("undefined element " ^ Int32.to_string i) *)
+let elem inst x i at =
+  match Table.load (table inst x) i with
+  | Table.Uninitialized ->
+    Trap.error at ("uninitialized element " ^ Int32.to_string i)
+  | f -> f
+  | exception Table.Bounds ->
+    Trap.error at ("undefined element " ^ Int32.to_string i)
 
-(* let func_elem inst x i at =
- *   match elem inst x i at with
- *   | FuncElem f -> f
- *   | _ -> Crash.error at ("type mismatch for element " ^ Int32.to_string i) *)
+let func_elem inst x i at =
+  match elem inst x i at with
+  | FuncElem f -> f
+  | _ -> Crash.error at ("type mismatch for element " ^ Int32.to_string i)
 
 let func_type_of = function
   | Func.AstFunc (t, inst, f) -> t
@@ -389,13 +389,25 @@ let rec step (c : config) : config list =
            let vs', es' = vs, [Invoke (func frame.inst x) @@ e.at] in
            [{c with code = vs', es' @ List.tl es}]
 
-        (* | CallIndirect x, I32 i :: vs ->
-         *   let func = func_elem frame.inst (0l @@ e.at) i e.at in
-         *   if type_ frame.inst x <> Func.type_of func then
-         *     vs, [Trapping "indirect call type mismatch" @@ e.at]
-         *   else
-         *     vs, [Invoke func @@ e.at] *)
-
+        | CallIndirect x, SI32 i :: vs ->
+           print_endline "call indirect";
+           (* TODO(Romy): Check that it is not a high value *)
+           (* svalue_to_string (SI32 i) |> print_endline; *)
+           let mem = (frame.inst.smemories, smemlen frame.inst) in
+           let i_sol = Z3_solver.find_solutions (SI32 i) (pclet, pc) mem  in
+           (match i_sol with
+            | [] -> failwith "No solution for the symbolic value of the index."
+            | _ -> List.map (fun sol ->
+                       let func = func_elem frame.inst (0l @@ e.at) (Int32.of_int sol) e.at in
+                       if type_ frame.inst x <> Func.type_of func then
+                         let vs', es' = vs, [Trapping "indirect call type mismatch" @@ e.at] in
+                         {c with code = vs', es' @ List.tl es}
+                       else
+                         let vs', es' = vs, [Invoke func @@ e.at] in
+                         {c with code = vs', es' @ List.tl es}
+                     ) i_sol
+           )
+             
         | Drop, v :: vs' ->
            let vs', es' = vs', [] in
            [{c with code = vs', es' @ List.tl es}]
@@ -454,7 +466,6 @@ let rec step (c : config) : config list =
 
         | Load {offset; ty; sz; _}, si :: vs' ->
            (* print_endline "load"; *)
-           (* print_endline ("load:" ^ (string_of_int c.counter)); *)
            let imem = smemory frame.inst (0l @@ e.at) in
 
            let frame = {frame with
@@ -470,6 +481,9 @@ let rec step (c : config) : config list =
 
            let c = {c with observations = CT_V_UNSAT((pclet, pc), si,
                                                      mem, c.observations)} in
+
+           (* svalue_to_string si |> print_endline; *)
+
            if (Z3_solver.is_v_ct_unsat (pclet, pc) si mem) then
              (
                let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
@@ -751,6 +765,7 @@ let rec step (c : config) : config list =
        Exhaustion.error e.at "call stack exhausted"
 
     | Invoke func, vs ->
+       print_endline "invoke";
        (* print_endline ("inv:" ^ (string_of_int c.counter)); *)
        let FuncType (ins, out) = func_type_of func in
        let n1, n2 = Lib.List32.length ins, Lib.List32.length out in
@@ -769,7 +784,7 @@ let rec step (c : config) : config list =
            let inst' = {!inst' with smemories = nsmem;
                                     smemlen =  nmemlen;
                        } in
-                                    (* sglobals = frame.inst.sglobals} in *)
+           (* sglobals = frame.inst.sglobals} in *)
            let frame' = {inst = inst'; locals = locals'} in
            let instr' = [Label (n2, [], ([], List.map plain f.it.body), c.pc) @@ f.at] in 
            let vs', es' = vs', [Frame (n2, frame', ([], instr'), c.pc) @@ e.at] in
@@ -991,12 +1006,6 @@ let init_smemory (secret : bool) (inst : module_inst) (sec : security) =
     | true -> List.map (Eval_symbolic.create_new_hstore 4) hi_list
     | false -> List.map (Eval_symbolic.create_new_lstore 4) hi_list
   in
-
-  (* let inst' =
-   *   match secret with
-   *   | true -> { inst with secrets = (lo,hi)::inst.secrets }
-   *   | false -> { inst with public = (lo,hi)::inst.public }
-   * in *)
   let smem =
     match secret with
     | true -> Smemory.add_secret smem (lo,hi)
@@ -1005,15 +1014,25 @@ let init_smemory (secret : bool) (inst : module_inst) (sec : security) =
 
   let mem = List.fold_left Smemory.store_sind_value smem stores in  
   update_smemory inst mem  (0l @@ sec.at)
-  
-  (* let offset' = i32 (eval_const inst const) const.at in *)
-  (* let offset = I64_convert.extend_i32_u offset' in *)
-  (* let end_ = Int64.(add offset (of_int (String.length init))) in *)
-  (* let bound = Memory.bound mem in *)
-  
-  (* if I64.lt_u bound end_ || I64.lt_u end_ offset then
-   *   Link.error seg.at "data segment does not fit memory"; *)
-  
+
+let init_smemory_data (inst : module_inst) (seg : memory_segment) = 
+  let store_bytes a bs =
+    let list = List.init (String.length bs) (fun x -> x) in
+    (* print_endline "init_smemory_data";
+     * print_endline (string_of_int (Char.code bs.[0]));
+     * print_endline (string_of_int (Char.code bs.[1]));
+     * print_endline (string_of_int a); *)
+    List.map (fun i ->
+        Eval_symbolic.create_new_constant_store 1 (a + i) (Char.code bs.[i])) list
+  in
+  let {index; offset = const; init} = seg.it in
+  let smem = smemory inst index in
+  let offset = i32 (eval_const inst const) const.at in
+  (* let end_ = Int32.(add offset (of_int (String.length init))) in *)
+  let stores = store_bytes (Int32.to_int offset) init in
+  let mem = List.fold_left Smemory.store_sind_value smem stores in  
+  update_smemory inst mem  (0l @@ seg.at)
+
 
 
 let add_import (m : module_) (ext : extern) (im : import) (inst : module_inst)
@@ -1061,7 +1080,8 @@ let init (m : module_) (exts : extern list) : module_inst =
 
   let inst1 = List.fold_left (init_smemory true) inst1 secrets in
   let inst1 = List.fold_left (init_smemory false) inst1 public in
-  
+  let inst1 = List.fold_left init_smemory_data inst1 data in
+
   let inst = {inst1 with exports = List.map (create_export inst1) exports} in
 
   List.iter (init_func inst) fs;

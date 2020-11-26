@@ -231,7 +231,6 @@ let eval_cvtop = op SI32CvtOp.cvtop SI64CvtOp.cvtop F32CvtOp.cvtop F64CvtOp.cvto
 let eval_load ty ad i sz ext =
   match ty,ad with 
   | I32Type, SI32 a -> SI32 (Si32.load a i sz ext)
-  
   | I64Type, SI32 a -> SI64 (Si64.load a i sz ext)
   | _ -> failwith "Floats not implemented."
 
@@ -242,6 +241,12 @@ let eval_store ty ad sv i sz =
   | I64Type, SI32 a, SI64 v -> SI64 (Si64.store a v i sz)
   | _ -> failwith "Floats not implemented."
 
+
+let create_new_constant_store sz a v =
+  let value = Si8.bv_of_int v 8 in
+  let index = Si32.bv_of_int a 32 in
+  let st = SI32 (Si32.store index value 0 sz) in
+  st
 
 let create_new_hstore sz a =
   let value = Si32.of_high() in

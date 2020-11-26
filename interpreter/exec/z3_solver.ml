@@ -604,6 +604,79 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
   | _ -> false
 
 
+let find_solutions (sv: svalue) (pc : pc_ext)
+      (mem: Smemory.t list * int) : int list =
+  (* print_endline "find_solutions";
+   * svalue_to_string sv |> print_endline; *)
+  let rec find_solutions_i (sv: svalue) (pc : pc_ext)
+        (mem: Smemory.t list * int) (acc: int list) : int list =
+
+    (* print_endline "find_solutions_i"; *)
+    let ctx = init_solver() in
+
+    let v = sv_to_expr pc sv ctx mem in
+    let g = Goal.mk_goal ctx true false false in
+    
+    let size = Svalues.size_of sv in
+    let v' = BitVector.mk_const_s ctx "sv" size in
+    let vrec = 
+      (match v with
+       | L v ->  Boolean.mk_eq ctx v' v
+       | H (v1,v2) -> Boolean.mk_eq ctx v' v1
+      );
+    in
+    Goal.add g [vrec];
+
+    let previous_values = List.map (fun i ->
+                              let bv = Expr.get_sort v'  in
+                              let old_val = Expr.mk_numeral_int ctx i bv in
+                              let eq = Boolean.mk_eq ctx old_val v' in
+                              Boolean.mk_not ctx eq) acc in
+
+    Goal.add g previous_values;
+    let pcex = pc_to_expr pc ctx mem in
+    (match pcex with
+     | L v ->
+        Goal.add g [v]
+     | H (v1,v2) ->
+        Goal.add g [v1]
+    );
+    (* Printf.printf "Goal: %s\n" (Goal.to_string g); *)
+    let solver = Solver.mk_solver ctx None in
+    List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
+    (* Printf.printf "Solver is_sat: %s\n" (Solver.to_string solver); *)
+    let check_solver = Solver.check solver [] in
+    match check_solver with
+    | Solver.SATISFIABLE ->
+       let model = Solver.get_model solver in
+       (match model with
+        | None -> failwith "No model"
+        | Some m ->
+           (* print_endline "Model";
+            * print_endline (Model.to_string m);
+            * print_endline "decl"; *)
+           let decls = Model.get_decls m in
+           let sv_func = List.filter (fun d ->
+                             Symbol.get_string (FuncDecl.get_name d) = "sv") decls in
+           (match sv_func with
+            | sv'::[] ->
+               let res = Model.get_const_interp m sv' in
+               (match res with
+                | None -> failwith "No solutions for \"sv\""
+                | Some exp -> if (BitVector.is_bv exp) then
+                                let v = BitVector.get_int exp in
+                                find_solutions_i sv pc mem (v::acc)
+                              else
+                                failwith ("not is_numeral" ^ Expr.to_string exp)
+               );
+            | _ -> failwith "Two many solutions for \"sv\""
+           )
+       )
+    | Solver.UNSATISFIABLE -> acc
+    | Solver.UNKNOWN -> failwith "Unknown solver result"
+  in
+  find_solutions_i sv pc mem []
+
 (* let max = Optimize.maximize
  * let min = Optimize.minimize
  * 

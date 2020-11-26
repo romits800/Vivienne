@@ -50,7 +50,8 @@
     end
     local.get 1)
   (export "test6" (func $test6))
-  (data (;0;) (i32.const 0) "\01\00\00\00\02\00\00\00\03\00\00\00\04\00\00\00\05\00\00\00\06\00\00\00\07\00\00\00\08\00\00\00"))
+)
+
 
 
 (assert_failure (symb_exec "test6" (i32.sconst l1)) "BrIf: Constant-time failure")
