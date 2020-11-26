@@ -39,7 +39,7 @@ type term =
   | String of string
   | Int of int
   | Float of float
-  | BitVec of int * int (* bool + number of bits *)
+  | BitVec of int64 * int (* bool + number of bits *)
   | Const of identifier * int
   (* | Multi of term list * identifier * int (\* term list, high/low, number_of_elements *\) *)
   | Load of  term * int * int * Types.extension option (* index, memory, size, ext *)
@@ -48,7 +48,7 @@ type term =
   (* | Let of term * term *)
   | Let of int
          
-type mergetype = PLUS_INF | MINUS_INF | Integer of int | Term of term
+type mergetype = PLUS_INF | MINUS_INF | Integer of int64 | Term of term
 
 type solv_type = TGT | TGE | TLT | TLE | TNONE
 (* let curr_num = ref 0 *)
@@ -60,7 +60,7 @@ val zero: int -> term
 val one: int -> term
 
 val int_to_intterm : int -> term
-val int_to_bvterm : int -> int -> term
+val int64_to_bvterm : int64 -> int -> term
 val float_to_term : float -> term
 val get_high : unit -> identifier
 val get_low : unit -> identifier
@@ -94,7 +94,7 @@ val gt : term -> term -> term
 val lte : term -> term -> term
 val gte : term -> term -> term
 
-val bv : int -> int -> term
+val bv : int64 -> int -> term
 val bvadd : term -> term -> term
 val bvsub : term -> term -> term
 val bvmul : term -> term -> term

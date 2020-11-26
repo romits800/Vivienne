@@ -162,8 +162,7 @@ and si_to_expr pc size ctx mem si: rel_type  =
   (* Smt_type.term_to_string si |> print_endline; *)
   match si with
   | BitVec (i,n) ->
-     let bv = BitVector.mk_sort ctx n  in
-     L (Expr.mk_numeral_int ctx i bv)
+     L (BitVector.mk_numeral ctx (Int64.to_string i) n)
   | Const (High i, size) ->
      (try
         DefMap.find i !defmap
@@ -588,6 +587,13 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
   let ctx = init_solver() in
   
   let v = pc_to_expr pc ctx mem in
+
+  (* (match pc with
+   * | (pclet, PCAnd (v',pc)) ->
+   *    let sv = sv_to_expr (pclet,pc) v' ctx mem in
+   *    print_endline "this";
+   *    print_exp sv;              (\*  *\)
+   * | _ -> print_endline "other"); *)
 
   let g = Goal.mk_goal ctx true false false in
   (match v with

@@ -197,7 +197,7 @@ rule token = parse
                  Si32.of_low ()
               | Nat s
                 | Int s
-                | Float s -> Si32.bv_of_int (Int32.to_int (I32.of_string s) ) 32
+                | Float s -> Si32.bv_of_int (Int64.of_int (Int32.to_int (I32.of_string s))) 32
              ) in i32_sconst (n @@ s.at), Svalues.SI32 n              
          )
          (fun s ->
@@ -213,7 +213,7 @@ rule token = parse
                  Si64.of_low ()
               | Nat s
                 | Int s
-                | Float s -> Si64.bv_of_int (Int64.to_int (I64.of_string s) ) 64
+                | Float s -> Si64.bv_of_int (I64.of_string s) 64
              ) in i64_sconst (n @@ s.at), Svalues.SI64 n              
          )
          (fun s ->

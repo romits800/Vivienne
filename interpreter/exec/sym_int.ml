@@ -28,7 +28,7 @@ sig
   val one: int -> term
     
   val int_to_intterm : int -> term
-  val int_to_bvterm : int -> int -> term
+  val int64_to_bvterm : int64 -> int -> term
   val float_to_term : float -> term
   val high_to_term : int -> term
   val low_to_term : int -> term
@@ -63,7 +63,7 @@ sig
 
   (* val bv_sort : int -> sort *)
 
-  val bv     : int -> int -> term
+  val bv     : int64 -> int -> term
   val bvadd  : term -> term -> term
   val bvsub  : term -> term -> term
   val bvmul  : term -> term -> term
@@ -162,7 +162,7 @@ sig
   val ite : t -> t -> t -> t
     
   val int_of_int : int -> t
-  val bv_of_int : int -> int -> t
+  val bv_of_int : int64 -> int -> t
   val of_float : float -> t
   val of_high : unit -> t
   val of_low : unit -> t
@@ -349,7 +349,7 @@ struct
 
 
   let int_of_int = Rep.int_to_intterm
-  let bv_of_int = Rep.int_to_bvterm
+  let bv_of_int = Rep.int64_to_bvterm
   let of_float = Rep.float_to_term
   let of_high () =
     Rep.high_to_term Rep.size
@@ -361,9 +361,9 @@ struct
   let is_int = Rep.is_int
               
              
-  let of_int_s i = Rep.int_to_bvterm i Rep.size
-  let of_int_u i = Rep.int_to_bvterm i Rep.size
-  let of_int32 i = Rep.int_to_bvterm (I32.to_int_s i) Rep.size
+  let of_int_s i = Rep.int64_to_bvterm (Int64.of_int i) Rep.size
+  let of_int_u i = Rep.int64_to_bvterm (Int64.of_int i) Rep.size
+  let of_int32 i = Rep.int64_to_bvterm (Int64.of_int (Int32.to_int i)) Rep.size
   (*TODO(Romy) *)(* Unimplemented *)
   let of_string_s str = Rep.zero Rep.size
   let of_string_u str = Rep.zero Rep.size

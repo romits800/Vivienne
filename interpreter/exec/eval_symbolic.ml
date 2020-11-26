@@ -243,20 +243,20 @@ let eval_store ty ad sv i sz =
 
 
 let create_new_constant_store sz a v =
-  let value = Si8.bv_of_int v 8 in
-  let index = Si32.bv_of_int a 32 in
+  let value = Si8.bv_of_int (Int64.of_int v) 8 in
+  let index = Si32.bv_of_int (Int64.of_int a) 32 in
   let st = SI32 (Si32.store index value 0 sz) in
   st
 
 let create_new_hstore sz a =
   let value = Si32.of_high() in
-  let index = Si32.bv_of_int a 32 in
+  let index = Si32.bv_of_int (Int64.of_int a) 32 in
   let st = SI32 (Si32.store index value 0 sz) in
   st
 
 let create_new_lstore sz a =
   let value = Si32.of_low() in
-  let index = Si32.bv_of_int a 32 in
+  let index = Si32.bv_of_int (Int64.of_int a) 32 in
   let st = SI32 (Si32.store index value 0 sz) in
   st
 

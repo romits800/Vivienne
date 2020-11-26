@@ -39,7 +39,7 @@ type term =
   | String of string
   | Int of int
   | Float of float
-  | BitVec of int * int (* bool + number of bits *)
+  | BitVec of int64 * int (* number + number of bits *)
   | Const of identifier * int
   (* | Multi of term list * identifier * int (\* term list, high/low, number_of_elements *\) *)
   (* index in memory and index of memory - because we cannot have the memory here*)
@@ -50,7 +50,7 @@ type term =
   (* | Let of term * term *)
   | Let of int
 
-type mergetype = PLUS_INF | MINUS_INF | Integer of int | Term of term
+type mergetype = PLUS_INF | MINUS_INF | Integer of int64 | Term of term
 
 type solv_type = TGT | TGE | TLT | TLE | TNONE
                                   
@@ -66,11 +66,11 @@ let new_const () =
  * 
  * val array_sort : sort -> sort -> sort *)
 
-let zero size = BitVec (0, size)
-let one size = BitVec (1, size)
+let zero size = BitVec (0L, size)
+let one size = BitVec (1L, size)
          
 let int_to_intterm i = Int i
-let int_to_bvterm i n = BitVec (i,n)
+let int64_to_bvterm i n = BitVec (i,n)
 let float_to_term f = Float f
 
   
@@ -116,10 +116,10 @@ let low_to_term size =
 let term_to_int i =
   match i with
   | Int i -> i
-  | BitVec (i,n) -> i
+  | BitVec (i,n) -> Int64.to_int i
   | _ -> failwith "Term_to_int error: at smt_type"
 
-let bool_to_term b =  if b then BitVec (1, 1) else BitVec (0, 1)
+let bool_to_term b =  if b then BitVec (1L, 1) else BitVec (0L, 1)
 
 (* let const str = Const str *)
 
@@ -192,9 +192,9 @@ let bv i nb = BitVec(i, nb)
 
 let bvadd t1 t2 =
   match t1,t2 with
-  | BitVec(i1,nb1), BitVec(i2,nb2) when nb2 == nb1 -> BitVec(i1+i2, nb1)
-  | BitVec(0,nb), t
-    | t, BitVec(0,nb)-> t
+  | BitVec(i1,nb1), BitVec(i2,nb2) when nb2 == nb1 -> BitVec(Int64.(add i1 i2), nb1)
+  | BitVec(0L,nb), t
+    | t, BitVec(0L,nb)-> t
   | _ -> App (BvAdd, [t1; t2])
     (* match t1, t2 with
      * | App (BvAdd, ts1), App (BvAdd, ts2) -> App (BvAdd, ts1 @ ts2)
@@ -333,7 +333,7 @@ let rec term_to_string (t : term) : string =
   | String s -> s
   | Int i -> string_of_int i
   | Float f ->  string_of_float f
-  | BitVec (i, n) -> "BitVec(" ^ string_of_int i ^ ", " ^ string_of_int n ^ ")"
+  | BitVec (i, n) -> "BitVec(" ^ I64.to_string_u i ^ ", " ^ string_of_int n ^ ")"
   | Const (id, size) ->  identifier_to_string id ^ "(" ^ string_of_int size ^ ")"
   | App (f, ts) -> func_to_string f ^ " (" ^
                      List.fold_left (fun acc -> fun t -> acc ^ term_to_string t ^ ",") "" ts ^ ")" 
@@ -345,7 +345,7 @@ let merge_to_string (m : mergetype) : string =
   match m with
   | PLUS_INF -> "inf"
   | MINUS_INF -> "-inf"
-  | Integer i -> string_of_int i
+  | Integer i -> I64.to_string_u i
   | Term t -> term_to_string t
 
 let count_depth si = 

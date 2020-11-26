@@ -212,11 +212,11 @@ let storen mem a o n x =
        (match sz with
         | 0 -> mem
         | _ ->
-           let v =  Smt_type.BitVec(Int64.to_int i land 0xff, 8) in
+           let v =  Smt_type.BitVec(Int64.(logand i  0xffL), 8) in
            let mem' = store_byte mem a v  in
            store_i (a+1) (sz-1) (Int64.shift_right i 8) mem'
        ) in
-     store_i (effective_address a o) sz (Int64.of_int i) mem
+     store_i (effective_address a o) sz i mem
   (* | Smt_type.Const (Smt_type.High i ) as v ->
    *    let rec store_i a n mem res =
    *      (match n with

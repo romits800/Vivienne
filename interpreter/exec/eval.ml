@@ -212,7 +212,7 @@ let split_condition (sv : svalue) (pc : pc): pc * pc =
     | SF32 vf32 -> PCAnd( SF32 ( F32.neg vf32), pc)
     | SF64 vf64 -> PCAnd( SF64 ( F64.neg vf64), pc)
   in
-  (pc'', pc')
+  (pc'', pc') (* false, true *)
 
 let split_msec (sv : svalue)
       (msec : (int * int) list )
@@ -235,8 +235,8 @@ let split_msec (sv : svalue)
   in
   match sv with
   | SI32 vi32 ->
-     let hrange = within_hrange vi32 msec in
-     let lrange = Si32.not_ hrange in (* within_hrange vi32 mpub in *) (* Si32.not_ hrange in *)
+     let lrange = within_hrange vi32 mpub in (* Si32.not_ hrange in *)
+     let hrange = Si32.not_ lrange in (* within_hrange vi32 msec in *)
      (PCAnd (SI32 hrange, pc), PCAnd (SI32 lrange, pc))
   | _ -> failwith "Address should be 32bit integer"
 
@@ -283,10 +283,11 @@ let rec step (c : config) : config list =
     | Plain e', vs ->
        (match e', vs with
         | Unreachable, vs ->
+           print_endline "Unreachable";
            let vs', es' = vs, [Trapping "unreachable executed" @@ e.at] in
            [{c with code = vs', es' @ List.tl es}]
         | Nop, vs ->
-           (* print_endline "nop"; *)
+           print_endline "nop";
            let vs', es' = vs, [] in
            [{c with code = vs', es' @ List.tl es}]
         | Block (bt, es'), vs ->
@@ -314,7 +315,7 @@ let rec step (c : config) : config list =
             )
         | If (bt, es1, es2), v :: vs' ->
            (* print_endline "if"; *)
-           let pc', pc'' = split_condition v pc in
+           let pc', pc'' = split_condition v pc in (* false, true *)
            let vs'', es'' = vs', [Plain (Block (bt, es1)) @@ e.at] in (* True *)
            let vs', es' = vs', [Plain (Block (bt, es2)) @@ e.at] in (* False *)
            (* Check sat of if *)
@@ -345,21 +346,22 @@ let rec step (c : config) : config list =
            [{c with code = vs', es' @ List.tl es}]
            
         | BrIf x, v :: vs' ->
-           (* print_endline "br_if"; *)
-           let pc', pc'' = split_condition v pc in
-           let vs'', es'' = vs', [Plain (Br x) @@ e.at] in
-           let vs', es' = vs', [] in
+           (* print_endline "br_if";
+            * svalue_to_string v |> print_endline; *)
+           let pc', pc'' = split_condition v pc in (* false, true *)
+           let vs'', es'' = vs', [Plain (Br x) @@ e.at] in (* true *) 
+           let vs', es' = vs', [] in (* false *)
            
            let mem = (frame.inst.smemories, smemlen frame.inst) in
 
            (* proof obligation *)
            let c = {c with observations = CT_UNSAT((pclet,pc), v, mem, c.observations)} in
            
-           let res = if Z3_solver.is_sat (pclet, pc') mem then
-                       [{c with code = vs', es' @ List.tl es; pc = pclet,pc'}]
+           let res = if Z3_solver.is_sat (pclet, pc') mem then (
+                       [{c with code = vs', es' @ List.tl es; pc = pclet,pc'}])
                      else [] in
-           let res = if Z3_solver.is_sat (pclet, pc'') mem then
-                       {c with code = vs'', es'' @ List.tl es; pc = pclet,pc''}::res
+           let res = if Z3_solver.is_sat (pclet, pc'') mem then (
+                       {c with code = vs'', es'' @ List.tl es; pc = pclet,pc''}::res)
                      else res in
            (match res with
             | [] ->
@@ -386,6 +388,8 @@ let rec step (c : config) : config list =
 
         | Call x, vs ->
            (* print_endline ("call:" ^ (string_of_int c.counter)); *)
+           print_endline "call";
+           print_endline (string_of_int (Int32.to_int x.it));
            let vs', es' = vs, [Invoke (func frame.inst x) @@ e.at] in
            [{c with code = vs', es' @ List.tl es}]
 
@@ -398,6 +402,8 @@ let rec step (c : config) : config list =
            (match i_sol with
             | [] -> failwith "No solution for the symbolic value of the index."
             | _ -> List.map (fun sol ->
+                       print_endline "call indirect";
+                       print_endline (string_of_int sol);
                        let func = func_elem frame.inst (0l @@ e.at) (Int32.of_int sol) e.at in
                        if type_ frame.inst x <> Func.type_of func then
                          let vs', es' = vs, [Trapping "indirect call type mismatch" @@ e.at] in
@@ -583,10 +589,10 @@ let rec step (c : config) : config list =
                          (let c =
                             {c with observations =
                                       CT_V_UNSAT((pclet,pc''), sv, mems, c.observations)} in
-                          (* print_endline "path2.";
-                           * svalue_to_string sv |> print_endline;
-                           * svalue_to_string final_addr |> print_endline;
-                           * print_pc pc'' |> print_endline; *)
+                          print_endline "path2.";
+                          svalue_to_string sv |> print_endline;
+                          svalue_to_string final_addr |> print_endline;
+                          (* print_pc pc'' |> print_endline; *)
                           if Z3_solver.is_v_ct_unsat (pclet, pc'') sv mems then
                             {c with code = vs', es' @ List.tl es;
                                     frame = nframe;
@@ -617,10 +623,10 @@ let rec step (c : config) : config list =
              match v.it with
              | Values.I32 i ->
                 let ii = Int32.to_int i in
-                SI32 (Si32.bv_of_int ii 32)
+                let ii' = Int64.of_int ii in
+                SI32 (Si32.bv_of_int ii' 32)
              | Values.I64 i ->
-                let ii = Int64.to_int i in
-                SI64 (Si64.bv_of_int ii 64)
+                SI64 (Si64.bv_of_int i 64)
              | Values.F32 i -> SF32 i
              | Values.F64 i -> SF64 i
            in
@@ -676,6 +682,7 @@ let rec step (c : config) : config list =
        )
 
     | Trapping msg, vs ->   
+       print_endline "trapping";
        assert false
 
     | Returning vs', vs ->
