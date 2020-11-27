@@ -437,6 +437,11 @@ and app_to_expr pc ts size ctx mem f =
      propagate_policy_one (Boolean.mk_not ctx) e
   | Not, _ -> failwith "Not valid boolean not."
 
+  (* | RedOr, t::[] ->
+   *    let e = si_to_expr pc size ctx mem t in
+   *    propagate_policy_one (Boolean.mk_redor ctx) e
+   * | RedOr, _ -> failwith "Not valid boolean redor." *)
+
 
   | And, ts ->
      let es = List.map (si_to_expr pc size ctx mem) ts in
@@ -549,10 +554,12 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
   (* print_endline "is_v_ct_unsat"; *) 
   (* Pc_type.print_pc pc |> print_endline; *)
   (* svalue_to_string sv |> print_endline; *)
+
   let ctx = init_solver() in
   
   let g = Goal.mk_goal ctx true false false in
   let v = sv_to_expr pc sv ctx mem in
+  (* print_exp v; *)
   match v with
    | L v -> true 
    | H (v1,v2) ->
@@ -566,24 +573,28 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
       in
       Goal.add g [v'];
       Goal.add g [pcexp'];
-
       let solver = Solver.mk_solver ctx None in
       
       List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
 
       (* Printf.printf "Solver v_ct: %s\n" (Solver.to_string solver); *)
-
       match (Solver.check solver []) with
       | Solver.UNSATISFIABLE ->
          true
-      | _ ->
+      | Solver.SATISFIABLE ->
+         let model = Solver.get_model solver in
+        (match model with
+         | None -> print_endline "None"
+         | Some m -> print_endline "Model"; print_endline (Model.to_string m)
+        );
          false
-
+      | _ -> false
 
 
 
 let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
   (* check only satisfiability *)
+  (* print_endline "is_sat"; *)
   let ctx = init_solver() in
   
   let v = pc_to_expr pc ctx mem in
@@ -612,11 +623,12 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
 
 let find_solutions (sv: svalue) (pc : pc_ext)
       (mem: Smemory.t list * int) : int list =
-  (* print_endline "find_solutions";
-   * svalue_to_string sv |> print_endline; *)
+  (* print_endline "find_solutions"; *)
+  (* svalue_to_string sv |> print_endline; *)
   let rec find_solutions_i (sv: svalue) (pc : pc_ext)
-        (mem: Smemory.t list * int) (acc: int list) : int list =
-
+        (mem: Smemory.t list * int) (acc: string list) : string list =
+    if (List.length acc >= 10) then acc
+    else (
     (* print_endline "find_solutions_i"; *)
     let ctx = init_solver() in
 
@@ -632,13 +644,11 @@ let find_solutions (sv: svalue) (pc : pc_ext)
       );
     in
     Goal.add g [vrec];
-
     let previous_values = List.map (fun i ->
                               let bv = Expr.get_sort v'  in
-                              let old_val = Expr.mk_numeral_int ctx i bv in
+                              let old_val = Expr.mk_numeral_string ctx i bv in
                               let eq = Boolean.mk_eq ctx old_val v' in
                               Boolean.mk_not ctx eq) acc in
-
     Goal.add g previous_values;
     let pcex = pc_to_expr pc ctx mem in
     (match pcex with
@@ -669,19 +679,22 @@ let find_solutions (sv: svalue) (pc : pc_ext)
                let res = Model.get_const_interp m sv' in
                (match res with
                 | None -> failwith "No solutions for \"sv\""
-                | Some exp -> if (BitVector.is_bv exp) then
-                                let v = BitVector.get_int exp in
-                                find_solutions_i sv pc mem (v::acc)
+                | Some exp -> if (BitVector.is_bv exp) then (
+                                (* let v = BitVector.get_int exp in *)
+                                let v = BitVector.numeral_to_string exp in
+                                find_solutions_i sv pc mem (v::acc))
                               else
                                 failwith ("not is_numeral" ^ Expr.to_string exp)
                );
-            | _ -> failwith "Two many solutions for \"sv\""
+            | _ -> failwith "Too many solutions for \"sv\""
            )
        )
     | Solver.UNSATISFIABLE -> acc
     | Solver.UNKNOWN -> failwith "Unknown solver result"
+    )
   in
-  find_solutions_i sv pc mem []
+  let str = find_solutions_i sv pc mem [] in
+  List.map (fun s -> Int64.to_int (Int64.of_string s)) str
 
 (* let max = Optimize.maximize
  * let min = Optimize.minimize

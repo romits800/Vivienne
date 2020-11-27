@@ -63,11 +63,16 @@ let next_let () =
 let add_let (pce: pc_ext) (sv: svalue) =
   let pclet, pc = pce in
   let nl = next_let () in
+  (* print_endline ("Add let:" ^ (string_of_int nl)); *)
   nl, (Lets.add nl sv pclet, pc)
 
 let find_let (pce: pc_ext) (i: int) =
   let pclet, pc = pce in
-  Lets.find i pclet
+  try
+    Lets.find i pclet
+  with Not_found ->
+    failwith ("Not_found pc_let " ^ (string_of_int i)) 
+        
   (* nl, (Lets.add nl sv pclet, pc) *)
 
 let empty_pc () =

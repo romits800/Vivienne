@@ -120,33 +120,15 @@ sig
 
   val zero : t
   val one : t
-    
+   
   val load : t -> int -> int -> Types.extension option -> t
   val store : t -> t -> int -> int -> t
-  val add : t -> t -> t
-  val sub : t -> t -> t
-  val mul : t -> t -> t
-  val div_s : t -> t -> t 
-  val div_u : t -> t -> t 
-  val rem_s : t -> t -> t 
-  val rem_u : t -> t -> t 
+
   val and_ : t -> t -> t
   val or_ : t -> t -> t
-  val band : t -> t -> t
-  val bor : t -> t -> t
-  val not_ : t -> t 
-  val xor : t -> t -> t
-  val shl : t -> t -> t
-  val shr_s : t -> t -> t
-  val shr_u : t -> t -> t
-  val rotl : t -> t -> t
-  val rotr : t -> t -> t
-  val clz : t -> t
-  val ctz : t -> t
-  val popcnt : t -> t
-  val extend_s : int -> t -> t
-  val extend_u : int -> t -> t
-  val wrap : int -> t -> t
+  val not_ : t -> t
+
+  val ite : t -> t -> t -> t
   val eqz : t -> t
   val eq : t -> t -> t
   val ne : t -> t -> t
@@ -159,7 +141,30 @@ sig
   val ge_s : t -> t -> t
   val ge_u : t -> t -> t
 
-  val ite : t -> t -> t -> t
+  val band : t -> t -> t
+  val bor : t -> t -> t
+  val xor : t -> t -> t
+
+     
+  val add : t -> t -> t
+  val sub : t -> t -> t
+  val mul : t -> t -> t
+  val div_s : t -> t -> t 
+  val div_u : t -> t -> t 
+  val rem_s : t -> t -> t 
+  val rem_u : t -> t -> t 
+
+  val shl : t -> t -> t
+  val shr_s : t -> t -> t
+  val shr_u : t -> t -> t
+  val rotl : t -> t -> t
+  val rotr : t -> t -> t
+  val clz : t -> t
+  val ctz : t -> t
+  val popcnt : t -> t
+  val extend_s : int -> t -> t
+  val extend_u : int -> t -> t
+  val wrap : int -> t -> t
     
   val int_of_int : int -> t
   val bv_of_int : int64 -> int -> t
