@@ -105,7 +105,7 @@ sig
   val term_to_string : term -> string
   val merge : solv_type -> term -> term -> (mergetype * mergetype) option
   val merge_to_string : mergetype -> string
-  val count_depth : term -> int
+  val count_depth : term -> int -> bool
   val let_ : int -> term
 end
 
@@ -190,7 +190,7 @@ sig
 
   val merge : stype -> t -> t-> (mtype * mtype) option
   val merge_to_string : mtype -> string
-  val count_depth : t -> int
+  val count_depth : t -> int -> bool
   val let_ : int -> t
 end
 

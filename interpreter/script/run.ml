@@ -339,6 +339,7 @@ let run_action act : Values.value list =
   | Symb_exec (x_opt, name, vs) ->
     trace ("Symbolically executing function \"" ^ Ast.string_of_name name ^ "\"...");
     let inst = lookup_instance x_opt act.at in
+    Z3_solver.clean_solver();
     (match Instance.export inst name with
      | Some (Instance.ExternFunc f) ->
         let t = Sys.time() in

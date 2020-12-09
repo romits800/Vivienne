@@ -203,9 +203,17 @@ let bvadd t1 t2 =
      * | _, _-> App (BvAdd, [t1;t2]) *)
 
 
-let bvsub t1 t2 = App (BvSub, [t1;t2])
+let bvsub t1 t2 =
+  match t1,t2 with
+  | BitVec(i1,nb1), BitVec(i2,nb2) when nb2 == nb1 -> BitVec(Int64.(sub i1 i2), nb1)
+  | t, BitVec(0L,nb)-> t
+  | _ -> App (BvSub, [t1; t2])
 
-let bvmul t1 t2 = App (BvMul, [t1;t2])
+  
+
+let bvmul t1 t2 =
+  (* print_endline "bvmul"; *)
+  App (BvMul, [t1;t2])
     (* match t1, t2 with
      * | App (BvMul, ts1), App (BvMul, ts2) -> App (BvMul, ts1 @ ts2)
      * | App (BvMul, ts), t
@@ -325,8 +333,13 @@ let func_to_string func =
            
 let rec term_to_string (t : term) : string =
   match t with
-  | Load (i, index, sz, ext) ->
-     "Mem[" ^ term_to_string i ^ "]" ^ "(" ^ string_of_int sz ^ ")" 
+  | Load (i, index, sz, None) ->
+     "Mem[" ^ term_to_string i ^ "]" ^ "(" ^ string_of_int sz ^ ")[None]" 
+  | Load (i, index, sz, Some Types.ZX) ->
+     "Mem[" ^ term_to_string i ^ "]" ^ "(" ^ string_of_int sz ^ ")[Some ZX]" 
+  | Load (i, index, sz, Some Types.SX) ->
+     "Mem[" ^ term_to_string i ^ "]" ^ "(" ^ string_of_int sz ^ ")[Some SX]" 
+
   | Store (i, v, index, sz) ->
      "Mem[" ^ term_to_string i ^ "] = "
                                ^ term_to_string v ^ "(" ^ string_of_int sz ^ ")" 
@@ -348,19 +361,22 @@ let merge_to_string (m : mergetype) : string =
   | Integer i -> I64.to_string_u i
   | Term t -> term_to_string t
 
-let count_depth si = 
+let count_depth si n = 
   let rec count_depth_i count si =
+    if (count > n) then count
+    else
     (* print_endline (string_of_int count); *)
-    match si with
-    | BitVec (i,n) -> count + 1
-    | Const (_) -> count + 1
-    | App (f, ts) ->
-       List.fold_left (fun x y -> count_depth_i (x+1) y) (count + 1) ts
-    | Load (i, memi, sz, ext) ->
-       count_depth_i (count+1) i
-    | Let i -> count + 1
-    | _ -> failwith "Not supported."
+      match si with
+      | BitVec (i,n) -> count + 1
+      | Const (_) -> count + 1
+      | App (f, ts) ->
+         List.fold_left (fun x y -> count_depth_i (x+1) y) (count + 1) ts
+      | Load (i, memi, sz, ext) ->
+         count_depth_i (count+1) i
+      | Let i -> count + 1
+      | _ -> failwith "Not supported."
   in
-  count_depth_i 0 si
+  let c = count_depth_i 0 si in
+  c > n
 
 let let_ (i : int) = Let i

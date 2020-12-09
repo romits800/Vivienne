@@ -247,10 +247,16 @@ let split_msec (sv : svalue)
 let select_condition v0 v1 v2 = (* (v0: svalue  v1: svalue): svalue = *)
   match v0, v1, v2 with
   (* v0 :: v2 :: v1 :: vs' -> *)
-  | SI32 vi32, SI32 vi32_1, SI32 vi32_2 -> SI32 ( Si32.ite vi32 vi32_1 vi32_2 )
-  | SI64 vi64, SI64 vi64_1, SI64 vi64_2 -> SI64 ( Si64.ite vi64 vi64_1 vi64_2 )
-  | SF32 vf32, SF32 vf32_1, SF32 vf32_2 -> SF32 vf32
-  | SF64 vf64, SF64 vf64_1, SF64 vf64_2 -> SF64 vf64
+  | SI32 vi32, SI32 vi32_1, SI32 vi32_2 ->
+     let one = Si32.one in
+     let cond = Si32.eq vi32 one in
+     SI32 ( Si32.ite cond vi32_1 vi32_2 )
+  | SI32 vi32, SI64 vi64_1, SI64 vi64_2 ->
+     let one = Si32.one in
+     let cond = Si32.eq vi32 one in
+     SI64 ( Si64.ite cond vi64_1 vi64_2 )
+  (* | SF32 vf32, SF32 vf32_1, SF32 vf32_2 -> SF32 vf32
+   * | SF64 vf64, SF64 vf64_1, SF64 vf64_2 -> SF64 vf64 *)
   | _ -> failwith "Type problem select"
 
 
@@ -271,6 +277,31 @@ let rec step (c : config) : config list =
   (* print_endline ("step:" ^ (string_of_int c.counter)); *)
   let {frame; code = vs, es; pc = pclet, pc; _} = c in
   let e = List.hd es in
+  let vs, (pclet, pc) =
+    match vs with
+    | v::vs' ->
+       if svalue_depth v 5 then (
+         let mem = (frame.inst.smemories, smemlen frame.inst) in
+         (match Z3_solver.simplify v (pclet, pc) mem with
+          | (false as tf), v 
+            | (true as tf), (Z3Expr32 _ as v)
+            | (true as tf), (Z3Expr64 _ as v) -> 
+             (* if tf then print_endline "true_expr"; *)
+             let nl, pc' = add_let (pclet, pc) v in
+             let nv = svalue_newlet v nl in
+             (* let eq = svalue_eq nv v in *)
+             (* let c = {c with pc = pc'} in *) 
+             nv::vs', pc'
+          | true, Sv v ->
+             (* print_endline "true";
+              * svalue_to_string v |> print_endline; *)
+             v::vs', (pclet,pc)
+         )
+       ) else
+         vs, (pclet,pc)
+    | [] -> vs, (pclet,pc)
+  in
+  let c = {c with pc = (pclet,pc)} in
   (* print_endline "step:";
    * (if List.length frame.locals > 1 then
    *   svalue_to_string (local frame (1l @@ e.at)) |> print_endline
@@ -283,11 +314,18 @@ let rec step (c : config) : config list =
     | Plain e', vs ->
        (match e', vs with
         | Unreachable, vs ->
-           print_endline "Unreachable";
+           (* print_endline "Unreachable"; *)
            let vs', es' = vs, [Trapping "unreachable executed" @@ e.at] in
            [{c with code = vs', es' @ List.tl es}]
         | Nop, vs ->
-           print_endline "nop";
+           (* print_endline "nop"; *)
+           (* let mem = (frame.inst.smemories, smemlen frame.inst) in
+            * print_endline "printing_test_addr 37356";
+            * let test_addr = SI32 (Si32.bv_of_int 37356L 32) in
+            * let load = Eval_symbolic.eval_load I32Type test_addr (smemlen frame.inst) (Types.size I32Type) None in
+            * let i_sol = Z3_solver.find_solutions load (pclet, pc) mem  in
+            * List.iter (fun x-> string_of_int x |> print_endline) i_sol; *)
+
            let vs', es' = vs, [] in
            [{c with code = vs', es' @ List.tl es}]
         | Block (bt, es'), vs ->
@@ -346,8 +384,8 @@ let rec step (c : config) : config list =
            [{c with code = vs', es' @ List.tl es}]
            
         | BrIf x, v :: vs' ->
-           (* print_endline "br_if";
-            * svalue_to_string v |> print_endline; *)
+           (* print_endline "br_if"; *)
+           (* svalue_to_string v |> print_endline; *)
            let pc', pc'' = split_condition v pc in (* false, true *)
            let vs'', es'' = vs', [Plain (Br x) @@ e.at] in (* true *) 
            let vs', es' = vs', [] in (* false *)
@@ -388,22 +426,23 @@ let rec step (c : config) : config list =
 
         | Call x, vs ->
            (* print_endline ("call:" ^ (string_of_int c.counter)); *)
-           print_endline "call";
-           print_endline (string_of_int (Int32.to_int x.it));
+           (* print_endline "call";
+            * print_endline (string_of_int (Int32.to_int x.it)); *)
            let vs', es' = vs, [Invoke (func frame.inst x) @@ e.at] in
            [{c with code = vs', es' @ List.tl es}]
 
         | CallIndirect x, SI32 i :: vs ->
-           print_endline "call indirect";
+           (* print_endline "call indirect"; *)
            (* TODO(Romy): Check that it is not a high value *)
            (* svalue_to_string (SI32 i) |> print_endline; *)
            let mem = (frame.inst.smemories, smemlen frame.inst) in
+           (* print_endline "before find_solutions"; *)
            let i_sol = Z3_solver.find_solutions (SI32 i) (pclet, pc) mem  in
            (match i_sol with
             | [] -> failwith "No solution for the symbolic value of the index."
             | _ -> List.map (fun sol ->
-                       print_endline "call indirect";
-                       print_endline (string_of_int sol);
+                       (* print_endline "call indirect_inside";
+                        * print_endline (string_of_int sol); *)
                        let func = func_elem frame.inst (0l @@ e.at) (Int32.of_int sol) e.at in
                        if type_ frame.inst x <> Func.type_of func then
                          let vs', es' = vs, [Trapping "indirect call type mismatch" @@ e.at] in
@@ -425,20 +464,31 @@ let rec step (c : config) : config list =
            [{c with code = vs', es' @ List.tl es }]
            
         | LocalGet x, vs ->
+           (* print_endline "localget"; *)
            let vs', es' = (local frame x) :: vs, [] in
            [{c with code = vs', es' @ List.tl es}]
 
         | LocalSet x, v :: vs' ->
            (* print_endline ("localset:" ^ (string_of_int c.counter)); *)
+           (* print_endline "localset"; *)
            let v, c =
-             if svalue_depth v > 5 then (
-               (* print_endline "Depth greater than 10"; *)
-               (* svalue_to_string nv |> print_endline; *)
-               let nl, pc' = add_let (pclet, pc) v in
-               let nv = svalue_newlet v nl in
-               (* let eq = svalue_eq nv v in *)
-               let c = {c with pc = pc'} in 
-               nv,c)
+             if svalue_depth v 5 then (
+               let mem = (frame.inst.smemories, smemlen frame.inst) in
+               match Z3_solver.simplify v (pclet, pc) mem with
+               | (false as tf), v 
+                 | (true as tf), (Z3Expr32 _ as v)
+                 | (true as tf), (Z3Expr64 _ as v)-> 
+                  (* if tf then print_endline "true_expr"; *)
+                  let nl, pc' = add_let (pclet, pc) v in
+                  let nv = svalue_newlet v nl in
+                  (* let eq = svalue_eq nv v in *)
+                  let c = {c with pc = pc'} in 
+                  nv,c
+               | true, Sv v ->
+                  (* print_endline "true";
+                   * svalue_to_string v |> print_endline; *)
+                  v, c
+             )
              else
                v, c
            in
@@ -489,9 +539,11 @@ let rec step (c : config) : config list =
            let c = {c with observations = CT_V_UNSAT((pclet, pc), final_addr,
                                                      mem, c.observations)} in
 
-           (* svalue_to_string si |> print_endline; *)
-           (* print_endline "printing_solutions";
-            * let i_sol = Z3_solver.find_solutions final_addr (pclet, pc) mem  in
+           (* svalue_to_string si |> print_endline;
+            * print_endline "printing_test_addr 37356";
+            * let test_addr = SI32 (Si32.bv_of_int 37356L 32) in
+            * let load = Eval_symbolic.eval_load I32Type test_addr (smemlen frame.inst) (Types.size I32Type) None in
+            * let i_sol = Z3_solver.find_solutions load (pclet, pc) mem  in
             * List.iter (fun x-> string_of_int x |> print_endline) i_sol; *)
            if (Z3_solver.is_v_ct_unsat (pclet, pc) final_addr mem) then
              (
@@ -503,7 +555,8 @@ let rec step (c : config) : config list =
                let nv =
                  (* (try *)
                  (match sz with
-                  | None -> Eval_symbolic.eval_load ty final_addr
+                  | None ->
+                     Eval_symbolic.eval_load ty final_addr
                               (smemlen frame.inst) (Types.size ty) None
                   | Some (sz, ext) ->
                      assert (packed_size sz <= Types.size ty);
@@ -597,9 +650,9 @@ let rec step (c : config) : config list =
                          (let c =
                             {c with observations =
                                       CT_V_UNSAT((pclet,pc''), sv, mems, c.observations)} in
-                          print_endline "path2.";
-                          svalue_to_string sv |> print_endline;
-                          svalue_to_string final_addr |> print_endline;
+                          (* print_endline "path2.";
+                           * svalue_to_string sv |> print_endline;
+                           * svalue_to_string final_addr |> print_endline; *)
                           (* print_pc pc'' |> print_endline; *)
                           if Z3_solver.is_v_ct_unsat (pclet, pc'') sv mems then
                             {c with code = vs', es' @ List.tl es;
@@ -655,7 +708,8 @@ let rec step (c : config) : config list =
            (* print_endline "relop"; *)
            let vs', es' =
              (try (svalue32_of_bool (Eval_symbolic.eval_relop relop v1 v2)) :: vs', []
-              with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
+              with exn ->
+                vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
            [{c with code = vs', es' @ List.tl es}]
         | Unary unop, v :: vs' ->
            (* print_endline "unop"; *)
@@ -671,7 +725,8 @@ let rec step (c : config) : config list =
                 (* "Printing binop" |> print_endline; *)
                 (* Pc_type.svalue_to_string nv |> print_endline; *)
                 nv :: vs', []
-              with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
+              with exn ->
+                vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
            [{c with code = vs', es' @ List.tl es}]
         | Convert cvtop, v :: vs' ->
            let vs', es' = 
@@ -791,7 +846,7 @@ let rec step (c : config) : config list =
        Exhaustion.error e.at "call stack exhausted"
 
     | Invoke func, vs ->
-       print_endline "invoke";
+       (* print_endline "invoke"; *)
        (* print_endline ("inv:" ^ (string_of_int c.counter)); *)
        let FuncType (ins, out) = func_type_of func in
        let n1, n2 = Lib.List32.length ins, Lib.List32.length out in
@@ -1024,16 +1079,19 @@ let init_memory (inst : module_inst) (seg : memory_segment) =
   fun () -> Memory.store_bytes mem offset init
 
 let init_smemory (secret : bool) (inst : module_inst) (sec : security) = 
-  let {index; range = (const_lo,const_hi)} = sec.it in
+  let {index; range = (const_lo,const_hi); value} = sec.it in
   let smem = smemory inst index in
   let lo = i32 (eval_const inst const_lo) const_lo.at in
   let hi = i32 (eval_const inst const_hi) const_hi.at in
   let lo,hi = Int32.to_int lo, Int32.to_int hi in
   let hi_list = List.init ((hi-lo+1)/4) (fun x-> 4*x + lo) in
   let stores =
-    match secret with
-    | true -> List.map (Eval_symbolic.create_new_hstore 4) hi_list
-    | false -> List.map (Eval_symbolic.create_new_lstore 4) hi_list
+    match secret, value with
+    | true, _ -> List.map (Eval_symbolic.create_new_hstore 4) hi_list
+    | false, None -> List.map (Eval_symbolic.create_new_lstore 4) hi_list
+    | false, Some v ->
+       let ev = i32 (eval_const inst v) v.at in
+       List.map (Eval_symbolic.create_new_value 4 (Int32.to_int ev)) hi_list
   in
   let smem =
     match secret with

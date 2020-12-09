@@ -2,9 +2,10 @@ open Pc_type
 open Z3
 open Svalues
 open Smt_type
-
-type rel_type = L of Expr.expr | H of Expr.expr * Expr.expr
-
+open Sys
+(* open Unix *)
+open Smtlib
+  
 
 module ExprMem = Map.Make(struct
                      type t = int
@@ -24,6 +25,25 @@ module DefMap = Map.Make(struct
                   end)
 let defmap = ref DefMap.empty
 
+module SiMap = Map.Make(struct
+                    type t = string
+                    let compare = compare
+                  end)
+let simap = ref SiMap.empty
+
+let cfg = [("model", "true"); ("proof", "false")];;
+
+let ctx = ref (mk_context cfg);;
+
+Params.set_print_mode !ctx Z3enums.PRINT_SMTLIB2_COMPLIANT;;
+  (* memmap := ExprMem.empty;
+   * letmap := LetMap.empty;
+   * defmap := DefMap.empty;
+   * simap := SiMap.empty; *)
+
+          
+(* let test_mul = ref true *)
+             
 let print_exp exp =
   (match exp with
       | L e ->
@@ -157,68 +177,102 @@ let rec update_mem pc ctx mem a s =
    | _ -> failwith "Unexpected store - not implemented f64/32"
 
 and si_to_expr pc size ctx mem si: rel_type  = 
-  (* print_endline "si_to_expr"; *)
-  (* let _ = test_si 0 si in *)
-  (* Smt_type.term_to_string si |> print_endline; *)
-  match si with
-  | BitVec (i,n) ->
-     L (BitVector.mk_numeral ctx (Int64.to_string i) n)
-  | Const (High i, size) ->
-     (try
-        DefMap.find i !defmap
-      with Not_found -> 
-        let def = H (BitVector.mk_const_s ctx ("h1_" ^ string_of_int i) size,
-                     BitVector.mk_const_s ctx ("h2_" ^ string_of_int i) size) in
-        defmap := DefMap.add i def !defmap;
-        def
-     )
-  | Const (Low i, size) ->
-     (try
-        DefMap.find i !defmap
-      with Not_found -> 
-        let def = L (BitVector.mk_const_s ctx ("l_" ^ string_of_int i) size ) in
-        defmap := DefMap.add i def !defmap;
-        def
-     )
-  | App (f, ts) ->
-     app_to_expr pc ts size ctx mem f
-  | Let (i) ->
-     (try
-        LetMap.find i !letmap
-      with Not_found -> 
-        let sv = Pc_type.find_let pc i in
-        let sv' = sv_to_expr pc sv ctx mem in
-        letmap := LetMap.add i sv' !letmap;
-        sv'
-     )
-  | Load (i, memi, sz, ext) ->
-     let smem, memlen = mem in
-     let arr =
-       (try
-          ExprMem.find (memlen - memi) !memmap
-        with Not_found -> 
-          let bva = BitVector.mk_sort ctx 32 in
-          let bvd = BitVector.mk_sort ctx 8 in
-          let arr1 = Z3Array.mk_const_s ctx  "mem1" bva bvd in
-          let arr2 = Z3Array.mk_const_s ctx  "mem2" bva bvd in
-          let newmem = H (arr1, arr2) in
-          let tmem = Lib.List32.nth smem (Int32.of_int (memlen - memi)) in
-          let stores = Smemory.get_stores tmem in
-          let fmem = List.fold_left (update_mem pc ctx mem)
-                       newmem (List.rev stores) in
-          memmap := ExprMem.add (memlen - memi) fmem !memmap;
-          fmem
-       )
-     in
-     (* print_endline "beforeindex"; (\*  *\) *)
-     let index = si_to_expr pc size ctx mem i in
-     (* print_exp index; *)
-     let v' = merge_bytes ctx arr index sz in
-     extend ctx size v' ext
-  (* propagate_policy (Z3Array.mk_select ctx) fmem index *)
-     (* index *)
-  | _ -> failwith "String, Int, Float, Let, Multi are not implemented yet."
-
+    let si' = 
+      (match si with
+       | BitVec (i,n) ->
+          L (BitVector.mk_numeral ctx (Int64.to_string i) n)
+       | Const (High i, size) ->
+          (try
+             DefMap.find i !defmap
+           with Not_found -> 
+             let def = H (BitVector.mk_const_s ctx ("h1_" ^ string_of_int i) size,
+                          BitVector.mk_const_s ctx ("h2_" ^ string_of_int i) size) in
+             defmap := DefMap.add i def !defmap;
+             def
+          )
+       | Const (Low i, size) ->
+          (try
+             DefMap.find i !defmap
+           with Not_found -> 
+             let def = L (BitVector.mk_const_s ctx ("l_" ^ string_of_int i) size ) in
+             defmap := DefMap.add i def !defmap;
+             def
+          )
+       | App (f, ts) ->
+          (try
+             SiMap.find (Obj.magic si) !simap
+           with Not_found ->
+             let res = app_to_expr pc ts size ctx mem f in
+             simap := SiMap.add (Obj.magic si) res !simap;
+             res
+          )
+       | Let (i) ->
+          (try
+             LetMap.find i !letmap
+           with Not_found -> 
+             match Pc_type.find_let pc i with
+             | Sv sv' ->
+                let sv' = sv_to_expr pc sv' ctx mem in
+                letmap := LetMap.add i sv' !letmap;
+                sv'
+             | Z3Expr32 e
+               | Z3Expr64 e ->
+                letmap := LetMap.add i e !letmap;
+                e
+          )
+       | Load (i, memi, sz, _) ->
+          (try
+             SiMap.find (Obj.magic si) !simap
+           with Not_found ->
+             let smem, memlen = mem in
+             let arr =
+               (try
+                  ExprMem.find (memlen - memi) !memmap
+                with Not_found ->
+                  let bva = BitVector.mk_sort ctx 32 in
+                  let bvd = BitVector.mk_sort ctx 8 in
+                  let arr1 = Z3Array.mk_const_s ctx  "mem1" bva bvd in
+                  let arr2 = Z3Array.mk_const_s ctx  "mem2" bva bvd in
+                  let newmem = H (arr1, arr2) in
+                  let tmem = Lib.List32.nth smem (Int32.of_int (memlen - memi)) in
+                  let stores = Smemory.get_stores tmem in
+                  let fmem = List.fold_left (update_mem pc ctx mem)
+                               newmem (List.rev stores) in
+                  memmap := ExprMem.add (memlen - memi) fmem !memmap;
+                  fmem
+               )
+             in
+             let index = si_to_expr pc size ctx mem i in
+             (* print_exp index; *)
+             let v' = merge_bytes ctx arr index sz in
+             simap := SiMap.add (Obj.magic si) v' !simap;
+             v' )
+         
+       (* let v'' = extend ctx size v' ext in *)
+          (* let v''' = (match v'' with
+           *             | L v'' 
+           *             | H (v'',_) -> v'') in
+           * let bv = Expr.get_sort v''' in
+           * let s = BitVector.get_size bv in
+           * print_endline "z3_solver: load";
+           * term_to_string i |> print_endline;
+           * print_endline (string_of_int sz);
+           * print_endline (string_of_int size);
+           * (match ext with
+           *  | None -> print_endline "None";
+           *  | Some Types.SX -> print_endline "sx";
+           *  | Some Types.ZX -> print_endline "zx";
+           * );
+           * print_endline "final size";
+           * print_endline (string_of_int s);
+           * v'' *)
+       (* propagate_policy (Z3Array.mk_select ctx) fmem index *)
+       (* index *)
+       | _ -> failwith "String, Int, Float, Let, Multi are not implemented yet."
+      ) in
+    simap := SiMap.add (Obj.magic si) si' !simap;
+    si'
+  
 and app_to_expr pc ts size ctx mem f =
   match f, ts with
   | Ite, t1::t2::t3::[] ->
@@ -337,9 +391,32 @@ and app_to_expr pc ts size ctx mem f =
   | BvSub, _ -> failwith "Not valid bitwise subtraction."
 
   | BvMul, t1::t2::[] ->
+     (* print_endline "mk_mul"; *)
      let e1 = si_to_expr pc size ctx mem t1 in
      let e2 = si_to_expr pc size ctx mem t2 in
+     (* let e1' = match e1 with
+      *   | L e1' -> e1'
+      *   | H (e1',_) -> e1'
+      * in
+      * let e2' = match e2 with
+      *   | L e2' -> e2'
+      *   | H (e2',_) -> e2'
+      * in
+      * (try
+      *      let e1s = Expr.get_sort e1' in 
+      *      BitVector.get_size e1s |> string_of_int |> print_endline;
+      *      let e2s = Expr.get_sort e2' in 
+      *      BitVector.get_size e2s |> string_of_int |> print_endline;
+      * with _ -> print_endline "try failed"); *)
+     (* (try *)
      propagate_policy (BitVector.mk_mul ctx) e1 e2
+      (* with _ ->
+      *    print_endline "failure";
+      *    print_endline (string_of_int size);
+      *    term_to_string t1 |> print_endline;
+      *    term_to_string t2 |> print_endline;
+      *    failwith "failure";
+      * ) *)
   | BvMul, _ -> failwith "Not valid bitwise multiplication."
 
   | BvURem, t1::t2::[] ->
@@ -459,6 +536,7 @@ and sv_to_expr pc sv ctx mem =
     | _ -> failwith "Float not implemented."
 
 
+
 let rec pc_to_expr pc ctx mem: rel_type =
   let pclet, pc = pc in
   match pc with
@@ -474,14 +552,364 @@ let create_mem ctx size =
   let bv = BitVector.mk_sort ctx size in
   Z3Array.mk_const_s ctx  "mem" bv bv
 
-let init_solver () = 
-  let cfg = [("model", "true"); ("proof", "false")] in
-  let ctx = mk_context cfg in
-  Params.set_print_mode ctx Z3enums.PRINT_SMTLIB2_COMPLIANT;
+let clean_solver () =
+  ctx := mk_context cfg;
+  Params.set_print_mode !ctx Z3enums.PRINT_SMTLIB2_COMPLIANT;
   memmap := ExprMem.empty;
   letmap := LetMap.empty;
   defmap := DefMap.empty;
-  ctx
+  simap := SiMap.empty
+
+  
+let init_solver () =
+  memmap := ExprMem.empty;
+  !ctx
+
+let bin_of_string str =
+  let len = String.length str in
+  if len < 3 then failwith "Bitvector.of_string : too short string" else
+    (* let size =
+     *   match str.[0], str.[1], str.[2] with
+     *   | '0', 'x', _ -> (len - 2) * 4
+     *   | '0', 'b', _ -> len - 2
+     *   | '+', '0', 'x'
+     *   | '-', '0', 'x' -> (len - 3) * 4
+     *   | '+', '0', 'b'
+     *   | '-', '0', 'b' -> len - 3
+     *   | _ -> failwith "Bitvector.of_string : should start with [+-]?0[xb]"
+     * in *)
+    try
+      let num = Big_int.big_int_of_string str in
+      Big_int.int64_of_big_int num 
+    with Failure _ -> raise (Invalid_argument ("of_string : " ^ str))
+
+
+
+let rec find_command = function
+  | h::tl ->
+     let cd = h.command_desc in
+     (match cd with
+      | Smtlib.CmdDefineFun fd ->
+         let FunDef (symb, sort_option, sorted_vars, sort, term) = fd.fun_def_desc in
+         if (match symb.symbol_desc with
+             | SimpleSymbol s when s = "sv" -> true
+             | _ -> false)
+         then (
+           (match term.term_desc with
+            | TermSpecConstant (CstBinary str) ->
+               let b64 = bin_of_string ("0b" ^ str) in
+               (* Int64.to_int b64 |> string_of_int |> print_endline; *)
+               (* Smtlib_pp.pp_symbol Format.std_formatter symb; *)
+               (* Smtlib_pp.pp_term Format.std_formatter term; *)
+               b64
+            | _ -> failwith "Unknown term");
+         ) else 
+             find_command tl
+      | _ ->
+         print_endline "No assert cmd";
+         find_command tl
+     );
+  | [] -> failwith "Not found"
+
+        
+let read_cvc4 () =
+  print_endline "read_cvc4";
+  let tmp_file = "/tmp/cvc4.out" in
+  (* let _ = Sys.command @@ "cvc4-1.8-x86_64-linux-opt -m /tmp/out.smt2 > " ^ tmp_file in *)
+  let chan = open_in tmp_file in
+    match input_line chan with
+    | "unsat" -> None
+    | "sat" ->
+       let lexbuf = Lexing.from_channel chan in
+       let c =
+         (try
+            let m = Smtlib_parser.model Smtlib_lexer.token lexbuf in
+            let mc = m.model_commands in
+            close_in chan;
+            find_command mc
+          with e ->
+            print_endline "failed cvc4";
+            (* let open Lexing in
+             * let pos = lexbuf.lex_curr_p.pos_cnum in
+             * let width = 30 in
+             * let lo = max 0 (pos - width)
+             * and hi = min (String.length raw_model) (pos + width) in
+             * let extract =
+             *   String.sub raw_model lo (hi - lo)
+             *   |> String.map (function '\n' -> ' ' | x -> x)
+             * in
+             * let underline = String.make (pos - lo) ' ' in
+             * Printf.printf
+             *   "Parsing of solver output failed approximately here :@ @[<v>%s@,%s^@]"
+             *   extract underline; *)
+            raise e
+         ) in
+       close_in chan;
+       Some c
+    | _ -> failwith @@ "Error output of file " ^ tmp_file
+       
+  let read_z3 () =
+    print_endline "read_z3";
+    let tmp_file = "/tmp/z3.out" in
+    (* let _ = Sys.command @@ "z3 -smt2 MODEL=true /tmp/out.smt2 > " ^ tmp_file in *)
+    let chan = open_in tmp_file in
+    match input_line chan with
+    | "unsat" -> None
+    | "sat" ->
+       let lexbuf = Lexing.from_channel chan in
+       let c =
+         (try
+            let m = Smtlib_parser.model Smtlib_lexer.token lexbuf in
+            let mc = m.model_commands in
+            close_in chan;
+            find_command mc
+          with e ->
+            close_in chan;
+            print_endline "failed z3";
+            raise e
+         ) in
+       close_in chan;
+       Some c
+    | _ -> failwith @@ "Error output of file " ^ tmp_file
+
+let read_yices () =
+  print_endline "read_yices";
+  let tmp_file = "/tmp/yices.out" in
+  (* let _ = Sys.command @@ "yices-smt2 /tmp/out.smt2 > " ^ tmp_file in *)
+  let chan = open_in tmp_file in
+  match input_line chan with
+  | "unsat" ->
+     close_in chan;
+     None
+  | "sat" ->
+     let lexbuf = Lexing.from_channel chan in
+     (try
+        print_endline "reading line";
+        match Smt2_parser.model Smt2_lexer.token lexbuf with
+        | Smtlib.Sat lst ->
+           print_endline "test binary to string sat";
+           let num = bin_of_string ("0b" ^ snd (List.hd lst)) in
+           print_endline "after binary to string sat";
+           close_in chan;
+           print_endline "after close chan";
+           Some num
+                (* Int64.to_int num |> string_of_int |> print_endline; *)
+      with e ->
+        close_in chan;
+        print_endline "Yices error";
+        raise e
+     )
+  | _ -> failwith @@ "Error output of file " ^ tmp_file
+  (* print_endline "returning"; *)
+  (* exit 0 *)
+
+let read_sat solver_name () =
+  (* print_endline "read_sat"; *)
+  let tmp_file = "/tmp/" ^ solver_name ^ ".out" in
+  let chan = open_in tmp_file in
+  let result = input_line chan in
+  let ret =
+    match  result with
+    | "unsat" -> false
+    | "sat" -> true
+    | _ -> failwith @@ "Unknown result from " ^ solver_name ^ " returns: " ^ result 
+  in
+  close_in chan;
+  ret
+ 
+
+let run_solvers input_file yices z3 cvc4 =
+  (* print_endline "run_solvers"; *)
+  try
+    (* TODO(Romy): before commiting *)
+    let path = "/home/romi/didaktoriko/repo/wasm/test/symb_wasm/relsymb/interpreter/" in
+    let out_file = "/tmp/run_solvers.out" in
+    let err_file = "/tmp/run_solvers.err" in
+    let _ = Sys.command @@ "bash " ^ path ^ "run_solvers.sh " ^ input_file ^ " 1> " ^ out_file ^ " 2> " ^ err_file in
+    let chan = open_in out_file in
+    try
+      let solver = input_line chan in
+      if solver = "yices" then
+        yices()
+      else if solver = "z3" then
+        z3()
+      else if solver = "cvc4" then
+        cvc4()
+      else
+        failwith "No solver returned";
+    with e ->
+      print_endline "Solver error";
+      raise e
+  with e ->
+    print_endline "failed";
+    raise e
+  (* match fork() with
+   * | 0 -> run_cvc4()
+   * | pid_yices ->
+   *    (
+   *      (\* match fork() with
+   *       * | 0 -> run_cvc4()
+   *       * | pid_cvc4 -> *\)
+   * 
+   *         (match fork() with
+   *          | 0 -> run_z3()
+   *          | pid_z3 ->
+   *             (match wait () with
+   *              | (pid, WEXITED retcode) when pid = pid_yices->
+   *                 print_endline "yices";
+   *                 string_of_int retcode |> print_endline;
+   *                 print_endline @@ "Killing z3 " ^ string_of_int pid_z3;
+   *                 kill_children pid_z3 sigkill;
+   *              | (pid, WEXITED retcode) when pid = pid_z3->
+   *                 print_endline "z3 terminated";
+   *                 string_of_int retcode |> print_endline;
+   *                 print_endline "Killing yices";
+   *                 kill_children pid_yices sigkill;
+   *              | (pid, _) when pid = pid_z3 ->
+   *                 print_endline "failed z3";
+   *                 kill_children pid_yices sigkill;
+   *                 kill_children pid_z3 sigkill;
+   *              | (pid, _) when pid = pid_yices ->
+   *                 print_endline "failed yices";
+   *                 kill_children pid_yices sigkill;
+   *                 kill_children pid_z3 sigkill;
+   *              | _ ->
+   *                 print_endline "failed all";
+   *                 kill_children pid_yices sigkill;
+   *                 kill_children pid_z3 sigkill;
+   *             )
+   *         )
+   *    ) *)
+
+let write_formula_to_file solver =
+  (* print_endline "write_formula_to_file"; *)
+  let filename = Filename.temp_file "wasm_" ".smt2" in
+  let oc = open_out filename in
+  Printf.fprintf oc "(set-logic QF_ABV)\n";
+  Printf.fprintf oc "%s\n" (Solver.to_string solver);
+  Printf.fprintf oc "(check-sat)\n(get-model)\n";
+  close_out oc;
+  filename
+
+let find_solutions (sv: svalue) (pc : pc_ext)
+      (mem: Smemory.t list * int) : int list =
+  (* print_endline "find_solutions"; *)
+  (* svalue_to_string sv |> print_endline; *)
+  let ctx = init_solver() in
+  (* print_endline "before sv_to_expr"; *)
+  let v = sv_to_expr pc sv ctx mem in
+  (* print_endline "after sv_to_expr"; *)
+  let g = Goal.mk_goal ctx true false false in
+  
+  let size = Svalues.size_of sv in
+  let v' = BitVector.mk_const_s ctx "sv" size in
+  (* print_endline "after mk_Const"; *)
+  let rec find_solutions_i (sv: svalue) (pc : pc_ext)
+            (mem: Smemory.t list * int) (acc: int64 list) : int64 list =
+    print_endline "find_solutions_i";
+    let vrec = 
+      (match v with
+       | L v ->  Boolean.mk_eq ctx v' v
+       | H (v1,v2) -> Boolean.mk_eq ctx v' v1
+      );
+    in
+    Goal.add g [vrec];
+    let previous_values = List.map (fun i ->
+                              let bv = Expr.get_sort v'  in
+                              let old_val = Expr.mk_numeral_string ctx (Int64.to_string i) bv in
+                              let eq = Boolean.mk_eq ctx old_val v' in
+                              Boolean.mk_not ctx eq) acc in
+    Goal.add g previous_values;
+    let pcex = pc_to_expr pc ctx mem in
+    print_endline "find_solutions_i_ after pc_to_expr";
+    (match pcex with
+     | L v ->
+        Goal.add g [v]
+     | H (v1,v2) ->
+        Goal.add g [v1]
+    );
+    (* Printf.printf "Goal: %s\n" (Goal.to_string g); *)
+    let solver = Solver.mk_solver ctx None in
+    List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
+
+    print_endline "creating filename";
+    let filename = write_formula_to_file solver in
+    print_endline @@ "after writing formula to filename" ^ filename;
+    let ret = match run_solvers filename read_yices read_z3 read_cvc4 with
+      | None -> acc
+      | Some v -> find_solutions_i sv pc mem (v::acc)
+    in
+    (* remove filename;            (\*  *\) *)
+    ret
+  in
+  let str = find_solutions_i sv pc mem [] in
+  List.map (fun v -> Int64.to_int v) str
+
+                            
+let simplify (sv: svalue) (pc : pc_ext)
+      (mem: Smemory.t list * int) : bool * simpl =
+  (* print_endline "simplify"; *)
+  (* svalue_to_string sv |> print_endline; *)
+  let ctx = init_solver() in
+
+  let v = sv_to_expr pc sv ctx mem in
+  (* print_endline (Expr.get_simplify_help ctx); *)
+  let params = Params.mk_params ctx in
+  (* Params.add_int params (Symbol.mk_string ctx "max_steps") 10000000; *)
+  (* print_endline (Params.to_string params); *)
+  try
+    match v with
+    | L v ->
+       let simp = Expr.simplify v (Some params) in
+       (* Expr.to_string simp |> print_endline; *)
+       if (BitVector.is_bv simp && Expr.is_numeral simp) then (
+         let bvs = Expr.get_sort simp in
+         let size = BitVector.get_size bvs in
+         let v = Int64.of_string (BitVector.numeral_to_string simp) in
+         if (size = 32) then
+           true, Sv  (SI32 (Si32.bv_of_int v size))
+         else if (size = 64) then
+           true, Sv (SI64 (Si64.bv_of_int v size))
+         else
+           failwith ("Simplify: unknown size" ^ string_of_int size);
+       ) else ( 
+         (* print_endline "fail simplify L";
+          * Expr.to_string v |> print_endline;
+          * Expr.to_string simp |> print_endline;
+          * svalue_to_string sv |> print_endline; *)
+         (match sv with
+         | SI32 _ -> (true, Z3Expr32 (L simp))
+         | SI64 _ -> (true, Z3Expr64 (L simp))
+         | SF32 _ -> failwith "Not implemented fi32"
+         | SF64 _ -> failwith "Not implemented fi64"
+         )
+       )
+    | H (v1,v2) ->
+       let simp1 = Expr.simplify v1 (Some params) in
+       let simp2 = Expr.simplify v2 (Some params) in
+       if (BitVector.is_bv simp1 && Expr.is_numeral simp1 && Expr.equal simp1 simp2) then (
+         let bvs = Expr.get_sort simp1 in
+         let size = BitVector.get_size bvs in
+         let v = Int64.of_string (BitVector.numeral_to_string simp1) in
+         if (size = 32) then
+           true, Sv (SI32 (Si32.bv_of_int v size))
+         else if (size = 64) then
+           true, Sv (SI64 (Si64.bv_of_int v size))
+         else
+           failwith ("Simplify: unknown size" ^ string_of_int size);
+       ) else (
+         (* print_endline "fail simplify H";
+          * Expr.to_string v1 |> print_endline;
+          * Expr.to_string simp1 |> print_endline;
+          * svalue_to_string sv |> print_endline; *)
+         (match sv with
+         | SI32 _ -> (true, Z3Expr32 (H (simp1,simp2)))
+         | SI64 _ -> (true, Z3Expr64 (H (simp1,simp2)))
+         | SF32 _ -> failwith "Not implemented fi32"
+         | SF64 _ -> failwith "Not implemented fi64"
+         )
+       )
+  with _ -> (false, Sv sv)
 
 
 let is_unsat (pc : pc_ext) (mem: Smemory.t list * int) =
@@ -499,16 +927,22 @@ let is_unsat (pc : pc_ext) (mem: Smemory.t list * int) =
   (* Printf.printf "Goal: %s\n" (Goal.to_string g); *)
   let solver = Solver.mk_solver ctx None in
   List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
-  match (Solver.check solver []) with
-  | Solver.UNSATISFIABLE ->
-     true
-  | _ ->
-     (* let model = Solver.get_model solver in
-      * (match model with
-      *  | None -> print_endline "None"
-      *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
-      * ); *)
-     false
+
+  let filename = write_formula_to_file solver in
+  let res = not (run_solvers filename (read_sat "yices") (read_sat "z3") (read_sat "cvc4")) in
+  remove filename;
+  res
+  
+  (* match (Solver.check solver []) with
+   * | Solver.UNSATISFIABLE ->
+   *    true
+   * | _ ->
+   *    (\* let model = Solver.get_model solver in
+   *     * (match model with
+   *     *  | None -> print_endline "None"
+   *     *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
+   *     * ); *\)
+   *    false *)
 
 
   
@@ -538,16 +972,22 @@ let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) =
      (* Printf.printf "Goal: %s\n" (Goal.to_string g); *)
      let solver = Solver.mk_solver ctx None in
      List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
-     match (Solver.check solver []) with
-     | Solver.UNSATISFIABLE -> true
-     | _ ->
-        (* Printf.printf "Goal v_ct: %s\n" (Goal.to_string g); *)
-        let model = Solver.get_model solver in
-        (match model with
-         | None -> print_endline "None"
-         | Some m -> print_endline "Model"; print_endline (Model.to_string m)
-        );
-        false
+
+     let filename = write_formula_to_file solver in
+     let res = not (run_solvers filename (read_sat "yices") (read_sat "z3") (read_sat "cvc4")) in
+     remove filename;
+     res
+
+     (* match (Solver.check solver []) with
+      * | Solver.UNSATISFIABLE -> true
+      * | _ ->
+      *    (\* Printf.printf "Goal v_ct: %s\n" (Goal.to_string g); *\)
+      *    let model = Solver.get_model solver in
+      *    (match model with
+      *     | None -> print_endline "None"
+      *     | Some m -> print_endline "Model"; print_endline (Model.to_string m)
+      *    );
+      *    false *)
 
   
 let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool =
@@ -578,6 +1018,11 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
       List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
 
       (* Printf.printf "Solver v_ct: %s\n" (Solver.to_string solver); *)
+      (* let filename = write_formula_to_file solver in
+       * let res = not (run_solvers filename (read_sat "yices") (read_sat "z3") (read_sat "cvc4")) in
+       * remove filename;
+       * res *)
+
       match (Solver.check solver []) with
       | Solver.UNSATISFIABLE ->
          true
@@ -615,88 +1060,20 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
   let solver = Solver.mk_solver ctx None in
   List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
   (* Printf.printf "Solver is_sat: %s\n" (Solver.to_string solver); *)
+  
+  (* let filename = write_formula_to_file solver in
+   * let res = run_solvers filename (read_sat "yices") (read_sat "z3") (read_sat "cvc4") in
+   * remove filename;
+   * res *)
+
   let check_solver = Solver.check solver [] in
   match check_solver with
   | Solver.SATISFIABLE -> true
   | _ -> false
 
 
-let find_solutions (sv: svalue) (pc : pc_ext)
-      (mem: Smemory.t list * int) : int list =
-  (* print_endline "find_solutions"; *)
-  (* svalue_to_string sv |> print_endline; *)
-  let rec find_solutions_i (sv: svalue) (pc : pc_ext)
-        (mem: Smemory.t list * int) (acc: string list) : string list =
-    if (List.length acc >= 10) then acc
-    else (
-    (* print_endline "find_solutions_i"; *)
-    let ctx = init_solver() in
-
-    let v = sv_to_expr pc sv ctx mem in
-    let g = Goal.mk_goal ctx true false false in
-    
-    let size = Svalues.size_of sv in
-    let v' = BitVector.mk_const_s ctx "sv" size in
-    let vrec = 
-      (match v with
-       | L v ->  Boolean.mk_eq ctx v' v
-       | H (v1,v2) -> Boolean.mk_eq ctx v' v1
-      );
-    in
-    Goal.add g [vrec];
-    let previous_values = List.map (fun i ->
-                              let bv = Expr.get_sort v'  in
-                              let old_val = Expr.mk_numeral_string ctx i bv in
-                              let eq = Boolean.mk_eq ctx old_val v' in
-                              Boolean.mk_not ctx eq) acc in
-    Goal.add g previous_values;
-    let pcex = pc_to_expr pc ctx mem in
-    (match pcex with
-     | L v ->
-        Goal.add g [v]
-     | H (v1,v2) ->
-        Goal.add g [v1]
-    );
-    (* Printf.printf "Goal: %s\n" (Goal.to_string g); *)
-    let solver = Solver.mk_solver ctx None in
-    List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
-    (* Printf.printf "Solver is_sat: %s\n" (Solver.to_string solver); *)
-    let check_solver = Solver.check solver [] in
-    match check_solver with
-    | Solver.SATISFIABLE ->
-       let model = Solver.get_model solver in
-       (match model with
-        | None -> failwith "No model"
-        | Some m ->
-           (* print_endline "Model";
-            * print_endline (Model.to_string m);
-            * print_endline "decl"; *)
-           let decls = Model.get_decls m in
-           let sv_func = List.filter (fun d ->
-                             Symbol.get_string (FuncDecl.get_name d) = "sv") decls in
-           (match sv_func with
-            | sv'::[] ->
-               let res = Model.get_const_interp m sv' in
-               (match res with
-                | None -> failwith "No solutions for \"sv\""
-                | Some exp -> if (BitVector.is_bv exp) then (
-                                (* let v = BitVector.get_int exp in *)
-                                let v = BitVector.numeral_to_string exp in
-                                find_solutions_i sv pc mem (v::acc))
-                              else
-                                failwith ("not is_numeral" ^ Expr.to_string exp)
-               );
-            | _ -> failwith "Too many solutions for \"sv\""
-           )
-       )
-    | Solver.UNSATISFIABLE -> acc
-    | Solver.UNKNOWN -> failwith "Unknown solver result"
-    )
-  in
-  let str = find_solutions_i sv pc mem [] in
-  List.map (fun s -> Int64.to_int (Int64.of_string s)) str
-
-(* let max = Optimize.maximize
+              
+     (* let max = Optimize.maximize
  * let min = Optimize.minimize
  * 
  * 

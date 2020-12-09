@@ -1,10 +1,15 @@
 open Svalues
-
+open Z3
+   
 module Lets = Map.Make(struct
                   type t = int
                   let compare = compare
                 end)
-type pc_let = svalue Lets.t
+type rel_type = L of Expr.expr | H of Expr.expr * Expr.expr
+                                    
+type simpl = Z3Expr32 of rel_type | Z3Expr64 of rel_type | Sv of svalue
+                                       
+type pc_let = simpl Lets.t
 
 let letnum = ref 0
            
@@ -20,19 +25,21 @@ let svalue_to_string sv =
      | SF32 sv -> "F32 " ^ F32.to_string sv
      | SF64 sv -> "F64 " ^ F64.to_string sv
 
-let svalue_depth sv =
+let svalue_depth sv n =
    match sv with
-     | SI32 sv -> Si32.count_depth sv
-     | SI64 sv -> Si64.count_depth sv
-     | SF32 sv -> 1
-     | SF64 sv -> 1
+     | SI32 sv -> Si32.count_depth sv n
+     | SI64 sv -> Si64.count_depth sv n
+     | SF32 sv -> false
+     | SF64 sv -> false
 
 let svalue_newlet sv i =
    match sv with
-     | SI32 sv -> SI32 (Si32.let_ i)
-     | SI64 sv -> SI64 (Si64.let_ i)
-     | SF32 _ -> sv
-     | SF64 _ -> sv
+   | Z3Expr32 _ -> SI32 (Si32.let_ i)
+   | Z3Expr64 _ -> SI64 (Si32.let_ i)
+   | Sv (SI32 sv) -> SI32 (Si32.let_ i)
+   | Sv (SI64 sv) -> SI64 (Si64.let_ i)
+   | Sv (SF32 sv) -> SF32 sv
+   | Sv (SF64 sv) -> SF64 sv
 
 (* function to check if assignment works *)
 (* let svalue_eq sv tr =
@@ -60,13 +67,13 @@ let next_let () =
   letnum := !letnum + 1;
   !letnum
   
-let add_let (pce: pc_ext) (sv: svalue) =
+let add_let (pce: pc_ext) (sv: simpl) =
   let pclet, pc = pce in
   let nl = next_let () in
   (* print_endline ("Add let:" ^ (string_of_int nl)); *)
   nl, (Lets.add nl sv pclet, pc)
 
-let find_let (pce: pc_ext) (i: int) =
+let find_let (pce: pc_ext) (i: int) : simpl =
   let pclet, pc = pce in
   try
     Lets.find i pclet
@@ -77,3 +84,4 @@ let find_let (pce: pc_ext) (i: int) =
 
 let empty_pc () =
   (Lets.empty, PCTrue)
+

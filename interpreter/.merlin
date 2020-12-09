@@ -10,6 +10,7 @@ S syntax
 S text
 S util
 S valid
+S smtlib
 
 
 B _build/
@@ -24,4 +25,5 @@ B _build/syntax
 B _build/text
 B _build/util
 B _build/valid
+B _build/smtlib
 

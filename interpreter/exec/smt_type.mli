@@ -138,6 +138,6 @@ val merge : solv_type -> term -> term -> (mergetype * mergetype) option
 val merge_to_string :  mergetype -> string
 val term_to_string : term -> string
 
-val count_depth : term -> int
+val count_depth : term -> int -> bool
 
 val let_ : int -> term

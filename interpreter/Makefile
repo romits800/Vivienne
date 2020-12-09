@@ -19,7 +19,7 @@ WINMAKE =	winmake.bat
 
 #PACKAGE =       
 PACKAGE =       -package z3
-DIRS =		util syntax binary text valid runtime exec script host main
+DIRS =		util syntax binary text valid smtlib runtime exec script host main
 LIBS =		bigarray
 FLAGS = 	-lexflags -ml -cflags '-w +a-4-27-42-44-45 -warn-error +a-3'
 OCB =		ocamlbuild $(FLAGS) $(DIRS:%=-I %) $(LIBS:%=-libs %) ${PACKAGE}
@@ -52,6 +52,7 @@ comma =		,
 _tags:
 		echo >$@ "true: bin_annot"
 		echo >>$@ "true: debug"
+		echo >>$@ "true: use_menhir"
 		echo >>$@ "<{$(subst $(space),$(comma),$(DIRS))}/*.cmx>: for-pack($(PACK))"
 
 $(UNOPT):	main.byte

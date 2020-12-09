@@ -11,10 +11,10 @@ open Script
 
 let error at msg = raise (Script.Syntax (at, msg))
 
-let parse_error msg =
+(*let parse_error msg =
   error Source.no_region
     (if msg = "syntax error" then "unexpected token" else msg)
-
+ *)
 
 (* Position handling *)
 
@@ -178,21 +178,23 @@ let inline_type_explicit (c : context) x ft at =
 
 %}
 
-%token NAT INT FLOAT STRING VAR VALUE_TYPE FUNCREF MUT LPAR RPAR
+/*%token NAT INT FLOAT STRING VAR VALUE_TYPE*/
+%token FUNCREF MUT LPAR RPAR
 %token LSBR RSBR COMMA
 %token NOP DROP BLOCK END IF THEN ELSE SELECT LOOP BR BR_IF BR_TABLE
 %token CALL CALL_INDIRECT RETURN
 %token LOCAL_GET LOCAL_SET LOCAL_TEE GLOBAL_GET GLOBAL_SET
-%token LOAD STORE OFFSET_EQ_NAT ALIGN_EQ_NAT
-%token SCONST CONST UNARY BINARY TEST COMPARE CONVERT
+/*%token LOAD STORE OFFSET_EQ_NAT ALIGN_EQ_NAT*/
+/*%token SCONST CONST*/
+/*%token UNARY BINARY TEST COMPARE CONVERT*/
 %token UNREACHABLE MEMORY_SIZE MEMORY_GROW
 %token FUNC START TYPE PARAM RESULT LOCAL GLOBAL
-%token TABLE ELEM MEMORY DATA OFFSET IMPORT EXPORT TABLE SECRET PUBLIC
+%token TABLE ELEM MEMORY DATA OFFSET IMPORT EXPORT SECRET PUBLIC
 %token MODULE BIN QUOTE
 %token SCRIPT REGISTER INVOKE GET SYMB_EXEC
-%token ASSERT_MALFORMED ASSERT_INVALID ASSERT_SOFT_INVALID ASSERT_UNLINKABLE
+%token ASSERT_MALFORMED ASSERT_INVALID ASSERT_UNLINKABLE
 %token ASSERT_RETURN ASSERT_TRAP ASSERT_EXHAUSTION ASSERT_FAILURE
-%token NAN
+/*%token NAN*/
 %token INPUT OUTPUT
 %token EOF
 
@@ -217,9 +219,10 @@ let inline_type_explicit (c : context) x ft at =
 %token<string> ALIGN_EQ_NAT
 
 %token<Script.nan> NAN
+%token LOW
 
-%nonassoc LOW
-%nonassoc VAR
+/* %nonassoc LOW 
+%nonassoc VAR */
 
 %start script script1 module1
 %type<Script.script> script
@@ -311,7 +314,7 @@ bind_var :
   | VAR { $1 @@ at () }
 
 labeling_opt :
-  | /* empty */ %prec LOW
+  | /* empty */ /*%prec LOW*/
     { fun c xs ->
       List.iter (fun x -> error x.at "mismatching label") xs;
       anon_label c }
@@ -322,7 +325,7 @@ labeling_opt :
       bind_label c $1 }
 
 labeling_end_opt :
-  | /* empty */ %prec LOW { [] }
+  | /* empty */ /*%prec LOW*/ { [] }
   | bind_var { [$1] }
 
 offset_opt :
@@ -690,22 +693,31 @@ secret :
     { let at = at () in
       fun c ->
         let sx = $3 c smemory in
-        {range = ($4 c, $5 c); index = sx } @@ at }
+        {range = ($4 c, $5 c); index = sx; value = None } @@ at }
   | LPAR SECRET offset offset RPAR
     { let at = at () in
       fun c ->
-        {range = ($3 c, $4 c); index = 0l @@ at } @@ at }
+        {range = ($3 c, $4 c); index = 0l @@ at; value = None } @@ at }
 
 public :
   | LPAR PUBLIC var offset offset RPAR
     { let at = at () in
       fun c ->
         let sx = $3 c smemory in
-        {range = ($4 c, $5 c); index = sx } @@ at }
+        {range = ($4 c, $5 c); index = sx; value = None } @@ at }
   | LPAR PUBLIC offset offset RPAR
     { let at = at () in
       fun c ->
-        {range = ($3 c, $4 c); index = 0l @@ at } @@ at }
+        {range = ($3 c, $4 c); index = 0l @@ at; value = None } @@ at }
+  | LPAR PUBLIC var offset offset offset RPAR
+    { let at = at () in
+      fun c ->
+        let sx = $3 c smemory in
+        {range = ($4 c, $5 c); index = sx; value = Some ($5 c) } @@ at; }
+  | LPAR PUBLIC offset offset offset RPAR
+    { let at = at () in
+      fun c ->
+        {range = ($3 c, $4 c); index = 0l @@ at; value = Some ($5 c) } @@ at }
 
       
 memory :

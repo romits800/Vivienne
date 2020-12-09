@@ -163,6 +163,7 @@ and sec' =
 {
   index : var;
   range : const * const;
+  value : const option;
 }
 
   
