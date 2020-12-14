@@ -21,7 +21,7 @@
 %%
 
 model:
- definitions EOF { print_endline "sat"; Smtlib.Sat $1 }
+ definitions EOF { (* print_endline "sat"; *) Smtlib.Sat $1 }
 ;
 
 definitions:

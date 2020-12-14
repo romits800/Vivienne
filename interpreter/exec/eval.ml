@@ -893,37 +893,53 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
  *   c : config
  *)
 (*TODO(Romy): Implement debug flag etc*)
+let simplify_v frame pc v =
+  if svalue_depth v 5 then (
+    let mem = (frame.inst.smemories, smemlen frame.inst) in
+    (match Z3_solver.simplify v pc mem with
+     | false, v 
+       | true, (Z3Expr32 _ as v)
+       | true, (Z3Expr64 _ as v) -> 
+        let nl, pc' = add_let pc v in
+        let nv = svalue_newlet v nl in
+        (* let eq = svalue_eq nv v in *)
+        (* let c = {c with pc = pc'} in *) 
+        nv, pc'
+     | true, Sv v ->
+        (* print_endline "true";
+         * svalue_to_string v |> print_endline; *)
+        v, pc
+    )
+  ) else
+    v, pc
 
+(* let simplify_pc frame pc =
+ *   let pclet, pc = pc in
+ *   if pc_depth pc 10 then (
+ *     let mem = (frame.inst.smemories, smemlen frame.inst) in
+ *     (match Z3_solver.simplify_pc (pclet,pc) mem with
+ *      | false, pc 
+ *        | true, pc -> pc
+ *     )
+ *   ) else
+ *     (pclet,pc) *)
+
+        
 let disable_ct = ref false
                
 let rec step (c : config) : config list =
   (* print_endline ("step:" ^ (string_of_int c.counter)); *)
   let {frame; code = vs, es; pc = pclet, pc; _} = c in
   let e = List.hd es in
+  
   let vs, (pclet, pc) =
     match vs with
     | v::vs' ->
-       if svalue_depth v 5 then (
-         let mem = (frame.inst.smemories, smemlen frame.inst) in
-         (match Z3_solver.simplify v (pclet, pc) mem with
-          | (false), v 
-            | (true), (Z3Expr32 _ as v)
-            | (true), (Z3Expr64 _ as v) -> 
-             (* if tf then print_endline "true_expr"; *)
-             let nl, pc' = add_let (pclet, pc) v in
-             let nv = svalue_newlet v nl in
-             (* let eq = svalue_eq nv v in *)
-             (* let c = {c with pc = pc'} in *) 
-             nv::vs', pc'
-          | true, Sv v ->
-             (* print_endline "true";
-              * svalue_to_string v |> print_endline; *)
-             v::vs', (pclet,pc)
-         )
-       ) else
-         vs, (pclet,pc)
+       let v, pc' = simplify_v frame (pclet,pc) v in
+       v::vs', pc'
     | [] -> vs, (pclet,pc)
   in
+  (* let pclet,pc = simplify_pc frame (pclet,pc) in *)
   let c = {c with pc = (pclet,pc)} in
   (* print_endline "step:";
    * (if List.length frame.locals > 1 then
@@ -931,7 +947,6 @@ let rec step (c : config) : config list =
    * else
    *   print_endline "No six"
    * ); *)
-  (* let vs', es' = *)
   let res =
     match e.it, vs with
     | Plain e', vs ->
@@ -960,7 +975,7 @@ let rec step (c : config) : config list =
            let vs', es' = vs', [Label (n2, [], (args, List.map plain es'), (pclet,pc)) @@ e.at] in
            [{c with code = vs', es' @ List.tl es}]
         | Loop (bt, es'), vs ->
-           print_endline "loop";
+           (* print_endline "loop"; *)
            if !Flags.loop_invar
            then 
              (
@@ -969,7 +984,7 @@ let rec step (c : config) : config list =
                let args, vs' = take n1 vs e.at, drop n1 vs e.at in
 
                let vs'', es'' = vs', [Label (n1, [e' @@ e.at],
-                                           (args, List.map plain es'), (pclet,pc)) @@ e.at] in
+                                             (args, List.map plain es'), (pclet,pc)) @@ e.at] in
                (* let vs', es' = vs', [Label (n1, [],
                 *                             (args, List.map plain es'), (pclet,pc)) @@ e.at] in *)
 
@@ -981,7 +996,7 @@ let rec step (c : config) : config list =
                
                (* let havc = havoc_vars lvs c in *)
                let first_pass = FirstPass (n1, [], (args, List.map plain es')) in
-                                  
+               
                let havoc = Havoc lvs in
                let second_pass = SecondPass (n1, [], (args, List.map plain es')) in
                let assrt = Assert lvs in
@@ -992,8 +1007,8 @@ let rec step (c : config) : config list =
                      assrt @@ e.at
                    ] in
                [{c with code = vs'', es'' @ List.tl es;}]
-               (* let lvs = find_vars [] {c with code = vs'', es'' @ List.tl es;} in *)
-               (* assertX;
+             (* let lvs = find_vars [] {c with code = vs'', es'' @ List.tl es;} in *)
+             (* assertX;
                   havocv1; ... ;havocvn;
                   assume X;
                   if(c) {
@@ -1001,7 +1016,7 @@ let rec step (c : config) : config list =
                         assertX;
                         assumefalse;
                   } *)
-               (* failwith "Loop invar Not implemented yet"; *)
+             (* failwith "Loop invar Not implemented yet"; *)
              )
            else ( (* Not using loop invariants *)
              (* print_endline "Loop: first time"; *)
@@ -1136,27 +1151,27 @@ let rec step (c : config) : config list =
         | LocalSet x, v :: vs' ->
            (* print_endline ("localset:" ^ (string_of_int c.counter)); *)
            (* print_endline "localset"; *)
-           let v, c =
-             if svalue_depth v 5 then (
-               let mem = (frame.inst.smemories, smemlen frame.inst) in
-               match Z3_solver.simplify v (pclet, pc) mem with
-               | (false), v 
-                 | (true), (Z3Expr32 _ as v)
-                 | (true), (Z3Expr64 _ as v)-> 
-                  (* if tf then print_endline "true_expr"; *)
-                  let nl, pc' = add_let (pclet, pc) v in
-                  let nv = svalue_newlet v nl in
-                  (* let eq = svalue_eq nv v in *)
-                  let c = {c with pc = pc'} in 
-                  nv,c
-               | true, Sv v ->
-                  (* print_endline "true";
-                   * svalue_to_string v |> print_endline; *)
-                  v, c
-             )
-             else
-               v, c
-           in
+           (* let v, c =
+            *   if svalue_depth v 50 then (
+            *     let mem = (frame.inst.smemories, smemlen frame.inst) in
+            *     match Z3_solver.simplify v (pclet, pc) mem with
+            *     | (false), v 
+            *       | (true), (Z3Expr32 _ as v)
+            *       | (true), (Z3Expr64 _ as v)-> 
+            *        (\* if tf then print_endline "true_expr"; *\)
+            *        let nl, pc' = add_let (pclet, pc) v in
+            *        let nv = svalue_newlet v nl in
+            *        (\* let eq = svalue_eq nv v in *\)
+            *        let c = {c with pc = pc'} in 
+            *        nv,c
+            *     | true, Sv v ->
+            *        (\* print_endline "true";
+            *         * svalue_to_string v |> print_endline; *\)
+            *        v, c
+            *   )
+            *   else
+            *     v, c
+            * in *)
            
            let frame' = update_local c.frame x v in
            let vs', es' = vs', [] in
@@ -1295,7 +1310,7 @@ let rec step (c : config) : config list =
             * svalue_to_string final_addr |> print_endline; *)
 
            if (not !disable_ct) then (
-           
+             
              let c = {c with observations =
                                CT_V_UNSAT((pclet,pc), final_addr, mems, c.observations)} in
 
@@ -1466,7 +1481,7 @@ let rec step (c : config) : config list =
        if assert_invar lvs c then
          [{c with code = vs, List.tl es}]
        else failwith "Assertion failed"
-    
+       
     | Havoc lvs, vs ->
        print_endline "havoc";
        let havc = havoc_vars lvs c in
@@ -1478,7 +1493,7 @@ let rec step (c : config) : config list =
        let vs', es' = vs, [Label (n, es0, (vs', code'),
                                   (pclet, pc)) @@ e.at] in
        [{c with code = vs', es' @ List.tl es}]
-       (* failwith "FirstPass: not implemented" *)
+    (* failwith "FirstPass: not implemented" *)
 
     | SecondPass  (n, es0, (vs', code')), vs ->
        print_endline "second pass";
@@ -1486,7 +1501,7 @@ let rec step (c : config) : config list =
        let vs', es' = vs, [Label (n, es0, (vs', code'),
                                   (pclet, pc)) @@ e.at] in
        [{c with code = vs', es' @ List.tl es}]
-       (* failwith "SecondPass: not implemented" *)
+    (* failwith "SecondPass: not implemented" *)
 
     | Returning vs', vs ->
        Crash.error e.at "undefined frame"
@@ -1602,7 +1617,7 @@ let rec step (c : config) : config list =
                        else frame.inst.smemories
            in
            let sglobals =  if (List.length frame.inst.sglobals == 0) then !inst'.sglobals
-                       else frame.inst.sglobals in
+                           else frame.inst.sglobals in
            let nmemlen = List.length nsmem in
            let inst' = {!inst' with smemories = nsmem;
                                     smemlen =  nmemlen;

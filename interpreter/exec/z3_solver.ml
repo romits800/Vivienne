@@ -542,6 +542,7 @@ let rec pc_to_expr pc ctx mem: rel_type =
   match pc with
   | PCTrue -> L (Boolean.mk_true ctx)
   | PCFalse -> L (Boolean.mk_false ctx)
+  | PCExpr e -> e
   | PCAnd (sv, pc') ->
      let ex1 = sv_to_expr (pclet, pc) sv ctx mem in
      let ex2 = pc_to_expr (pclet, pc') ctx mem in
@@ -613,7 +614,7 @@ let rec find_command = function
 
         
 let read_cvc4 () =
-  print_endline "read_cvc4";
+  (* print_endline "read_cvc4"; *)
   let tmp_file = "/tmp/cvc4.out" in
   (* let _ = Sys.command @@ "cvc4-1.8-x86_64-linux-opt -m /tmp/out.smt2 > " ^ tmp_file in *)
   let chan = open_in tmp_file in
@@ -649,7 +650,7 @@ let read_cvc4 () =
     | _ -> failwith @@ "Error output of file " ^ tmp_file
        
   let read_z3 () =
-    print_endline "read_z3";
+    (* print_endline "read_z3"; *)
     let tmp_file = "/tmp/z3.out" in
     (* let _ = Sys.command @@ "z3 -smt2 MODEL=true /tmp/out.smt2 > " ^ tmp_file in *)
     let chan = open_in tmp_file in
@@ -673,7 +674,7 @@ let read_cvc4 () =
     | _ -> failwith @@ "Error output of file " ^ tmp_file
 
 let read_yices () =
-  print_endline "read_yices";
+  (* print_endline "read_yices"; *)
   let tmp_file = "/tmp/yices.out" in
   (* let _ = Sys.command @@ "yices-smt2 /tmp/out.smt2 > " ^ tmp_file in *)
   let chan = open_in tmp_file in
@@ -684,14 +685,14 @@ let read_yices () =
   | "sat" ->
      let lexbuf = Lexing.from_channel chan in
      (try
-        print_endline "reading line";
+        (* print_endline "reading line"; *)
         match Smt2_parser.model Smt2_lexer.token lexbuf with
         | Smtlib.Sat lst ->
-           print_endline "test binary to string sat";
+           (* print_endline "test binary to string sat"; *)
            let num = bin_of_string ("0b" ^ snd (List.hd lst)) in
-           print_endline "after binary to string sat";
+           (* print_endline "after binary to string sat"; *)
            close_in chan;
-           print_endline "after close chan";
+           (* print_endline "after close chan"; *)
            Some num
                 (* Int64.to_int num |> string_of_int |> print_endline; *)
       with e ->
@@ -806,7 +807,7 @@ let find_solutions (sv: svalue) (pc : pc_ext)
   (* print_endline "after mk_Const"; *)
   let rec find_solutions_i (sv: svalue) (pc : pc_ext)
             (mem: Smemory.t list * int) (acc: int64 list) : int64 list =
-    print_endline "find_solutions_i";
+    (* print_endline "find_solutions_i"; *)
     let vrec = 
       (match v with
        | L v ->  Boolean.mk_eq ctx v' v
@@ -821,7 +822,7 @@ let find_solutions (sv: svalue) (pc : pc_ext)
                               Boolean.mk_not ctx eq) acc in
     Goal.add g previous_values;
     let pcex = pc_to_expr pc ctx mem in
-    print_endline "find_solutions_i_ after pc_to_expr";
+    (* print_endline "find_solutions_i_ after pc_to_expr"; *)
     (match pcex with
      | L v ->
         Goal.add g [v]
@@ -832,14 +833,14 @@ let find_solutions (sv: svalue) (pc : pc_ext)
     let solver = Solver.mk_solver ctx None in
     List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
 
-    print_endline "creating filename";
+    (* print_endline "creating filename"; *)
     let filename = write_formula_to_file solver in
-    print_endline @@ "after writing formula to filename" ^ filename;
+    (* print_endline @@ "after writing formula to filename" ^ filename; *)
     let ret = match run_solvers filename read_yices read_z3 read_cvc4 with
       | None -> acc
       | Some v -> find_solutions_i sv pc mem (v::acc)
     in
-    (* remove filename;            (\*  *\) *)
+    remove filename;            (*  *)
     ret
   in
   let str = find_solutions_i sv pc mem [] in
@@ -855,7 +856,7 @@ let simplify (sv: svalue) (pc : pc_ext)
   let v = sv_to_expr pc sv ctx mem in
   (* print_endline (Expr.get_simplify_help ctx); *)
   let params = Params.mk_params ctx in
-  (* Params.add_int params (Symbol.mk_string ctx "max_steps") 10000000; *)
+  (* Params.add_int params (Symbol.mk_string ctx "max_steps") 1000000000; *)
   (* print_endline (Params.to_string params); *)
   try
     match v with
@@ -911,6 +912,27 @@ let simplify (sv: svalue) (pc : pc_ext)
        )
   with _ -> (false, Sv sv)
 
+
+let simplify_pc (pc : pc_ext)
+      (mem: Smemory.t list * int) : bool * pc_ext =
+  let ctx = init_solver() in
+  let pc_exp = pc_to_expr pc ctx mem in
+  let params = Params.mk_params ctx in
+  let pclet, _ = pc in
+  (* Params.add_int params (Symbol.mk_string ctx "max_steps") 10000000; *)
+  (* print_endline (Params.to_string params); *)
+  try
+    match pc_exp with
+    | L pce ->
+       let simp = Expr.simplify pce (Some params) in
+       (true, (pclet, PCExpr (L simp)))
+    | H (v1,v2) ->
+       let simp1 = Expr.simplify v1 (Some params) in
+       let simp2 = Expr.simplify v2 (Some params) in
+       (true, (pclet, PCExpr (H (simp1, simp2))))
+  with _ -> (false, pc)
+
+          
 
 let is_unsat (pc : pc_ext) (mem: Smemory.t list * int) =
   print_endline "is_unsat";
@@ -974,21 +996,21 @@ let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) =
      let solver = Solver.mk_solver ctx None in
      List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
 
-     (* let filename = write_formula_to_file solver in
-      * let res = not (run_solvers filename (read_sat "yices") (read_sat "z3") (read_sat "cvc4")) in
-      * remove filename;
-      * res *)
+     let filename = write_formula_to_file solver in
+     let res = not (run_solvers filename (read_sat "yices") (read_sat "z3") (read_sat "cvc4")) in
+     remove filename;
+     res
 
-     match (Solver.check solver []) with
-     | Solver.UNSATISFIABLE -> true
-     | _ ->
-        (* Printf.printf "Goal v_ct: %s\n" (Goal.to_string g); *)
-        (* let model = Solver.get_model solver in *)
-        (* (match model with
-         *  | None -> print_endline "None"
-         *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
-         * ); *)
-        false
+     (* match (Solver.check solver []) with
+      * | Solver.UNSATISFIABLE -> true
+      * | _ ->
+      *    (\* Printf.printf "Goal v_ct: %s\n" (Goal.to_string g); *\)
+      *    (\* let model = Solver.get_model solver in *\)
+      *    (\* (match model with
+      *     *  | None -> print_endline "None"
+      *     *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
+      *     * ); *\)
+      *    false *)
 
   
 let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool =

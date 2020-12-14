@@ -16,6 +16,8 @@ let letnum = ref 0
 type pc = PCTrue | PCFalse
           | PCAnd of svalue * pc
           (* | PCLet of svalue * svalue *)
+          | PCExpr of rel_type
+                    
 type pc_ext = pc_let * pc
 
 let svalue_to_string sv =
@@ -56,7 +58,10 @@ let rec print_pc pc =
   | PCTrue -> "True"
   | PCFalse -> "False"
   | PCAnd (sv, pc) -> "(" ^ svalue_to_string sv ^ ") " ^ "&" ^ " (" ^ print_pc pc ^ ")"
-  (* | PCLet (sv1, sv2) -> "let" ^ svalue_to_string sv1 ^ "=" ^ svalue_to_string sv2 *) 
+  | PCExpr (H (e1,e2)) -> "H (" ^ Expr.to_string e1 ^ ", " ^ Expr.to_string e2 ^ ")"
+  | PCExpr (L e) -> "L (" ^ Expr.to_string e ^ ")"
+                          
+(* | PCLet (sv1, sv2) -> "let" ^ svalue_to_string sv1 ^ "=" ^ svalue_to_string sv2 *) 
 
 let print_pc_let pcext =
   let pclet, pc = pcext in
@@ -85,3 +90,14 @@ let find_let (pce: pc_ext) (i: int) : simpl =
 let empty_pc () =
   (Lets.empty, PCTrue)
 
+let pc_depth pc n =
+  let rec pc_depth_i pc n acc = 
+    match pc with
+    | PCTrue | PCFalse | PCExpr _ -> (acc + 1 > n)
+    | PCAnd (sv,pc) ->
+       let d = svalue_depth sv (n - acc) in
+       if d then true else 
+         pc_depth_i pc (n - acc) (acc + 1)
+    
+  in
+  pc_depth_i pc n 0
