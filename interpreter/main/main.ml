@@ -33,6 +33,7 @@ let argspec = Arg.align
   "-t", Arg.Set Flags.trace, " trace execution";
   "-b", Arg.Set Flags.bfs, " run breadth first Search instead of default DFS";
   "-l", Arg.Set Flags.loop_invar, " use loop invariant";
+  "-m", Arg.Set Flags.simplify, " enable simplify from Z3";
   "-v", Arg.Unit banner, " show version"
 ]
 

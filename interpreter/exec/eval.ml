@@ -928,25 +928,23 @@ let simplify_v frame pc v =
 let disable_ct = ref false
                
 let rec step (c : config) : config list =
-  (* print_endline ("step:" ^ (string_of_int c.counter)); *)
+  (* print_endline "step:";*)
   let {frame; code = vs, es; pc = pclet, pc; _} = c in
   let e = List.hd es in
-  
+
+
   let vs, (pclet, pc) =
-    match vs with
-    | v::vs' ->
-       let v, pc' = simplify_v frame (pclet,pc) v in
-       v::vs', pc'
-    | [] -> vs, (pclet,pc)
+    if !Flags.simplify then
+      match vs with
+      | v::vs' ->
+         let v, pc' = simplify_v frame (pclet,pc) v in
+         v::vs', pc'
+      | [] -> vs, (pclet,pc)
+    else
+      vs, (pclet,pc) 
   in
   (* let pclet,pc = simplify_pc frame (pclet,pc) in *)
   let c = {c with pc = (pclet,pc)} in
-  (* print_endline "step:";
-   * (if List.length frame.locals > 1 then
-   *   svalue_to_string (local frame (1l @@ e.at)) |> print_endline
-   * else
-   *   print_endline "No six"
-   * ); *)
   let res =
     match e.it, vs with
     | Plain e', vs ->
@@ -956,14 +954,7 @@ let rec step (c : config) : config list =
            let vs', es' = vs, [Trapping "unreachable executed" @@ e.at] in
            [{c with code = vs', es' @ List.tl es}]
         | Nop, vs ->
-           (* print_endline "nop"; *)
-           (* let mem = (frame.inst.smemories, smemlen frame.inst) in
-            * print_endline "printing_test_addr 37356";
-            * let test_addr = SI32 (Si32.bv_of_int 37356L 32) in
-            * let load = Eval_symbolic.eval_load I32Type test_addr (smemlen frame.inst) (Types.size I32Type) None in
-            * let i_sol = Z3_solver.find_solutions load (pclet, pc) mem  in
-            * List.iter (fun x-> string_of_int x |> print_endline) i_sol; *)
-
+           print_endline "nop";
            let vs', es' = vs, [] in
            [{c with code = vs', es' @ List.tl es}]
         | Block (bt, es'), vs ->
@@ -975,7 +966,7 @@ let rec step (c : config) : config list =
            let vs', es' = vs', [Label (n2, [], (args, List.map plain es'), (pclet,pc)) @@ e.at] in
            [{c with code = vs', es' @ List.tl es}]
         | Loop (bt, es'), vs ->
-           (* print_endline "loop"; *)
+           print_endline "loop";
            if !Flags.loop_invar
            then 
              (
@@ -1151,27 +1142,35 @@ let rec step (c : config) : config list =
         | LocalSet x, v :: vs' ->
            (* print_endline ("localset:" ^ (string_of_int c.counter)); *)
            (* print_endline "localset"; *)
-           (* let v, c =
-            *   if svalue_depth v 50 then (
-            *     let mem = (frame.inst.smemories, smemlen frame.inst) in
-            *     match Z3_solver.simplify v (pclet, pc) mem with
-            *     | (false), v 
-            *       | (true), (Z3Expr32 _ as v)
-            *       | (true), (Z3Expr64 _ as v)-> 
-            *        (\* if tf then print_endline "true_expr"; *\)
-            *        let nl, pc' = add_let (pclet, pc) v in
-            *        let nv = svalue_newlet v nl in
-            *        (\* let eq = svalue_eq nv v in *\)
-            *        let c = {c with pc = pc'} in 
-            *        nv,c
-            *     | true, Sv v ->
-            *        (\* print_endline "true";
-            *         * svalue_to_string v |> print_endline; *\)
-            *        v, c
-            *   )
-            *   else
-            *     v, c
-            * in *)
+           let v, c =
+             if svalue_depth v 5 then (
+               if (!Flags.simplify) then (
+                 let mem = (frame.inst.smemories, smemlen frame.inst) in
+                 match Z3_solver.simplify v (pclet, pc) mem with
+                 | (false), v 
+                   | (true), (Z3Expr32 _ as v)
+                   | (true), (Z3Expr64 _ as v)-> 
+                    (* if tf then print_endline "true_expr"; *)
+                    let nl, pc' = add_let (pclet, pc) v in
+                    let nv = svalue_newlet v nl in
+                  (* let eq = svalue_eq nv v in *)
+                    let c = {c with pc = pc'} in 
+                    nv,c
+                 | true, Sv v ->
+                  (* print_endline "true";
+                   * svalue_to_string v |> print_endline; *)
+                    v, c
+               ) else (
+                 let nl, pc' = add_let (pclet, pc) (Sv v) in
+                 let nv = svalue_newlet (Sv v) nl in
+                 (* let eq = svalue_eq nv v in *)
+                 let c = {c with pc = pc'} in 
+                 nv,c
+               )
+             )
+             else
+               v, c
+           in
            
            let frame' = update_local c.frame x v in
            let vs', es' = vs', [] in

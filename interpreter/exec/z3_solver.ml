@@ -94,9 +94,9 @@ let propagate_list f es =
 
 
 let increase_one ctx ind =
-    let bv = Expr.get_sort ind in
-    let one = Expr.mk_numeral_int ctx 1 bv in
-    BitVector.mk_add ctx ind one
+  let bv = Expr.get_sort ind in
+  let one = Expr.mk_numeral_int ctx 1 bv in
+  BitVector.mk_add ctx ind one
 
 
 
@@ -203,8 +203,9 @@ and si_to_expr pc size ctx mem si: rel_type  =
              SiMap.find (Obj.magic si) !simap
            with Not_found ->
              let res = app_to_expr pc ts size ctx mem f in
-             simap := SiMap.add (Obj.magic si) res !simap;
-             res
+             let simp = propagate_policy_one (fun x -> Expr.simplify x None) res in
+             simap := SiMap.add (Obj.magic si) simp !simap;
+             simp
           )
        | Let (i) ->
           (try
@@ -245,8 +246,9 @@ and si_to_expr pc size ctx mem si: rel_type  =
              let index = si_to_expr pc size ctx mem i in
              (* print_exp index; *)
              let v' = merge_bytes ctx arr index sz in
-             simap := SiMap.add (Obj.magic si) v' !simap;
-             v' )
+             let simp = propagate_policy_one (fun x -> Expr.simplify x None) v' in
+             simap := SiMap.add (Obj.magic si) simp !simap;
+             simp )
          
        (* let v'' = extend ctx size v' ext in *)
           (* let v''' = (match v'' with
@@ -270,7 +272,7 @@ and si_to_expr pc size ctx mem si: rel_type  =
        (* index *)
        | _ -> failwith "String, Int, Float, Let, Multi are not implemented yet."
       ) in
-    simap := SiMap.add (Obj.magic si) si' !simap;
+    (* simap := SiMap.add (Obj.magic si) si' !simap; *)
     si'
   
 and app_to_expr pc ts size ctx mem f =
@@ -539,15 +541,21 @@ and sv_to_expr pc sv ctx mem =
 
 let rec pc_to_expr pc ctx mem: rel_type =
   let pclet, pc = pc in
-  match pc with
-  | PCTrue -> L (Boolean.mk_true ctx)
-  | PCFalse -> L (Boolean.mk_false ctx)
-  | PCExpr e -> e
-  | PCAnd (sv, pc') ->
-     let ex1 = sv_to_expr (pclet, pc) sv ctx mem in
-     let ex2 = pc_to_expr (pclet, pc') ctx mem in
-     propagate_list (Boolean.mk_and ctx) [ex1; ex2]
-
+  try
+    SiMap.find (Obj.magic pc) !simap
+  with Not_found -> (
+    match pc with
+    | PCTrue -> L (Boolean.mk_true ctx)
+    | PCFalse -> L (Boolean.mk_false ctx)
+    | PCExpr e -> e
+    | PCAnd (sv, pc') ->
+       let ex1 = sv_to_expr (pclet, pc) sv ctx mem in
+       let ex2 = pc_to_expr (pclet, pc') ctx mem in
+       let pcexp = propagate_list (Boolean.mk_and ctx) [ex1; ex2] in
+       let simp = propagate_policy_one (fun x -> Expr.simplify x None) pcexp in
+       simap := SiMap.add (Obj.magic pc) simp !simap ; 
+       simp
+  )
 
 let create_mem ctx size =
   let bv = BitVector.mk_sort ctx size in
@@ -661,12 +669,15 @@ let read_cvc4 () =
        let c =
          (try
             let m = Smtlib_parser.model Smtlib_lexer.token lexbuf in
+            (* print_endline "parser"; *)
             let mc = m.model_commands in
+            (* print_endline "before close_in"; *)
             close_in chan;
+            (* print_endline "after close_in"; *)
             find_command mc
           with e ->
             close_in chan;
-            print_endline "failed z3";
+            (* print_endline "failed z3"; *)
             raise e
          ) in
        close_in chan;
@@ -726,7 +737,8 @@ let run_solvers input_file yices z3 cvc4 =
     let path = "/home/romi/didaktoriko/repo/wasm/test/symb_wasm/relsymb/interpreter/" in
     let out_file = "/tmp/run_solvers.out" in
     let err_file = "/tmp/run_solvers.err" in
-    let _ = Sys.command @@ "bash " ^ path ^ "run_solvers.sh " ^ input_file ^ " 1> " ^ out_file ^ " 2> " ^ err_file in
+    let _ = Sys.command @@ "bash " ^ path ^ "run_solvers.sh " ^
+                             input_file ^ " 1> " ^ out_file ^ " 2> " ^ err_file in
     let chan = open_in out_file in
     try
       let solver = input_line chan in
