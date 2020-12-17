@@ -932,17 +932,34 @@ let rec step (c : config) : config list =
   let {frame; code = vs, es; pc = pclet, pc; _} = c in
   let e = List.hd es in
 
-
-  let vs, (pclet, pc) =
-    if !Flags.simplify then
+  let vs, (pclet,pc) = 
       match vs with
       | v::vs' ->
-         let v, pc' = simplify_v frame (pclet,pc) v in
-         v::vs', pc'
+         if svalue_depth v 5 then (
+           if (!Flags.simplify) then (
+             let v, pc' = simplify_v frame (pclet,pc) v in
+             v::vs', pc'
+           ) else (
+             let nl, pc' = add_let (pclet, pc) (Sv v) in
+             let nv = svalue_newlet (Sv v) nl in
+             nv::vs', pc'
+           )
+         ) else (
+           vs, (pclet,pc)
+         )
       | [] -> vs, (pclet,pc)
-    else
-      vs, (pclet,pc) 
   in
+
+  (* let vs, (pclet, pc) =
+   *   if !Flags.simplify then
+   *     match vs with
+   *     | v::vs' ->
+   *        let v, pc' = simplify_v frame (pclet,pc) v in
+   *        v::vs', pc'
+   *     | [] -> vs, (pclet,pc)
+   *   else
+   *     vs, (pclet,pc) 
+   * in *)
   (* let pclet,pc = simplify_pc frame (pclet,pc) in *)
   let c = {c with pc = (pclet,pc)} in
   let res =
@@ -1253,20 +1270,30 @@ let rec step (c : config) : config list =
                   * ) *)
                  in
                  let vs', es' =  nv :: vs', [] in 
-                 let res = if Z3_solver.is_sat (pclet, pc') mem then(
-                             [{c with code = vs', es' @ List.tl es;
-                                      frame = frame;
-                                      pc = pclet,pc'}])
-                           else []
+                 let res =
+                   match Z3_solver.is_sat (pclet, pc') mem,  Z3_solver.is_sat (pclet, pc'') mem with
+                   | true,true ->
+                      [{c with code = vs', es' @ List.tl es;
+                               frame = frame;
+                               pc = pclet, pc}]
+                   | true, false ->
+                      [{c with code = vs', es' @ List.tl es;
+                               frame = frame;
+                               pc = pclet, pc'}]
+                   | false, true ->
+                      [{c with code = vs', es' @ List.tl es;
+                               frame = frame;
+                               pc = pclet, pc''}]
+                   | false, false -> failwith "Load No path left";
                  in
-
-                 let res = if Z3_solver.is_sat (pclet, pc'') mem then
-                             (* low values *)
-                             {c with code = vs', es' @ List.tl es;
-                                     frame = frame;
-                                     pc = pclet,pc''}:: res
-                           else res in
                  res)
+                 (* let res = if Z3_solver.is_sat (pclet, pc'') mem then
+                  *             (\* low values *\)
+                  *             {c with code = vs', es' @ List.tl es;
+                  *                     frame = frame;
+                  *                     pc = pclet,pc''}:: res
+                  *           else res in
+                  * res) *)
              else failwith "The index does not satisfy CT."
            )
            else (
@@ -1287,7 +1314,7 @@ let rec step (c : config) : config list =
            )
            
         | Store {offset; ty; sz; _}, sv :: si :: vs' ->
-           (* print_endline "store"; *)
+           print_endline "store";
 
            let mem = smemory frame.inst (0l @@ e.at) in
            let frame = {frame with
@@ -1343,30 +1370,56 @@ let rec step (c : config) : config list =
                (* Update memory with a store *)
                let nframe = {frame with inst = insert_smemory frame.inst mem'} in
                (* Path1: we store the value in secret memory *)
-               let res = if Z3_solver.is_sat (pclet, pc') mems then (
-                           (* print_endline "in is_sat1"; *)
-                           [{c with code = vs', es' @ List.tl es;
-                                    frame = nframe; 
-                                    pc = pclet,pc'}])
-                         else []
-               in
-               (* Path2: we store the value in non secret memory *)
-               let res = if Z3_solver.is_sat (pclet, pc'') mems then
-                           (let c =
-                              {c with observations =
-                                        CT_V_UNSAT((pclet,pc''), sv, mems, c.observations)} in
-                            (* print_endline "path2.";
-                             * svalue_to_string sv |> print_endline;
-                             * svalue_to_string final_addr |> print_endline; *)
-                            (* print_pc pc'' |> print_endline; *)
-                            if Z3_solver.is_v_ct_unsat (pclet, pc'') sv mems then
-                              {c with code = vs', es' @ List.tl es;
-                                      frame = nframe;
-                                      pc = pclet, pc''}:: res
-                            else failwith "Trying to write high values in low memory")
-                         else res
-               in
-               res
+
+               let res =
+                 (* match Z3_solver.is_sat (pclet, pc') mems, *)
+                 match Z3_solver.is_sat (pclet, pc'') mems with
+                 | true ->
+                    let c =
+                      {c with observations =
+                                CT_V_UNSAT((pclet,pc''), sv, mems, c.observations)} in
+                    (if Z3_solver.is_v_ct_unsat (pclet, pc'') sv mems then
+                       (match Z3_solver.is_sat (pclet, pc') mems with
+                        | true -> [{c with code = vs', es' @ List.tl es;
+                                           frame = nframe;
+                                           pc = pclet, pc}]
+                        | false -> [{c with code = vs', es' @ List.tl es;
+                                            frame = nframe;
+                                            pc = pclet, pc''}]
+                       )
+                     else failwith "Trying to write high values in low memory")
+                 | false ->
+                    (match Z3_solver.is_sat (pclet, pc') mems with
+                     | true -> [{c with code = vs', es' @ List.tl es;
+                                        frame = nframe;
+                                        pc = pclet, pc'}]
+                     | false -> failwith "No possible path available"
+                    )
+               in res
+             (* let res = if Z3_solver.is_sat (pclet, pc') mems then (
+              *             (\* print_endline "in is_sat1"; *\)
+              *             [{c with code = vs', es' @ List.tl es;
+              *                      frame = nframe; 
+              *                      pc = pclet,pc'}])
+              *           else []
+              * in
+              * (\* Path2: we store the value in non secret memory *\)
+              * let res = if Z3_solver.is_sat (pclet, pc'') mems then
+              *             (let c =
+              *                {c with observations =
+              *                          CT_V_UNSAT((pclet,pc''), sv, mems, c.observations)} in
+              *              (\* print_endline "path2.";
+              *               * svalue_to_string sv |> print_endline;
+              *               * svalue_to_string final_addr |> print_endline; *\)
+              *              (\* print_pc pc'' |> print_endline; *\)
+              *              if Z3_solver.is_v_ct_unsat (pclet, pc'') sv mems then
+              *                {c with code = vs', es' @ List.tl es;
+              *                        frame = nframe;
+              *                        pc = pclet, pc''}:: res
+              *              else failwith "Trying to write high values in low memory")
+              *           else res
+              * in
+              * res *)
              else failwith "The index does not satisfy CT."
            )
            else (

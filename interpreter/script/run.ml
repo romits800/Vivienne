@@ -343,8 +343,13 @@ let run_action act : Values.value list =
     (match Instance.export inst name with
      | Some (Instance.ExternFunc f) ->
         let t = Sys.time() in
-        let _ = Eval.symb_invoke f (List.map (fun v -> v.it) vs) in
-        trace (Printf.sprintf "Execution time: %fs" (Sys.time() -. t));
+        (try
+          let _ = Eval.symb_invoke f (List.map (fun v -> v.it) vs) in
+          trace (Printf.sprintf "Execution time: %fs" (Sys.time() -. t));
+        with e ->
+          trace (Printf.sprintf "Execution time: %fs" (Sys.time() -. t));
+          raise e
+        ) ; 
         []
     | Some _ -> Assert.error act.at "export is not a function"
     | None -> Assert.error act.at "undefined export"

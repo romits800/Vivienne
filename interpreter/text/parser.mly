@@ -727,8 +727,7 @@ memory :
                let sx = $3 c anon_smemory bind_smemory @@ at in
                fun () -> $4 c x sx at }
 
-/* TODO(Romy): remove memory_type rule from every where */
-/* TODO(Romy): fix for Smemories */
+/* TODO(Romy): remove memory_type rule from everywhere */
 memory_fields :
   | limits
     { fun c x sx at -> [{mtype = MemoryType $1} @@ at],
@@ -809,13 +808,17 @@ inline_import :
 export_desc :
   | LPAR FUNC var RPAR { fun c -> FuncExport ($3 c func) }
   | LPAR TABLE var RPAR { fun c -> TableExport ($3 c table) }
-  | LPAR MEMORY var RPAR { fun c -> MemoryExport ($3 c memory) }
   | LPAR GLOBAL var RPAR { fun c -> GlobalExport ($3 c global) }
 
 export :
+  | LPAR EXPORT name LPAR MEMORY var RPAR RPAR
+    { let at = at () and at4 = ati 4 in
+      let m = fun c -> MemoryExport ($6 c memory) in
+      let sm = fun c -> SmemoryExport ($6 c smemory) in
+      fun c -> [{name = 95::$3; edesc = sm c @@ at4} @@ at;{name = $3; edesc = m c @@ at4} @@ at] }
   | LPAR EXPORT name export_desc RPAR
     { let at = at () and at4 = ati 4 in
-      fun c -> {name = $3; edesc = $4 c @@ at4} @@ at }
+      fun c -> [{name = $3; edesc = $4 c @@ at4} @@ at] }
 
 inline_export :
   | LPAR EXPORT name RPAR
@@ -909,7 +912,7 @@ module_fields1 :
   | export module_fields
     { fun c -> let mf = $2 c in
       fun () -> let m = mf () in
-      {m with exports = $1 c :: m.exports} }
+      {m with exports = $1 c @ m.exports} }
   | secret module_fields
     { fun c -> let mf = $2 c in
       fun () -> let m = mf () in

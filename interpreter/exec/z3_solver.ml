@@ -177,7 +177,8 @@ let rec update_mem pc ctx mem a s =
    | _ -> failwith "Unexpected store - not implemented f64/32"
 
 and si_to_expr pc size ctx mem si: rel_type  = 
-    let si' = 
+  (* print_endline "begining_of_si_expr"; *)
+  let si' = 
       (match si with
        | BitVec (i,n) ->
           L (BitVector.mk_numeral ctx (Int64.to_string i) n)
@@ -199,14 +200,13 @@ and si_to_expr pc size ctx mem si: rel_type  =
              def
           )
        | App (f, ts) ->
-          (try
-             SiMap.find (Obj.magic si) !simap
-           with Not_found ->
+          (* print_endline "app"; *)
+          (* (try
+           *    SiMap.find (Obj.magic si) !simap
+           *  with Not_found -> *)
              let res = app_to_expr pc ts size ctx mem f in
-             let simp = propagate_policy_one (fun x -> Expr.simplify x None) res in
-             simap := SiMap.add (Obj.magic si) simp !simap;
-             simp
-          )
+             res
+          (* ) *)
        | Let (i) ->
           (try
              LetMap.find i !letmap
@@ -222,8 +222,11 @@ and si_to_expr pc size ctx mem si: rel_type  =
                 e
           )
        | Load (i, memi, sz, _) ->
+          (* print_endline "load z3_solver"; *)
           (try
-             SiMap.find (Obj.magic si) !simap
+             let f = SiMap.find (Obj.magic si) !simap in
+             (* print_endline "found sv"; *)
+             f
            with Not_found ->
              let smem, memlen = mem in
              let arr =
@@ -246,7 +249,9 @@ and si_to_expr pc size ctx mem si: rel_type  =
              let index = si_to_expr pc size ctx mem i in
              (* print_exp index; *)
              let v' = merge_bytes ctx arr index sz in
+             (* print_endline "simplify"; *)
              let simp = propagate_policy_one (fun x -> Expr.simplify x None) v' in
+             (* print_endline "simplify_after"; *)
              simap := SiMap.add (Obj.magic si) simp !simap;
              simp )
          
@@ -273,6 +278,7 @@ and si_to_expr pc size ctx mem si: rel_type  =
        | _ -> failwith "String, Int, Float, Let, Multi are not implemented yet."
       ) in
     (* simap := SiMap.add (Obj.magic si) si' !simap; *)
+    (* print_endline "end_of_si_expr"; *)
     si'
   
 and app_to_expr pc ts size ctx mem f =
@@ -531,11 +537,26 @@ and app_to_expr pc ts size ctx mem f =
   | _ -> failwith "Not implemented yet."
 
 and sv_to_expr pc sv ctx mem =
+  (* print_endline "sv_to_expr"; *)
+  let v,n =
     match sv with
-    | SI32 si32 -> si_to_expr pc 32 ctx mem si32
-    | SI64 si64 -> si_to_expr pc 64 ctx mem si64
-    (*TODO(Romy): Not implemented*)
-    | _ -> failwith "Float not implemented."
+    | SI32 si32 -> si32,32
+    | SI64 si64 -> si64,64 
+  (*TODO(Romy): Not implemented*)
+  | _ -> failwith "Float not implemented."
+  in
+  (try
+     let f =  SiMap.find (Obj.magic v) !simap in
+     (* print_endline "found sv"; *)
+     f
+   with Not_found ->
+     let v' = si_to_expr pc n ctx mem v in
+     (* print_endline "sv_to_expr before simp"; *)
+     let simp = propagate_policy_one (fun x -> Expr.simplify x None) v' in
+     (* print_endline "sv_to_expr after simp"; *)
+     simap := SiMap.add (Obj.magic v) simp !simap;
+     (* print_endline "sv_to_expr simp end"; *)
+     simp)
 
 
 
@@ -615,7 +636,7 @@ let rec find_command = function
          ) else 
              find_command tl
       | _ ->
-         print_endline "No assert cmd";
+         (* print_endline "No assert cmd"; *)
          find_command tl
      );
   | [] -> failwith "Not found"
@@ -637,6 +658,7 @@ let read_cvc4 () =
             close_in chan;
             find_command mc
           with e ->
+            close_in chan;
             print_endline "failed cvc4";
             (* let open Lexing in
              * let pos = lexbuf.lex_curr_p.pos_cnum in
@@ -653,7 +675,6 @@ let read_cvc4 () =
              *   extract underline; *)
             raise e
          ) in
-       close_in chan;
        Some c
     | _ -> failwith @@ "Error output of file " ^ tmp_file
        
@@ -705,7 +726,6 @@ let read_yices () =
            close_in chan;
            (* print_endline "after close chan"; *)
            Some num
-                (* Int64.to_int num |> string_of_int |> print_endline; *)
       with e ->
         close_in chan;
         print_endline "Yices error";
@@ -724,7 +744,9 @@ let read_sat solver_name () =
     match  result with
     | "unsat" -> false
     | "sat" -> true
-    | _ -> failwith @@ "Unknown result from " ^ solver_name ^ " returns: " ^ result 
+    | _ ->
+       close_in chan;
+       failwith @@ "Unknown result from " ^ solver_name ^ " returns: " ^ result 
   in
   close_in chan;
   ret
@@ -1026,14 +1048,16 @@ let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) =
 
   
 let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool =
-  (* print_endline "is_v_ct_unsat"; 
-   * Pc_type.print_pc (snd pc) |> print_endline;
+  (* print_endline "is_v_ct_unsat"; *) 
+  (* Pc_type.print_pc (snd pc) |> print_endline;-
    * svalue_to_string sv |> print_endline; *)
 
   let ctx = init_solver() in
   
   let g = Goal.mk_goal ctx true false false in
+  (* print_endline "is_v_ct_unsat before sv"; *)
   let v = sv_to_expr pc sv ctx mem in
+  (* print_endline "is_v_ct_unsat after  sv"; *)
   (* print_exp v; *)
   match v with
   | L v -> true 
@@ -1053,22 +1077,23 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
       List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
 
       (* Printf.printf "Solver v_ct: %s\n" (Solver.to_string solver); *)
-      (* let filename = write_formula_to_file solver in
-       * let res = not (run_solvers filename (read_sat "yices") (read_sat "z3") (read_sat "cvc4")) in
-       * remove filename;
-       * res *)
-
-      match (Solver.check solver []) with
-      | Solver.UNSATISFIABLE ->
-         true
-      | Solver.SATISFIABLE ->
-         (* let model = Solver.get_model solver in
-          * (match model with
-          *  | None -> print_endline "None"
-          *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
-          * ); *)
-         false
-      | _ -> false
+      print_endline "is_v_ct_unsat before write formula";
+      let filename = write_formula_to_file solver in
+      let res = not (run_solvers filename (read_sat "yices") (read_sat "z3") (read_sat "cvc4")) in
+      remove filename;
+      res
+      (* print_endline "is_v_ct_unsat_before_solving"; 
+       * match (Solver.check solver []) with
+       * | Solver.UNSATISFIABLE ->
+       *    true
+       * | Solver.SATISFIABLE ->
+       *    (\* let model = Solver.get_model solver in
+       *     * (match model with
+       *     *  | None -> print_endline "None"
+       *     *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
+       *     * ); *\)
+       *    false
+       * | _ -> false *)
 
 
 
