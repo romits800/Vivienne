@@ -70,7 +70,8 @@ sig
   val bvurem : term -> term -> term
   val bvsrem : term -> term -> term
   val bvsmod : term -> term -> term
-  val bvdiv  : term -> term -> term (* doesn't exist *)
+  val bvsdiv : term -> term -> term 
+  val bvudiv : term -> term -> term 
   val bvshl  : term -> term -> term
   val bvlshr : term -> term -> term
   val bvashr : term -> term -> term
@@ -242,25 +243,19 @@ struct
 
   (* result is truncated toward zero *)
   let div_s x y =
-    Rep.and_ ( Rep.not_ (Rep.equals y (Rep.zero Rep.size) ) ) (Rep.bvdiv x y)
+    (Rep.bvsdiv x y)
 
   (* result is floored (which is the same as truncating for unsigned values) *)
   (* TODO(Romy): fix *)
   let div_u x y =
-    div_s x y
-    (* let q, r = divrem_u x y in q *) 
+    (Rep.bvudiv x y)
 
   (* result has the sign of the dividend *)
   let rem_s x y =
-    Rep.and_ ( Rep.not_ (Rep.equals y (Rep.zero Rep.size)) ) (Rep.bvsrem x y)
-    (* if y = Rep.zero then
-     *   raise Numeric_error.IntegerDivideByZero
-     * else
-     *   Rep.rem x y *)
+      (Rep.bvsrem x y)
   
   let rem_u x y =
-    Rep.and_ ( Rep.not_ (Rep.equals y (Rep.zero Rep.size)) ) (Rep.bvurem x y)
-    (* let q, r = divrem_u x y in r *)
+      (Rep.bvurem x y)
 
   let and_ = Rep.and_
   let or_ = Rep.or_

@@ -13,7 +13,7 @@ type func =
 
   | BvAdd | BvSub | BvMul
                   
-  | BvURem | BvSRem | BvSMod | BvDiv
+  | BvURem | BvSRem | BvSMod | BvUDiv | BvSDiv
   | BvShl | BvLShr | BvAShr
                    
   | BvOr | BvAnd | BvNand | BvNor | BvXNor | BvXor
@@ -101,7 +101,8 @@ val bvmul : term -> term -> term
 val bvurem : term -> term -> term
 val bvsrem : term -> term -> term
 val bvsmod : term -> term -> term
-val bvdiv: term -> term -> term (* doesn't exist *)
+val bvudiv: term -> term -> term 
+val bvsdiv: term -> term -> term 
 val bvshl : term -> term -> term
 val bvlshr : term -> term -> term
 val bvashr : term -> term -> term

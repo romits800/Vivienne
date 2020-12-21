@@ -13,7 +13,7 @@ type func =
 
   | BvAdd | BvSub | BvMul
                   
-  | BvURem | BvSRem | BvSMod | BvDiv
+  | BvURem | BvSRem | BvSMod | BvUDiv | BvSDiv
   | BvShl | BvLShr | BvAShr
                    
   | BvOr | BvAnd | BvNand | BvNor | BvXNor | BvXor
@@ -192,7 +192,7 @@ let bv i nb = BitVec(i, nb)
 
 let bvadd t1 t2 =
   match t1,t2 with
-  | BitVec(i1,nb1), BitVec(i2,nb2) when nb2 == nb1 -> BitVec(Int64.(add i1 i2), nb1)
+  | BitVec(i1,nb1), BitVec(i2,nb2) when nb2 = nb1 -> BitVec(Int64.(add i1 i2), nb1)
   | BitVec(0L,nb), t
     | t, BitVec(0L,nb)-> t
   | _ -> App (BvAdd, [t1; t2])
@@ -205,7 +205,7 @@ let bvadd t1 t2 =
 
 let bvsub t1 t2 =
   match t1,t2 with
-  | BitVec(i1,nb1), BitVec(i2,nb2) when nb2 == nb1 -> BitVec(Int64.(sub i1 i2), nb1)
+  | BitVec(i1,nb1), BitVec(i2,nb2) when nb2 = nb1 -> BitVec(Int64.(sub i1 i2), nb1)
   | t, BitVec(0L,nb)-> t
   | _ -> App (BvSub, [t1; t2])
 
@@ -218,22 +218,13 @@ let bvmul t1 t2 =
     | t, BitVec(0L,nb) -> BitVec(0L,nb)
   | BitVec(1L,nb), t
     | t, BitVec(1L,nb) -> t
-  | BitVec(i1,nb1), BitVec(i2,nb2) when nb2 == nb1 -> BitVec(Int64.(mul i1 i2), nb1)
+  | BitVec(i1,nb1), BitVec(i2,nb2) when nb2 = nb1 -> BitVec(Int64.(mul i1 i2), nb1)
   | _ -> App (BvMul, [t1;t2])
 
-
-let bvurem t1 t2 = App (BvURem, [t1;t2])
-                
-let bvsrem t1 t2 = App (BvSRem, [t1;t2])
-let bvsmod t1 t2 = App (BvSMod, [t1;t2])
-
-(* Todo(Romy): Check doesn't exists *)
-let bvdiv t1 t2 = App (BvDiv, [t1;t2])
-                 
 let bvshl t1 t2 =
   match t1,t2 with 
   (* | BitVec(0L,nb), t -> BitVec(0L,nb) *)
-  | BitVec(i1,nb1), BitVec(i2,nb2) when nb1 == nb2 ->
+  | BitVec(i1,nb1), BitVec(i2,nb2) when nb1 = nb2 ->
      BitVec(Int64.(shift_left i1 (Int64.to_int i2)), nb1)
   | _ -> App (BvShl, [t1;t2])
 
@@ -241,7 +232,7 @@ let bvshl t1 t2 =
 let bvlshr t1 t2 = 
   match t1,t2 with 
   (* | BitVec(0L,nb), t -> BitVec(0L,nb) *)
-  | BitVec(i1,nb1), BitVec(i2,nb2) when nb1 == nb2 ->
+  | BitVec(i1,nb1), BitVec(i2,nb2) when nb1 = nb2 ->
      BitVec(Int64.(shift_right_logical i1 (Int64.to_int i2)), nb1)
   | _ -> App (BvLShr, [t1;t2])
 
@@ -249,22 +240,25 @@ let bvlshr t1 t2 =
 let bvashr t1 t2 = 
   match t1,t2 with 
   (* | BitVec(0L,nb), t -> BitVec(0L,nb) *)
-  | BitVec(i1,nb1), BitVec(i2,nb2) when nb1 == nb2 ->
+  | BitVec(i1,nb1), BitVec(i2,nb2) when nb1 = nb2 ->
      BitVec(Int64.(shift_right i1 (Int64.to_int i2)), nb1)
   | _ -> App (BvAShr, [t1;t2])
 
+
+       
+                 
                  
 let bvor t1 t2 =
   match t1,t2 with 
   (* | BitVec(0L,nb), t -> t *)
-  | BitVec(i1,nb1), BitVec(i2,nb2) when nb1 == nb2 ->
+  | BitVec(i1,nb1), BitVec(i2,nb2) when nb1 = nb2 ->
      BitVec(Int64.(logor i1 i2), nb1)
   | _ -> App (BvOr, [t1;t2])
        
 let bvand t1 t2 =
   match t1,t2 with 
   | BitVec(0L,nb), t -> BitVec(0L,nb)
-  | BitVec(i1,nb1), BitVec(i2,nb2) when nb1 == nb2 ->
+  | BitVec(i1,nb1), BitVec(i2,nb2) when nb1 = nb2 ->
      BitVec(Int64.(logand i1 i2), nb1)
   | _ -> App (BvAnd, [t1;t2])
        
@@ -274,7 +268,7 @@ let bvxnor t1 t2 = App (BvXNor, [t1;t2])
 let bvxor t1 t2 =
   match t1,t2 with 
   | BitVec(0L,nb), t -> BitVec(0L,nb)
-  | BitVec(i1,nb1), BitVec(i2,nb2) when nb1 == nb2 ->
+  | BitVec(i1,nb1), BitVec(i2,nb2) when nb1 = nb2 ->
      BitVec(Int64.(logxor i1 i2), nb1)
   | _ -> App (BvXor, [t1;t2])
        
@@ -342,7 +336,8 @@ let func_to_string func =
   | BvURem -> "BvURem"
   | BvSRem -> "BvSRem"
   | BvSMod -> "BvSMod"
-  | BvDiv -> "BvDiv"
+  | BvUDiv -> "BvUDiv"
+  | BvSDiv -> "BvSDiv"
   | BvShl -> "BvShl"
   | BvLShr -> "BvLShr"
   | BvAShr -> "BvAShr"
@@ -417,5 +412,67 @@ let count_depth si n =
   in
   let c = count_depth_i 0 si in
   c > n
+
+(* Todo(Romy): Check doesn't exists *)
+let bvudiv t1 t2 =
+  match t1,t2 with
+  | _, BitVec(1L,nb2)  -> t1
+  | _, BitVec(2L,nb2) -> bvlshr t1 (BitVec(1L, nb2))
+  | _, BitVec(4L,nb2) -> bvlshr t1 (BitVec(2L, nb2))
+  | _, BitVec(8L,nb2) -> bvlshr t1 (BitVec(3L, nb2))
+  | _, BitVec(16L,nb2) -> bvlshr t1 (BitVec(4L, nb2))
+  | _, BitVec(32L,nb2) -> bvlshr t1 (BitVec(5L, nb2))
+  | _, BitVec(64L,nb2) -> bvlshr t1 (BitVec(6L, nb2))
+  | _, BitVec(128L,nb2) -> bvlshr t1 (BitVec(7L, nb2))
+  | _, BitVec(256L,nb2) -> bvlshr t1 (BitVec(8L, nb2))
+  | _, BitVec(512L,nb2) -> bvlshr t1 (BitVec(9L, nb2))
+  | _, BitVec(1024L,nb2) -> bvlshr t1 (BitVec(10L, nb2))
+  |_ ->
+    print_endline "division by";
+    print_endline (term_to_string t2);
+    App (BvUDiv, [t1;t2])
+       
+(* Todo(Romy): Check if correct *)
+let bvsdiv t1 t2 =
+  match t1,t2 with
+  | _, BitVec(1L,nb2)  -> t1
+  | _, BitVec(2L,nb2) -> bvashr t1 (BitVec(1L, nb2))
+  | _, BitVec(4L,nb2) -> bvashr t1 (BitVec(2L, nb2))
+  | _, BitVec(8L,nb2) -> bvashr t1 (BitVec(3L, nb2))
+  | _, BitVec(16L,nb2) -> bvashr t1 (BitVec(4L, nb2))
+  | _, BitVec(32L,nb2) -> bvashr t1 (BitVec(5L, nb2))
+  | _, BitVec(64L,nb2) -> bvashr t1 (BitVec(6L, nb2))
+  | _, BitVec(128L,nb2) -> bvashr t1 (BitVec(7L, nb2))
+  | _, BitVec(256L,nb2) -> bvashr t1 (BitVec(8L, nb2))
+  | _, BitVec(512L,nb2) -> bvashr t1 (BitVec(9L, nb2))
+  | _, BitVec(1024L,nb2) -> bvashr t1 (BitVec(10L, nb2))
+  |_ ->
+    print_endline "Sdivision by";
+    print_endline (term_to_string t2);
+    App (BvSDiv, [t1;t2])
+ 
+(* Todo(Romy): Check if correct *)
+let bvurem t1 t2 =
+  match t1,t2 with
+  | _, BitVec(1L,nb2)  -> t1
+  | _, BitVec(2L,nb2) -> bvand  t1 (BitVec(1L, nb2))
+  | _, BitVec(4L,nb2) -> bvand t1 (BitVec(3L, nb2))
+  | _, BitVec(8L,nb2) -> bvand t1 (BitVec(7L, nb2))
+  | _, BitVec(16L,nb2) -> bvand t1 (BitVec(15L, nb2))
+  | _, BitVec(32L,nb2) -> bvand t1 (BitVec(31L, nb2))
+  | _, BitVec(64L,nb2) -> bvand t1 (BitVec(63L, nb2))
+  | _, BitVec(128L,nb2) -> bvand t1 (BitVec(127L, nb2))
+  | _, BitVec(256L,nb2) -> bvand t1 (BitVec(255L, nb2))
+  | _, BitVec(512L,nb2) -> bvand t1 (BitVec(511L, nb2))
+  | _, BitVec(1024L,nb2) -> bvand t1 (BitVec(1023L, nb2))
+  |_ ->
+    print_endline "bvurem by";
+    print_endline (term_to_string t2);
+    App (BvURem, [t1;t2])
+
+(* let bvurem t1 t2 = App (BvURem, [t1;t2]) *)
+                
+let bvsrem t1 t2 = App (BvSRem, [t1;t2])
+let bvsmod t1 t2 = App (BvSMod, [t1;t2])
 
 let let_ (i : int) = Let i

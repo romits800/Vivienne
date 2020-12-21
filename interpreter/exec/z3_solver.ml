@@ -177,7 +177,8 @@ let rec update_mem pc ctx mem a s =
    | _ -> failwith "Unexpected store - not implemented f64/32"
 
 and si_to_expr pc size ctx mem si: rel_type  = 
-  (* print_endline "begining_of_si_expr"; *)
+  (* print_endline "si_expr";
+   * print_endline (term_to_string si); *)
   let si' = 
       (match si with
        | BitVec (i,n) ->
@@ -282,6 +283,7 @@ and si_to_expr pc size ctx mem si: rel_type  =
     si'
   
 and app_to_expr pc ts size ctx mem f =
+  (* print_endline "app_to_expr"; *)
   match f, ts with
   | Ite, t1::t2::t3::[] ->
      let e1 = si_to_expr pc size ctx mem t1 in
@@ -505,11 +507,17 @@ and app_to_expr pc ts size ctx mem f =
      propagate_policy_one (BitVector.mk_extract ctx 31 0) e
   | Wrap _, _ -> failwith "Not valid bitwise rotl."
 
-  (* | BvDiv, t1::t2::[] ->
-   *    let e1 = si_to_expr pc size ctx mem t1 in
-   *    let e2 = si_to_expr pc size ctx mem t2 in
-   *    propagate_policy (BitVector.mk_div ctx) e1 e2
-   * | BvDiv, _ -> failwith "Not valid bitwise sremainder." *)
+  | BvUDiv, t1::t2::[] ->
+     let e1 = si_to_expr pc size ctx mem t1 in
+     let e2 = si_to_expr pc size ctx mem t2 in
+     propagate_policy (BitVector.mk_udiv ctx) e1 e2
+  | BvUDiv, _ -> failwith "Not valid bitwise sremainder."
+
+  | BvSDiv, t1::t2::[] ->
+     let e1 = si_to_expr pc size ctx mem t1 in
+     let e2 = si_to_expr pc size ctx mem t2 in
+     propagate_policy (BitVector.mk_sdiv ctx) e1 e2
+  | BvSDiv, _ -> failwith "Not valid bitwise sremainder."
 
   | Eq, t1::t2::[] ->
      let e1 = si_to_expr pc size ctx mem t1 in
@@ -534,7 +542,7 @@ and app_to_expr pc ts size ctx mem f =
   | Or, ts ->
      let es = List.map (si_to_expr pc size ctx mem) ts in
      propagate_list (Boolean.mk_or ctx) es 
-  | _ -> failwith "Not implemented yet."
+  | _ -> failwith "App_to_expr: Not implemented yet."
 
 and sv_to_expr pc sv ctx mem =
   (* print_endline "sv_to_expr"; *)
@@ -621,6 +629,10 @@ let rec find_command = function
      (match cd with
       | Smtlib.CmdDefineFun fd ->
          let FunDef (symb, sort_option, sorted_vars, sort, term) = fd.fun_def_desc in
+         (* Smtlib_pp.pp_symbol Format.std_formatter symb;
+          * Smtlib_pp.pp_term Format.std_formatter term;
+          * print_endline "done"; *)
+
          if (match symb.symbol_desc with
              | SimpleSymbol s when s = "sv" -> true
              | _ -> false)
@@ -632,7 +644,12 @@ let rec find_command = function
                (* Smtlib_pp.pp_symbol Format.std_formatter symb; *)
                (* Smtlib_pp.pp_term Format.std_formatter term; *)
                b64
-            | _ -> failwith "Unknown term");
+            | _ ->
+               print_endline "unknown term";
+               Smtlib_pp.pp_symbol Format.std_formatter symb;
+               Smtlib_pp.pp_term Format.std_formatter term;
+               print_endline "after prints";
+               failwith "Unknown term");
          ) else 
              find_command tl
       | _ ->
@@ -647,35 +664,38 @@ let read_cvc4 () =
   let tmp_file = "/tmp/cvc4.out" in
   (* let _ = Sys.command @@ "cvc4-1.8-x86_64-linux-opt -m /tmp/out.smt2 > " ^ tmp_file in *)
   let chan = open_in tmp_file in
-    match input_line chan with
-    | "unsat" -> None
-    | "sat" ->
-       let lexbuf = Lexing.from_channel chan in
-       let c =
-         (try
-            let m = Smtlib_parser.model Smtlib_lexer.token lexbuf in
-            let mc = m.model_commands in
-            close_in chan;
-            find_command mc
-          with e ->
-            close_in chan;
-            print_endline "failed cvc4";
-            (* let open Lexing in
-             * let pos = lexbuf.lex_curr_p.pos_cnum in
-             * let width = 30 in
-             * let lo = max 0 (pos - width)
-             * and hi = min (String.length raw_model) (pos + width) in
-             * let extract =
-             *   String.sub raw_model lo (hi - lo)
-             *   |> String.map (function '\n' -> ' ' | x -> x)
-             * in
-             * let underline = String.make (pos - lo) ' ' in
-             * Printf.printf
-             *   "Parsing of solver output failed approximately here :@ @[<v>%s@,%s^@]"
-             *   extract underline; *)
-            raise e
-         ) in
-       Some c
+  (* let ch = input_char chan in *)
+  match input_line chan with
+  | "unsat" -> None
+  (* match input_line chan with *)
+  (* | "unsat" -> None *)
+  | "sat" ->
+     let lexbuf = Lexing.from_channel chan in
+     let c =
+       (try
+          let m = Smtlib_parser.model Smtlib_lexer.token lexbuf in
+          let mc = m.model_commands in
+          close_in chan;
+          find_command mc
+        with e ->
+          close_in chan;
+          print_endline "failed cvc4";
+          (* let open Lexing in
+           * let pos = lexbuf.lex_curr_p.pos_cnum in
+           * let width = 30 in
+           * let lo = max 0 (pos - width)
+           * and hi = min (String.length raw_model) (pos + width) in
+           * let extract =
+           *   String.sub raw_model lo (hi - lo)
+           *   |> String.map (function '\n' -> ' ' | x -> x)
+           * in
+           * let underline = String.make (pos - lo) ' ' in
+           * Printf.printf
+           *   "Parsing of solver output failed approximately here :@ @[<v>%s@,%s^@]"
+           *   extract underline; *)
+          raise e
+       ) in
+     Some c
     | _ -> failwith @@ "Error output of file " ^ tmp_file
        
   let read_z3 () =
@@ -701,7 +721,7 @@ let read_cvc4 () =
             (* print_endline "failed z3"; *)
             raise e
          ) in
-       close_in chan;
+       (* close_in chan; *)
        Some c
     | _ -> failwith @@ "Error output of file " ^ tmp_file
 
@@ -869,12 +889,12 @@ let find_solutions (sv: svalue) (pc : pc_ext)
 
     (* print_endline "creating filename"; *)
     let filename = write_formula_to_file solver in
-    (* print_endline @@ "after writing formula to filename" ^ filename; *)
+    print_endline @@ "after writing formula to filename" ^ filename;
     let ret = match run_solvers filename read_yices read_z3 read_cvc4 with
       | None -> acc
       | Some v -> find_solutions_i sv pc mem (v::acc)
     in
-    remove filename;            (*  *)
+    (* remove filename;            (\*  *\) *)
     ret
   in
   let str = find_solutions_i sv pc mem [] in
@@ -969,7 +989,7 @@ let simplify_pc (pc : pc_ext)
           
 
 let is_unsat (pc : pc_ext) (mem: Smemory.t list * int) =
-  print_endline "is_unsat";
+  (* print_endline "is_unsat"; *)
   let ctx = init_solver() in
 
   let pc = pc_to_expr pc ctx mem in
@@ -1077,21 +1097,22 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
       List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
 
       (* Printf.printf "Solver v_ct: %s\n" (Solver.to_string solver); *)
-      print_endline "is_v_ct_unsat before write formula";
+      (* print_endline "is_v_ct_unsat before write formula"; *)
       let filename = write_formula_to_file solver in
+      print_endline ("is_v_ct_unsat after write formula " ^ filename);
       let res = not (run_solvers filename (read_sat "yices") (read_sat "z3") (read_sat "cvc4")) in
-      remove filename;
+      (* remove filename; *)
       res
       (* print_endline "is_v_ct_unsat_before_solving"; 
        * match (Solver.check solver []) with
        * | Solver.UNSATISFIABLE ->
        *    true
        * | Solver.SATISFIABLE ->
-       *    (\* let model = Solver.get_model solver in
-       *     * (match model with
-       *     *  | None -> print_endline "None"
-       *     *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
-       *     * ); *\)
+       *    let model = Solver.get_model solver in
+       *    (match model with
+       *     | None -> print_endline "None"
+       *     | Some m -> print_endline "Model"; print_endline (Model.to_string m)
+       *    );
        *    false
        * | _ -> false *)
 
@@ -1101,9 +1122,8 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
   (* check only satisfiability *)
   (* print_endline "is_sat"; *)
   let ctx = init_solver() in
-  
-  let v = pc_to_expr pc ctx mem in
 
+  let v = pc_to_expr pc ctx mem in
   (* (match pc with
    * | (pclet, PCAnd (v',pc)) ->
    *    let sv = sv_to_expr (pclet,pc) v' ctx mem in
@@ -1128,7 +1148,13 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
 
   let check_solver = Solver.check solver [] in
   match check_solver with
-  | Solver.SATISFIABLE -> true
+  | Solver.SATISFIABLE ->
+     (* let model = Solver.get_model solver in
+      * (match model with
+      *  | None -> print_endline "None"
+      *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
+      * ); *)
+     true
   | _ -> false
 
 

@@ -141,28 +141,28 @@ let rec pp_term ppf term =
   | TermSpecConstant sc -> pp_spec_constant ppf sc
   | TermQualIdentifier qualid -> pp_qual_identifier ppf qualid
   | TermQualIdentifierTerms (qualid, terms) ->
-    fprintf ppf "@[<hov 0>(%a@ %a)@]"
+    fprintf ppf "@[<hov 0>(%a@ %a)@]%!"
       pp_qual_identifier qualid
       pp_terms terms
   | TermLetTerm (varbindings, term) ->
-    fprintf ppf "@[<hov 0>(let@ (@[<v 0>%a@])@ %a)@]"
+    fprintf ppf "@[<hov 0>(let@ (@[<v 0>%a@])@ %a)@]%!"
       pp_var_bindings varbindings
       pp_term term
   | TermForallTerm (svars, term) ->
-    fprintf ppf "@[<hov 1>(forall@ (@[<hov>%a@])@ %a)@]"
+    fprintf ppf "@[<hov 1>(forall@ (@[<hov>%a@])@ %a)@]%!"
       pp_sorted_vars svars
       pp_term term
   | TermExistsTerm (svars, term) ->
-    fprintf ppf "@[<hov 1>(exists@ (@[<hov>%a@])@ %a)@]"
+    fprintf ppf "@[<hov 1>(exists@ (@[<hov>%a@])@ %a)@]%!"
       pp_sorted_vars svars
       pp_term term
   | TermAnnotatedTerm (term, attrs) ->
-    fprintf ppf "@[<hov 1>(!@ %a %a)@]"
+    fprintf ppf "@[<hov 1>(!@ %a %a)@]%!"
       pp_term term
       pp_attributes attrs
   | TermLambdaTerm (svars, term) ->
      fprintf ppf
-    "@[<hov 1>(lambda@ (@[<hov>%a@])@ %a)]"
+    "@[<hov 1>(lambda@ (@[<hov>%a@])@ %a)]%!"
     pp_sorted_vars svars
     pp_term term
 

@@ -105,6 +105,9 @@ let match_smemory_type (SmemoryType lim1) (SmemoryType lim2) =
 let match_global_type gt1 gt2 =
   gt1 = gt2
 
+let match_sglobal_type sgt1 sgt2 =
+  sgt1 = sgt2
+
 let match_extern_type et1 et2 =
   match et1, et2 with
   | ExternFuncType ft1, ExternFuncType ft2 -> match_func_type ft1 ft2
@@ -112,7 +115,10 @@ let match_extern_type et1 et2 =
   | ExternMemoryType mt1, ExternMemoryType mt2 -> match_memory_type mt1 mt2
   | ExternSmemoryType mt1, ExternSmemoryType mt2 -> match_smemory_type mt1 mt2
   | ExternGlobalType gt1, ExternGlobalType gt2 -> match_global_type gt1 gt2
-  | _, _ -> false
+  | ExternSglobalType gt1, ExternGlobalType gt2 ->
+     let sg2 = global_to_sglobal_type gt2 in
+     match_sglobal_type gt1 sg2
+  | _, _ ->   print_endline "match_ext_type no match"; false
 
 
 (* Filters *)
