@@ -8,3 +8,4 @@ let harness = ref true
 let bfs = ref false
 let loop_invar = ref false
 let simplify = ref false
+let select_unsafe = ref false
