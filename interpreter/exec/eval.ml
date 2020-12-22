@@ -12,13 +12,15 @@ module Link = Error.Make ()
 module Trap = Error.Make ()
 module Crash = Error.Make ()
 module Exhaustion = Error.Make ()
-(* module ConstantTime = Error.Make ()
- * module NonInterference = Error.Make () *)
+module ConstantTime = Error.Make ()
+module NonInterference = Error.Make ()
 
 exception Link = Link.Error
 exception Trap = Trap.Error
 exception Crash = Crash.Error (* failure that cannot happen in valid code *)
 exception Exhaustion = Exhaustion.Error
+(* exception ConstantTime = ConstantTime.Error
+ * exception NonIntereference = NonInterference.Error *)
 
 (* let memory_error at = function
  *   | Memory.Bounds -> "out of bounds memory access"
@@ -1013,14 +1015,11 @@ let rec step (c : config) : config list =
       match vs with
       | v::vs' ->
          if svalue_depth v 5 then (
-           (* print_endline "step g t 5";
-            * print_endline (svalue_to_string v); *)
            if (!Flags.simplify) then (
              let v, pc' = simplify_v frame (pclet,pc) v in
              v::vs', pc'
            ) else (
              let nl, pc' = add_let (pclet, pc) (Sv v) in
-             (* print_endline (string_of_int nl); *)
              let nv = svalue_newlet (Sv v) nl in
              nv::vs', pc'
            )
@@ -1055,7 +1054,7 @@ let rec step (c : config) : config list =
            let vs', es' = vs', [Label (n2, [], (args, List.map plain es'), (pclet,pc)) @@ e.at] in
            [{c with code = vs', es' @ List.tl es}]
         | Loop (bt, es'), vs ->
-           print_endline "loop";
+           (* print_endline "loop"; *)
            if !Flags.loop_invar
            then 
              (
@@ -1131,7 +1130,9 @@ let rec step (c : config) : config list =
             | _ ->
                if (not !disable_ct) then (
                  if Z3_solver.is_ct_unsat (pclet, pc) v mem then res
-                 else failwith "If: Constant-time failure"
+else (
+                   ConstantTime.warn e.at "If: Constant-time Violation";
+                   res)
                ) else res
            )
 
@@ -1166,8 +1167,11 @@ let rec step (c : config) : config list =
             | _::[] -> res
             | _ ->
                if (not !disable_ct) then (
-                 if Z3_solver.is_ct_unsat (pclet, pc) v mem then res
-                 else failwith "BrIf: Constant-time failure")
+                 if Z3_solver.is_ct_unsat (pclet, pc) v mem
+                 then res
+                 else (
+                   ConstantTime.warn e.at "BrIf: Constant-time Violation";
+                   res))
                else res
            )
 
@@ -1193,9 +1197,12 @@ let rec step (c : config) : config list =
 
         | CallIndirect x, SI32 i :: vs ->
            (* print_endline "call indirect"; *)
-           (* TODO(Romy): Check that it is not a high value *)
-           (* svalue_to_string (SI32 i) |> print_endline; *)
+
+           (* Check Constant-time violation *)
            let mem = (frame.inst.smemories, smemlen frame.inst) in
+           if (Z3_solver.is_v_ct_unsat (pclet, pc) (SI32 i) mem) then ()
+           else ConstantTime.warn e.at "CallIndirect: Constant-time Violation";
+
            (* print_endline "before find_solutions"; *)
            let i_sol = Z3_solver.find_solutions (SI32 i) (pclet, pc) mem  in
            (match i_sol with
@@ -1221,8 +1228,16 @@ let rec step (c : config) : config list =
            (* print_endline "select"; *)
            let vselect = select_condition v0 v1 v2 in
            let vs', es' = vselect :: vs', [] in
-           [{c with code = vs', es' @ List.tl es }]
-           
+           let res = [{c with code = vs', es' @ List.tl es }] in
+           if (!Flags.select_unsafe) then (
+             let mem = (frame.inst.smemories, smemlen frame.inst) in
+             if Z3_solver.is_ct_unsat (pclet, pc) v0 mem then res
+             else (
+               ConstantTime.warn e.at "Select: Constant-time Violation";
+               res
+             )
+           )
+           else res
         | LocalGet x, vs ->
            (* print_endline "localget"; *)
            let vs', es' = (local frame x) :: vs, [] in
@@ -1316,31 +1331,31 @@ let rec step (c : config) : config list =
              
              let c = {c with observations = CT_V_UNSAT((pclet, pc), final_addr,
                                                        mem, c.observations)} in
-
+             let msec = Smemory.get_secrets imem in
+             let mpub = Smemory.get_public imem in
+             let pc', pc'' = split_msec final_addr msec mpub pc in
+             (* The loaded value consists of the (symbolic) index and the memory
+                   index *)
+             let nv =
+               (* (try *)
+               (match sz with
+                | None ->
+                   Eval_symbolic.eval_load ty final_addr
+                     (smemlen frame.inst) (Types.size ty) None
+                | Some (sz, ext) ->
+                   assert (packed_size sz <= Types.size ty);
+                   let n = packed_size sz in 
+                   Eval_symbolic.eval_load ty final_addr
+                     (smemlen frame.inst) n (Some ext)
+               )
+             in
+             
              if (Z3_solver.is_v_ct_unsat (pclet, pc) final_addr mem) then
                (
-                 let msec = Smemory.get_secrets imem in
-                 let mpub = Smemory.get_public imem in
-                 let pc', pc'' = split_msec final_addr msec mpub pc in
-                 (* The loaded value consists of the (symbolic) index and the memory
-                   index *)
-                 let nv =
-                   (* (try *)
-                   (match sz with
-                    | None ->
-                       Eval_symbolic.eval_load ty final_addr
-                         (smemlen frame.inst) (Types.size ty) None
-                    | Some (sz, ext) ->
-                       assert (packed_size sz <= Types.size ty);
-                       let n = packed_size sz in 
-                       Eval_symbolic.eval_load ty final_addr
-                         (smemlen frame.inst) n (Some ext)
-                   )
                  (* with exn ->
                   *    let vs', es' = vs', [Trapped (memory_error e.at exn) @@ e.at] in 
                   *    [{c with code = vs', es' @ List.tl es}]
                   * ) *)
-                 in
                  let vs', es' =  nv :: vs', [] in 
                  let res =
                    match Z3_solver.is_sat (pclet, pc') mem,  Z3_solver.is_sat (pclet, pc'') mem with
@@ -1366,7 +1381,12 @@ let rec step (c : config) : config list =
                   *                     pc = pclet,pc''}:: res
                   *           else res in
                   * res) *)
-             else failwith "The index does not satisfy CT."
+             else (
+               ConstantTime.warn e.at "Load: Constant-time violation";
+               [{c with code = nv :: vs', [] @ List.tl es;
+                        frame = frame;
+                        pc = pclet, pc}]
+             )
            )
            else (
              let nv =
@@ -1386,7 +1406,7 @@ let rec step (c : config) : config list =
            )
            
         | Store {offset; ty; sz; _}, sv :: si :: vs' ->
-           print_endline "store";
+           (* print_endline "store"; *)
 
            let mem = smemory frame.inst (0l @@ e.at) in
            let frame = {frame with
@@ -1460,7 +1480,13 @@ let rec step (c : config) : config list =
                                             frame = nframe;
                                             pc = pclet, pc''}]
                        )
-                     else failwith "Trying to write high values in low memory")
+                     else (
+                       NonInterference.warn e.at "Trying to write high values in low memory";
+                       [{c with code = vs', es' @ List.tl es;
+                                           frame = nframe;
+                                           pc = pclet, pc}]
+                     )
+                    )
                  | false ->
                     (match Z3_solver.is_sat (pclet, pc') mems with
                      | true -> [{c with code = vs', es' @ List.tl es;
@@ -1469,7 +1495,13 @@ let rec step (c : config) : config list =
                      | false -> failwith "No possible path available"
                     )
                in res
-             else failwith "The index does not satisfy CT."
+             else (
+               ConstantTime.warn e.at "Store: Constant-time violation";
+               [{c with code = vs', [] @ List.tl es;
+                        frame = frame;
+                        pc = pclet, pc}]
+
+             )
            )
            else (
              let nv =
@@ -1626,7 +1658,7 @@ let rec step (c : config) : config list =
        [{c with code = vs', es' @ List.tl es}]
 
     | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es'), pc'), vs ->
-       print_endline ("lab4:" ^ (string_of_int c.counter));
+       (* print_endline ("lab4:" ^ (string_of_int c.counter)); *)
        let vs', es' = take n vs0 e.at @ vs, List.map plain es0 in
        [{c with code = vs', es' @ List.tl es}]
 

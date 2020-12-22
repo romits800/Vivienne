@@ -1099,9 +1099,9 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
       (* Printf.printf "Solver v_ct: %s\n" (Solver.to_string solver); *)
       (* print_endline "is_v_ct_unsat before write formula"; *)
       let filename = write_formula_to_file solver in
-      print_endline ("is_v_ct_unsat after write formula " ^ filename);
+      (* print_endline ("is_v_ct_unsat after write formula " ^ filename); *)
       let res = not (run_solvers filename (read_sat "yices") (read_sat "z3") (read_sat "cvc4")) in
-      (* remove filename; *)
+      remove filename;
       res
       (* print_endline "is_v_ct_unsat_before_solving"; 
        * match (Solver.check solver []) with
