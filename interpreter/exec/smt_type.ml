@@ -428,8 +428,8 @@ let bvudiv t1 t2 =
   | _, BitVec(512L,nb2) -> bvlshr t1 (BitVec(9L, nb2))
   | _, BitVec(1024L,nb2) -> bvlshr t1 (BitVec(10L, nb2))
   |_ ->
-    print_endline "division by";
-    print_endline (term_to_string t2);
+    (* print_endline "division by";
+     * print_endline (term_to_string t2); *)
     App (BvUDiv, [t1;t2])
        
 (* Todo(Romy): Check if correct *)
@@ -447,8 +447,8 @@ let bvsdiv t1 t2 =
   | _, BitVec(512L,nb2) -> bvashr t1 (BitVec(9L, nb2))
   | _, BitVec(1024L,nb2) -> bvashr t1 (BitVec(10L, nb2))
   |_ ->
-    print_endline "Sdivision by";
-    print_endline (term_to_string t2);
+    (* print_endline "Sdivision by";
+     * print_endline (term_to_string t2); *)
     App (BvSDiv, [t1;t2])
  
 (* Todo(Romy): Check if correct *)
@@ -466,8 +466,8 @@ let bvurem t1 t2 =
   | _, BitVec(512L,nb2) -> bvand t1 (BitVec(511L, nb2))
   | _, BitVec(1024L,nb2) -> bvand t1 (BitVec(1023L, nb2))
   |_ ->
-    print_endline "bvurem by";
-    print_endline (term_to_string t2);
+    (* print_endline "bvurem by";
+     * print_endline (term_to_string t2); *)
     App (BvURem, [t1;t2])
 
 (* let bvurem t1 t2 = App (BvURem, [t1;t2]) *)

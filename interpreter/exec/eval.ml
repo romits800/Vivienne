@@ -1020,6 +1020,8 @@ let rec step (c : config) : config list =
              v::vs', pc'
            ) else (
              let nl, pc' = add_let (pclet, pc) (Sv v) in
+             (* print_endline (string_of_int nl);
+              * print_endline (svalue_to_string v); *)
              let nv = svalue_newlet (Sv v) nl in
              nv::vs', pc'
            )
@@ -1130,7 +1132,7 @@ let rec step (c : config) : config list =
             | _ ->
                if (not !disable_ct) then (
                  if Z3_solver.is_ct_unsat (pclet, pc) v mem then res
-else (
+                 else (
                    ConstantTime.warn e.at "If: Constant-time Violation";
                    res)
                ) else res
@@ -1189,7 +1191,6 @@ else (
            [{c with code = vs', es' @ List.tl es}]
 
         | Call x, vs ->
-           (* print_endline ("call:" ^ (string_of_int c.counter)); *)
            (* print_endline "call";
             * print_endline (string_of_int (Int32.to_int x.it)); *)
            let vs', es' = vs, [Invoke (func frame.inst x) @@ e.at] in
