@@ -342,13 +342,18 @@ let run_action act : Values.value list =
     Z3_solver.clean_solver();
     (match Instance.export inst name with
      | Some (Instance.ExternFunc f) ->
-        let t = Sys.time() in
+        let start = Unix.gettimeofday () in
+        (* let t = Sys.time() in *)
         (try
-          let _ = Eval.symb_invoke f (List.map (fun v -> v.it) vs) in
-          trace (Printf.sprintf "Execution time: %fs" (Sys.time() -. t));
-        with e ->
-          trace (Printf.sprintf "Execution time: %fs" (Sys.time() -. t));
-          raise e
+           let _ = Sym_exec.symb_invoke f (List.map (fun v -> v.it) vs) in
+           let stop = Unix.gettimeofday () in
+           trace (Printf.sprintf "Execution time: %fs" (stop -. start));
+           trace (Printf.sprintf "Solver statistics:");
+           Stats.print_stats();
+         with e ->
+           let stop = Unix.gettimeofday () in
+           trace (Printf.sprintf "Execution time: %fs" (stop -. start));
+           raise e
         ) ; 
         []
     | Some _ -> Assert.error act.at "export is not a function"
@@ -427,7 +432,7 @@ let run_assertion ass =
     if not !Flags.unchecked then Valid.check_module m;
     (match
       let imports = Import.link m in
-      ignore (Eval.init m imports)
+      ignore (Sym_exec.init m imports)
     with
     | exception (Import.Unknown (_, msg) | Eval.Link (_, msg)) ->
       assert_message ass.at "linking" msg re
@@ -440,7 +445,7 @@ let run_assertion ass =
     if not !Flags.unchecked then Valid.check_module m;
     (match
       let imports = Import.link m in
-      ignore (Eval.init m imports)
+      ignore (Sym_exec.init m imports)
     with
     | exception Eval.Trap (_, msg) ->
       assert_message ass.at "instantiation" msg re
@@ -493,7 +498,7 @@ let rec run_command cmd =
     if not !Flags.dry then begin
       trace "Initializing...";
       let imports = Import.link m in
-      let inst = Eval.init m imports in
+      let inst = Sym_exec.init m imports in
       bind instances x_opt inst
     end
 

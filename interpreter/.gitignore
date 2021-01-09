@@ -10,4 +10,4 @@
 _build
 wasm
 wasm.debug
-
+*.bak

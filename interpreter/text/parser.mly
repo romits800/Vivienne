@@ -655,6 +655,9 @@ elem :
   | LPAR ELEM offset var_list RPAR  /* Sugar */
     { let at = at $startpos $endpos in
       fun c -> {index = 0l @@ at; offset = $3 c; init = $4 c func} @@ at }
+  | LPAR ELEM offset FUNC var_list RPAR  /* Sugar */
+    { let at = at $startpos $endpos in
+      fun c -> {index = 0l @@ at; offset = $3 c; init = $5 c func} @@ at }
 
 table :
   | LPAR TABLE bind_var_opt table_fields RPAR

@@ -5,7 +5,7 @@ open Smt_type
 open Sys
 (* open Unix *)
 open Smtlib
-  
+open Stats  
 
 module ExprMem = Map.Make(struct
                      type t = int
@@ -697,33 +697,56 @@ let read_cvc4 () =
        ) in
      Some c
     | _ -> failwith @@ "Error output of file " ^ tmp_file
-       
-  let read_z3 () =
-    (* print_endline "read_z3"; *)
-    let tmp_file = "/tmp/z3.out" in
-    (* let _ = Sys.command @@ "z3 -smt2 MODEL=true /tmp/out.smt2 > " ^ tmp_file in *)
-    let chan = open_in tmp_file in
-    match input_line chan with
-    | "unsat" -> None
-    | "sat" ->
-       let lexbuf = Lexing.from_channel chan in
-       let c =
-         (try
-            let m = Smtlib_parser.model Smtlib_lexer.token lexbuf in
-            (* print_endline "parser"; *)
-            let mc = m.model_commands in
-            (* print_endline "before close_in"; *)
-            close_in chan;
-            (* print_endline "after close_in"; *)
-            find_command mc
-          with e ->
-            close_in chan;
-            (* print_endline "failed z3"; *)
-            raise e
-         ) in
-       (* close_in chan; *)
-       Some c
+
+let read_boolector () =
+  (* print_endline "read_boolector"; *)
+  let tmp_file = "/tmp/boolector.out" in
+  let chan = open_in tmp_file in
+  match input_line chan with
+  | "unsat" -> None
+  | "sat" ->
+     let lexbuf = Lexing.from_channel chan in
+     let c =
+       (try
+          let m = Smtlib_parser.model Smtlib_lexer.token lexbuf in
+          let mc = m.model_commands in
+          close_in chan;
+          find_command mc
+        with e ->
+          close_in chan;
+          print_endline "failed boolector";
+          raise e
+       ) in
+     Some c
     | _ -> failwith @@ "Error output of file " ^ tmp_file
+
+         
+let read_z3 () =
+  (* print_endline "read_z3"; *)
+  let tmp_file = "/tmp/z3.out" in
+  (* let _ = Sys.command @@ "z3 -smt2 MODEL=true /tmp/out.smt2 > " ^ tmp_file in *)
+  let chan = open_in tmp_file in
+  match input_line chan with
+  | "unsat" -> None
+  | "sat" ->
+     let lexbuf = Lexing.from_channel chan in
+     let c =
+       (try
+          let m = Smtlib_parser.model Smtlib_lexer.token lexbuf in
+          (* print_endline "parser"; *)
+          let mc = m.model_commands in
+          (* print_endline "before close_in"; *)
+          close_in chan;
+          (* print_endline "after close_in"; *)
+          find_command mc
+        with e ->
+          close_in chan;
+          (* print_endline "failed z3"; *)
+          raise e
+       ) in
+     (* close_in chan; *)
+     Some c
+  | _ -> failwith @@ "Error output of file " ^ tmp_file
 
 let read_yices () =
   (* print_endline "read_yices"; *)
@@ -756,7 +779,6 @@ let read_yices () =
   (* exit 0 *)
 
 let read_sat solver_name () =
-  (* print_endline "read_sat"; *)
   let tmp_file = "/tmp/" ^ solver_name ^ ".out" in
   let chan = open_in tmp_file in
   let result = input_line chan in
@@ -770,9 +792,9 @@ let read_sat solver_name () =
   in
   close_in chan;
   ret
- 
 
-let run_solvers input_file yices z3 cvc4 =
+          
+let run_solvers input_file yices z3 cvc4 boolector =
   (* print_endline "run_solvers"; *)
   try
     (* TODO(Romy): before commiting *)
@@ -784,12 +806,22 @@ let run_solvers input_file yices z3 cvc4 =
     let chan = open_in out_file in
     try
       let solver = input_line chan in
-      if solver = "yices" then
+      if solver = "yices" then (
+        stats := {!stats with yices = !stats.yices + 1 };
         yices()
-      else if solver = "z3" then
+      )
+      else if solver = "z3" then (
+        stats := {!stats with z3 = !stats.z3 + 1 };
         z3()
-      else if solver = "cvc4" then
+      )
+      else if solver = "cvc4" then (
+        stats := {!stats with cvc4 = !stats.cvc4 + 1 };
         cvc4()
+      )
+      else if solver = "boolector" then (
+        stats := {!stats with boolector = !stats.boolector + 1 };
+        boolector()
+      )
       else
         failwith "No solver returned";
     with e ->
@@ -890,7 +922,7 @@ let find_solutions (sv: svalue) (pc : pc_ext)
     (* print_endline "creating filename"; *)
     let filename = write_formula_to_file solver in
     print_endline @@ "after writing formula to filename" ^ filename;
-    let ret = match run_solvers filename read_yices read_z3 read_cvc4 with
+    let ret = match run_solvers filename read_yices read_z3 read_cvc4 read_boolector with
       | None -> acc
       | Some v -> find_solutions_i sv pc mem (v::acc)
     in
@@ -1004,23 +1036,26 @@ let is_unsat (pc : pc_ext) (mem: Smemory.t list * int) =
   let solver = Solver.mk_solver ctx None in
   List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
 
-  let filename = write_formula_to_file solver in
-  let res = not (run_solvers filename (read_sat "yices")
-                   (read_sat "z3") (read_sat "cvc4")) in
-  remove filename;
-  res
-  
-  (* match (Solver.check solver []) with
-   * | Solver.UNSATISFIABLE ->
-   *    true
-   * | _ ->
-   *    (\* let model = Solver.get_model solver in
-   *     * (match model with
-   *     *  | None -> print_endline "None"
-   *     *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
-   *     * ); *\)
-   *    false *)
-
+  if !Flags.disable_portfolio = false then (
+    let filename = write_formula_to_file solver in
+    let res = not (run_solvers filename (read_sat "yices")
+                     (read_sat "z3") (read_sat "cvc4")
+                     (read_sat "boolector")) in
+    remove filename;
+    res
+  )
+  else
+    ( match (Solver.check solver []) with
+      | Solver.UNSATISFIABLE ->
+         true
+      | _ ->
+         (* let model = Solver.get_model solver in
+          * (match model with
+          *  | None -> print_endline "None"
+          *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
+          * ); *)
+         false
+    )
 
   
 let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) =
@@ -1050,22 +1085,24 @@ let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) =
      let solver = Solver.mk_solver ctx None in
      List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
 
-     let filename = write_formula_to_file solver in
-     let res = not (run_solvers filename (read_sat "yices") (read_sat "z3") (read_sat "cvc4")) in
-     remove filename;
-     res
-
-     (* match (Solver.check solver []) with
-      * | Solver.UNSATISFIABLE -> true
-      * | _ ->
-      *    (\* Printf.printf "Goal v_ct: %s\n" (Goal.to_string g); *\)
-      *    (\* let model = Solver.get_model solver in *\)
-      *    (\* (match model with
-      *     *  | None -> print_endline "None"
-      *     *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
-      *     * ); *\)
-      *    false *)
-
+     if !Flags.disable_portfolio = false then (
+       let filename = write_formula_to_file solver in
+       let res = not (run_solvers filename (read_sat "yices")
+                        (read_sat "z3") (read_sat "cvc4") (read_sat "boolector")) in
+       remove filename;
+       res
+     ) else (
+       match (Solver.check solver []) with
+       | Solver.UNSATISFIABLE -> true
+       | _ ->
+          (* Printf.printf "Goal v_ct: %s\n" (Goal.to_string g); *)
+          (* let model = Solver.get_model solver in *)
+          (* (match model with
+           *  | None -> print_endline "None"
+           *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
+           * ); *)
+          false
+     )
   
 let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool =
   (* print_endline "is_v_ct_unsat"; *) 
@@ -1098,24 +1135,28 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
 
       (* Printf.printf "Solver v_ct: %s\n" (Solver.to_string solver); *)
       (* print_endline "is_v_ct_unsat before write formula"; *)
-      let filename = write_formula_to_file solver in
-      (* print_endline ("is_v_ct_unsat after write formula " ^ filename); *)
-      let res = not (run_solvers filename (read_sat "yices") (read_sat "z3") (read_sat "cvc4")) in
-      remove filename;
-      res
-      (* print_endline "is_v_ct_unsat_before_solving"; 
-       * match (Solver.check solver []) with
-       * | Solver.UNSATISFIABLE ->
-       *    true
-       * | Solver.SATISFIABLE ->
-       *    let model = Solver.get_model solver in
-       *    (match model with
-       *     | None -> print_endline "None"
-       *     | Some m -> print_endline "Model"; print_endline (Model.to_string m)
-       *    );
-       *    false
-       * | _ -> false *)
 
+      if !Flags.disable_portfolio = false then (
+        let filename = write_formula_to_file solver in
+        (* print_endline ("is_v_ct_unsat after write formula " ^ filename); *)
+        let res = not (run_solvers filename (read_sat "yices") (read_sat "z3")
+                         (read_sat "cvc4") (read_sat "boolector")) in
+        remove filename;
+        res
+      ) else (
+        (* print_endline "is_v_ct_unsat_before_solving"; *) 
+        match (Solver.check solver []) with
+        | Solver.UNSATISFIABLE ->
+           true
+        | Solver.SATISFIABLE ->
+           (* let model = Solver.get_model solver in *)
+           (* (match model with
+            *  | None -> print_endline "None"
+            *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
+            * ); *)
+           false
+        | _ -> false
+      )
 
 
 let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
@@ -1159,7 +1200,7 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
 
 
               
-     (* let max = Optimize.maximize
+(* let max = Optimize.maximize
  * let min = Optimize.minimize
  * 
  * 
