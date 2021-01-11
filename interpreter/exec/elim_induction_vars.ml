@@ -4,7 +4,6 @@ open Types
 open Instance
 open Ast
 open Source
-open Find_induction_vars
 
 
 let multiply_triple iv b1 b2 =
