@@ -1,7 +1,7 @@
 #!/bin/bash
 
 filename=$1
-rm /tmp/*boolector.err /tmp/*boolector.out /tmp/*cvc4.err /tmp/*cvc4.out /tmp/*z3.err /tmp/*z3.out /tmp/*yices.err /tmp/*yices.out
+rm -f /tmp/*boolector.err /tmp/*boolector.out /tmp/*cvc4.err /tmp/*cvc4.out /tmp/*z3.err /tmp/*z3.out /tmp/*yices.err /tmp/*yices.out
 
 sed "s/(get-model)//" $filename > ${filename}.bool
 
