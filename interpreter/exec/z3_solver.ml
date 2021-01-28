@@ -659,9 +659,9 @@ let rec find_command = function
   | [] -> failwith "Not found"
 
         
-let read_cvc4 () =
+let read_cvc4 fname =
   (* print_endline "read_cvc4"; *)
-  let tmp_file = "/tmp/cvc4.out" in
+  let tmp_file = fname ^ "cvc4.out" in
   (* let _ = Sys.command @@ "cvc4-1.8-x86_64-linux-opt -m /tmp/out.smt2 > " ^ tmp_file in *)
   let chan = open_in tmp_file in
   (* let ch = input_char chan in *)
@@ -698,9 +698,9 @@ let read_cvc4 () =
      Some c
     | _ -> failwith @@ "Error output of file " ^ tmp_file
 
-let read_boolector () =
+let read_boolector fname =
   (* print_endline "read_boolector"; *)
-  let tmp_file = "/tmp/boolector.out" in
+  let tmp_file = fname ^ ".boolector.out" in
   let chan = open_in tmp_file in
   match input_line chan with
   | "unsat" -> None
@@ -721,9 +721,9 @@ let read_boolector () =
     | _ -> failwith @@ "Error output of file " ^ tmp_file
 
          
-let read_z3 () =
+let read_z3 fname =
   (* print_endline "read_z3"; *)
-  let tmp_file = "/tmp/z3.out" in
+  let tmp_file = fname ^ ".z3.out" in
   (* let _ = Sys.command @@ "z3 -smt2 MODEL=true /tmp/out.smt2 > " ^ tmp_file in *)
   let chan = open_in tmp_file in
   match input_line chan with
@@ -748,9 +748,9 @@ let read_z3 () =
      Some c
   | _ -> failwith @@ "Error output of file " ^ tmp_file
 
-let read_yices () =
+let read_yices fname =
   (* print_endline "read_yices"; *)
-  let tmp_file = "/tmp/yices.out" in
+  let tmp_file = fname ^ ".yices.out" in
   (* let _ = Sys.command @@ "yices-smt2 /tmp/out.smt2 > " ^ tmp_file in *)
   let chan = open_in tmp_file in
   match input_line chan with
@@ -778,8 +778,8 @@ let read_yices () =
   (* print_endline "returning"; *)
   (* exit 0 *)
 
-let read_sat solver_name () =
-  let tmp_file = "/tmp/" ^ solver_name ^ ".out" in
+let read_sat solver_name fname =
+  let tmp_file = fname ^ "." ^ solver_name ^ ".out" in
   let chan = open_in tmp_file in
   let result = input_line chan in
   let ret =
@@ -808,19 +808,19 @@ let run_solvers input_file yices z3 cvc4 boolector =
       let solver = input_line chan in
       if solver = "yices" then (
         stats := {!stats with yices = !stats.yices + 1 };
-        yices()
+        yices input_file
       )
       else if solver = "z3" then (
         stats := {!stats with z3 = !stats.z3 + 1 };
-        z3()
+        z3 input_file
       )
       else if solver = "cvc4" then (
         stats := {!stats with cvc4 = !stats.cvc4 + 1 };
-        cvc4()
+        cvc4 input_file
       )
       else if solver = "boolector" then (
         stats := {!stats with boolector = !stats.boolector + 1 };
-        boolector()
+        boolector input_file
       )
       else
         failwith "No solver returned";
@@ -1130,11 +1130,13 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
       Goal.add g [v'];
       Goal.add g [pcexp'];
       let solver = Solver.mk_solver ctx None in
-      
-      List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
+      List.iter (fun f -> Solver.add solver [f])
+        (List.map (fun e -> Expr.simplify e None) (Goal.get_formulas g));
+
+      (* let stats = Solver.get_statistics solver in
+       * print_endline (Statistics.to_string stats); *)     
 
       (* Printf.printf "Solver v_ct: %s\n" (Solver.to_string solver); *)
-      (* print_endline "is_v_ct_unsat before write formula"; *)
 
       if !Flags.disable_portfolio = false then (
         let filename = write_formula_to_file solver in
@@ -1149,8 +1151,8 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
         | Solver.UNSATISFIABLE ->
            true
         | Solver.SATISFIABLE ->
-           (* let model = Solver.get_model solver in *)
-           (* (match model with
+           (* let model = Solver.get_model solver in
+            * (match model with
             *  | None -> print_endline "None"
             *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
             * ); *)
