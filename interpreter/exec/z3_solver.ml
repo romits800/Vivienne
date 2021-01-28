@@ -797,8 +797,11 @@ let read_sat solver_name () =
 let run_solvers input_file yices z3 cvc4 boolector =
   (* print_endline "run_solvers"; *)
   try
+    let open Sys in
     (* TODO(Romy): before commiting *)
-    let path = "/home/romi/didaktoriko/repo/wasm/test/symb_wasm/relsymb/interpreter/" in
+    print_endline "reading viv_path";
+    let path = getenv "VIV_PATH" in
+    print_endline path;
     let out_file = "/tmp/run_solvers.out" in
     let err_file = "/tmp/run_solvers.err" in
     let _ = Sys.command @@ "bash " ^ path ^ "run_solvers.sh " ^
