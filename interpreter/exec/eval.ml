@@ -70,26 +70,6 @@ type loopvar_t = LocalVar of int32 Source.phrase * bool * modifier (* local x * 
                | GlobalVar of int32 Source.phrase * bool * modifier
                | StoreVar of svalue * Types.value_type * Types.pack_size option * bool * modifier
 
-type code = svalue stack * admin_instr list          
-and admin_instr = admin_instr' phrase
-and admin_instr' =
-  | Plain of instr'
-  | Invoke of func_inst
-  | Trapping of string
-  | Returning of svalue stack
-  | Breaking of int32 * svalue stack
-  | Label of int32 * instr list * code * pc_ext
-  | Frame of int32 * frame * code * pc_ext
-  | Assert of loopvar_t list
-  | Havoc of loopvar_t list
-  (* | FirstPass of int32 * instr list * code *)
-  | SecondPass of int32 * instr list * code 
-           
-type obs_type =
-  | CT_UNSAT of pc_ext * svalue * (Smemory.t list * int) * obs_type
-  | CT_V_UNSAT of pc_ext * svalue * (Smemory.t list * int) * obs_type
-  (* | CT_SAT of pc * obs_type *)
-  | OBSTRUE
 
 module IndVarMap = Map.Make(struct
                        type t = svalue
@@ -99,8 +79,30 @@ module IndVarMap = Map.Make(struct
 
 type triple = svalue * svalue * svalue * svalue (*real init value, symb init value, mul, add*)
 
+                           
 type iv_type = triple IndVarMap.t
-            
+                           
+type code = svalue stack * admin_instr list          
+and admin_instr = admin_instr' phrase
+and admin_instr' =
+  | Plain of instr'
+  | Invoke of func_inst
+  | Trapping of string
+  | Returning of svalue stack
+  | Breaking of int32 * svalue stack
+  | Label of int32 * instr list * code * pc_ext * iv_type option 
+  | Frame of int32 * frame * code * pc_ext * iv_type option 
+  | Assert of loopvar_t list
+  | Havoc of loopvar_t list
+  | FirstPass of int32 * instr list * code
+  | SecondPass of int32 * instr list * code 
+           
+type obs_type =
+  | CT_UNSAT of pc_ext * svalue * (Smemory.t list * int) * obs_type
+  | CT_V_UNSAT of pc_ext * svalue * (Smemory.t list * int) * obs_type
+  (* | CT_SAT of pc * obs_type *)
+  | OBSTRUE
+
 type config =
 {
   frame : frame;
@@ -335,7 +337,7 @@ let rec assert_invar (lv: loopvar_t list) (c : config) : bool =
      else false
   | [] -> true
 
-       
+let disable_ct = ref false       
   
 (* Find variants that get updated in a loop *)
 

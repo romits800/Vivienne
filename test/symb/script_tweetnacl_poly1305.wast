@@ -9756,10 +9756,10 @@
   (data (;9;) (i32.const 1920) "\09")
   (data (;10;) (i32.const 1952) "expand 32-byte k"))
 
-(symb_exec "poly1305_init" (i32.sconst 2000) (i32.sconst 2080))
+;;(symb_exec "poly1305_init" (i32.sconst 2000) (i32.sconst 2080))
 ;;;;(symb_exec "poly1305_finish" (i32.sconst 2000) (i32.sconst 2112)) ;; loop invariant - for (int i=leftover..; i<16; i++)
-(symb_exec "poly1305_blocks" (i32.sconst 2000) (i32.sconst 2128) (i32.sconst 16))
+;;(symb_exec "poly1305_blocks" (i32.sconst 2000) (i32.sconst 2128) (i32.sconst 16))
 (symb_exec "wrap_poly1305_update" (i32.sconst 2000) (i32.sconst 2128) (i32.sconst 16)) ;; i = 0 is not explicit before loop
-(symb_exec "wrap_poly1305_finish" (i32.sconst 2000) (i32.sconst 2112)) ;; loop invariant - for (int i=leftover..; i<16; i++)
+;;(symb_exec "wrap_poly1305_finish" (i32.sconst 2000) (i32.sconst 2112)) ;; loop invariant - for (int i=leftover..; i<16; i++)
 ;;;; mac, m, bytes, key, polyobject
-(symb_exec "crypto_onetimeauth" (i32.sconst 2112) (i32.sconst 2128) (i32.sconst 16) (i32.sconst 2080) (i32.sconst 2000)) ;; loop invariant - for (int i=leftover..; i<16; i++)
+;;(symb_exec "crypto_onetimeauth" (i32.sconst 2112) (i32.sconst 2128) (i32.sconst 16) (i32.sconst 2080) (i32.sconst 2000)) ;; loop invariant - for (int i=leftover..; i<16; i++)

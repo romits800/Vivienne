@@ -73,8 +73,11 @@
   (data (;0;) (i32.const 32) "\00\00\00\00"))
 
 
-(assert_failure (symb_exec "test_else" (i32.sconst l2) (i32.sconst h1)) "Trying to write high values in low memory")
+
+(symb_exec "test_else" (i32.sconst l2) (i32.sconst h1)) 
+;;(assert_failure (symb_exec "test_else" (i32.sconst l2) (i32.sconst h1)) "Trying to write high values in low memory")
 
 (symb_exec "test_else" (i32.sconst 4) (i32.sconst h1)) 
 
-(assert_failure (symb_exec "test_else" (i32.sconst 5) (i32.sconst h1)) "Trying to write high values in low memory")
+(symb_exec "test_else" (i32.sconst 5) (i32.sconst h1))
+;;(assert_failure (symb_exec "test_else" (i32.sconst 5) (i32.sconst h1)) "Trying to write high values in low memory")

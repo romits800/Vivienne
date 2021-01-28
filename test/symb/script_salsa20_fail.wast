@@ -639,4 +639,5 @@
   (export "keystream" (func 7)))
 ;; This is a comment
 
-(assert_failure (symb_exec "encrypt" (i32.sconst 64)) "Trying to write high values in low memory") 
+(symb_exec "encrypt" (i32.sconst 64)) 
+;;(assert_failure (symb_exec "encrypt" (i32.sconst 64)) "Trying to write high values in low memory") 
