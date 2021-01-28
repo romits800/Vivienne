@@ -7,6 +7,9 @@ open Sys
 open Smtlib
 open Stats  
 
+let path = ref (getenv "VIV_PATH")
+
+   
 module ExprMem = Map.Make(struct
                      type t = int
                      let compare = compare
@@ -793,18 +796,13 @@ let read_sat solver_name fname =
   close_in chan;
   ret
 
-          
+
 let run_solvers input_file yices z3 cvc4 boolector =
   (* print_endline "run_solvers"; *)
   try
-    let open Sys in
-    (* TODO(Romy): before commiting *)
-    print_endline "reading viv_path";
-    let path = getenv "VIV_PATH" in
-    print_endline path;
     let out_file = "/tmp/run_solvers.out" in
     let err_file = "/tmp/run_solvers.err" in
-    let _ = Sys.command @@ "bash " ^ path ^ "run_solvers.sh " ^
+    let _ = Sys.command @@ "bash " ^ !path ^ "run_solvers.sh " ^
                              input_file ^ " 1> " ^ out_file ^ " 2> " ^ err_file in
     let chan = open_in out_file in
     try
