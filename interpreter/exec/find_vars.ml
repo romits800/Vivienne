@@ -60,7 +60,8 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
              let n1 = Lib.List32.length ts1 in
              let n2 = Lib.List32.length ts2 in
              let args, vs' = take n1 vs e.at, drop n1 vs e.at in
-             let vs', es' = vs', [Label (n2, [], (args, List.map plain es'), (pclet,pc)) @@ e.at] in
+             let vs', es' = vs', [Label (n2, [], (args, List.map plain es'),
+                                         (pclet,pc), c.induction_vars) @@ e.at] in
              find_vars lv {c with code = vs', es' @ List.tl es}
           | Loop (bt, es'), vs ->
              (* print_endline "Loop find_vars"; *)
@@ -68,7 +69,8 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
              let n1 = Lib.List32.length ts1 in
              let args, vs' = take n1 vs e.at, drop n1 vs e.at in
              let vs', es' = vs', [Label (n1, [],
-                                         (args, List.map plain es'), (pclet,pc)) @@ e.at] in
+                                         (args, List.map plain es'),
+                                         (pclet,pc), c.induction_vars) @@ e.at] in
              find_vars lv {c with code = vs', es' @ List.tl es}
           | If (bt, es1, es2), v :: vs' ->
              (* print_endline "if"; *)
@@ -351,6 +353,9 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
       | SecondPass _, vs ->
          failwith "Unexpected SecondPass in find_vars";
 
+      | FirstPass _, vs ->
+         failwith "Unexpected FirstPass in find_vars";
+
       (* assert false *)
 
       | Returning vs', vs ->
@@ -361,40 +366,40 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
          lv, []
          (* Crash.error e.at "undefined label" *)
 
-      | Label (n, es0, (vs', []), pc'), vs ->
+      | Label (n, es0, (vs', []), pc', iv'), vs ->
          (* print_endline "lab"; *)
          let vs', es' = vs' @ vs, [] in
          find_vars lv {c with code = vs', es' @ List.tl es}
          
-      | Label (n, es0, (vs', {it = Trapping msg; at} :: es'), pc'), vs ->
+      | Label (n, es0, (vs', {it = Trapping msg; at} :: es'), pc', iv'), vs ->
          (* print_endline "lab2"; *)
          let vs', es' = vs, [Trapping msg @@ at] in
          find_vars lv {c with code = vs', es' @ List.tl es}
 
-      | Label (n, es0, (vs', {it = Returning vs0; at} :: es'), pc'), vs ->
+      | Label (n, es0, (vs', {it = Returning vs0; at} :: es'), pc', iv'), vs ->
          (* print_endline "lab3"; *)
          let vs', es' = vs, [Returning vs0 @@ at] in
          find_vars lv {c with code = vs', es' @ List.tl es}
 
-      | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es'), pc'), vs ->
+      | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es'), pc', iv'), vs ->
          (* print_endline "lab4"; *)
          let vs', es' = take n vs0 e.at @ vs, List.map plain es0 in
          find_vars lv {c with code = vs', es' @ List.tl es}
 
-      | Label (n, es0, (vs', {it = Breaking (k, vs0); at} :: es'), pc'), vs ->
+      | Label (n, es0, (vs', {it = Breaking (k, vs0); at} :: es'), pc', iv'), vs ->
          (* print_endline "lab5"; *)
          let vs', es' = vs, [Breaking (Int32.sub k 1l, vs0) @@ at] in
          find_vars lv {c with code = vs', es' @ List.tl es}
 
-      | Label (n, es0, code', pc'), vs ->
+      | Label (n, es0, code', pc', iv'), vs ->
          (* print_endline "lab6"; *)
          (* TODO(Romy): not sure if correct to change the pc *)
-         let lv', c' = find_vars lv {c with code = code'; pc = pc'} in
+         let lv', c' = find_vars lv {c with code = code'; pc = pc'; induction_vars = iv'} in
          (* print_endline "lab6_back"; *)
          let res =
            List.fold_left (fun (lvi, cprev) ci ->
              let lvi', ci' = find_vars lvi {c with code = vs,
-                                            [Label (n, es0, ci.code, ci.pc) @@ e.at]
+                                            [Label (n, es0, ci.code, ci.pc, ci.induction_vars) @@ e.at]
                                             @ List.tl es;
                                      pc = ci.pc; 
                                      frame = ci.frame}
@@ -405,7 +410,7 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
          (* print_endline "lab6_end"; *)
          res
 
-      | Frame (n, frame', (vs', []), pc'), vs ->
+      | Frame (n, frame', (vs', []), pc', iv'), vs ->
          (* print_endline ("frame1:" ^ (string_of_int c.counter)); *)
          let vs', es' = vs' @ vs, [] in
          let c = {c with code = vs', es' @ List.tl es;
@@ -416,15 +421,16 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
                                                   sglobals = frame'.inst.sglobals
                                              }
                                  };
-                         pc = pc'
+                         pc = pc';
+                         induction_vars = iv'
                  } in
          find_vars lv c
-      | Frame (n, frame', (vs', {it = Trapping msg; at} :: es'), _), vs ->
+      | Frame (n, frame', (vs', {it = Trapping msg; at} :: es'), _, _), vs ->
          (* print_endline "frame2"; *)
          let vs', es' = vs, [Trapping msg @@ at] in
          find_vars lv {c with code = vs', es' @ List.tl es}
 
-      | Frame (n, frame', (vs', {it = Returning vs0; at} :: es'), pc'), vs ->
+      | Frame (n, frame', (vs', {it = Returning vs0; at} :: es'), pc', iv'), vs ->
          (* print_endline "frame returning"; *)
          (* print_endline ("frame3:" ^ (string_of_int c.counter)); *)
          let vs', es' = take n vs0 e.at @ vs, [] in
@@ -436,20 +442,22 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
                                                   sglobals = frame'.inst.sglobals
                                              }
                                };
-                         pc = pc'} in
+                         pc = pc';
+                         induction_vars = iv'} in
          find_vars lv c
 
-      | Frame (n, frame', code', pc'), vs ->
+      | Frame (n, frame', code', pc', iv'), vs ->
          (* print_endline "frame4"; *)
          let lv', c' = find_vars lv {c with frame = frame'; code = code';
-                                            budget = c.budget - 1; pc = pc'} in
+                                            budget = c.budget - 1; pc = pc';
+                                            induction_vars = iv'} in
          (* print_endline "frame4_end"; *)
          (* TODO(Romy): the pc etc  should probably not be here *)
          
          List.fold_left
            (fun (lvi,cprev) ci ->
              let lvi', ci' =
-               find_vars lvi {c with code = vs, [Frame (n, ci.frame, ci.code, ci.pc)
+               find_vars lvi {c with code = vs, [Frame (n, ci.frame, ci.code, ci.pc, ci.induction_vars)
                                                  @@ e.at] @ List.tl es;}
              in
              lvi', ci' @ cprev) (lv',[]) c'
@@ -469,8 +477,8 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
              (* let locals' = List.rev args @ List.map Svalues.default_value rest in *) 
              let locals' = List.rev args @ List.map Svalues.default_value rest in
              let frame' = {inst = !inst'; locals = locals'} in
-             let instr' = [Label (n2, [], ([], List.map plain f.it.body), c.pc) @@ f.at] in 
-             let vs', es' = vs', [Frame (n2, frame', ([], instr'), c.pc) @@ e.at] in
+             let instr' = [Label (n2, [], ([], List.map plain f.it.body), c.pc, c.induction_vars) @@ f.at] in 
+             let vs', es' = vs', [Frame (n2, frame', ([], instr'), c.pc, c.induction_vars) @@ e.at] in
              find_vars lv {c with code = vs', es' @ List.tl es}
 
           (* | Func.HostFunc (t, f) ->

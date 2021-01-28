@@ -9,7 +9,7 @@ open Havoc
 open Merge_vars
 open Find_vars
 open Find_induction_vars
-
+open Elim_induction_vars
 
 let simplify_v frame pc v =
   if svalue_depth v 5 then (
@@ -43,7 +43,7 @@ let simplify_v frame pc v =
  *     (pclet,pc) *)
 
   
-let disable_ct = ref false
+
 
 (* Symbolic Execution *)
 
@@ -100,7 +100,8 @@ let rec step (c : config) : config list =
            let n1 = Lib.List32.length ts1 in
            let n2 = Lib.List32.length ts2 in
            let args, vs' = take n1 vs e.at, drop n1 vs e.at in
-           let vs', es' = vs', [Label (n2, [], (args, List.map plain es'), (pclet,pc)) @@ e.at] in
+           let vs', es' = vs', [Label (n2, [], (args, List.map plain es'),
+                                       (pclet,pc), c.induction_vars) @@ e.at] in
            [{c with code = vs', es' @ List.tl es}]
         | Loop (bt, es'), vs ->
            (* print_endline "loop"; *)
@@ -113,7 +114,8 @@ let rec step (c : config) : config list =
                let args, vs' = take n1 vs e.at, drop n1 vs e.at in
 
                let vs'', es'' = vs', [Label (n1, [],
-                                           (args, List.map plain es'), (pclet,pc)) @@ e.at] in
+                                             (args, List.map plain es'), (pclet,pc),
+                                             c.induction_vars) @@ e.at] in
 
                let lvs, _ = find_vars [] {c with code = vs'', es'' @ List.tl es;} in
                let lvs = merge_vars lvs in
@@ -126,21 +128,25 @@ let rec step (c : config) : config list =
                (* HAVOC *)
                let havc = havoc_vars lvs c in
                let vs'', es'' = vs', [Label (n1, [e' @@ e.at],
-                                             (args, List.map plain es'), (pclet,pc)) @@ e.at] in
+                                             (args, List.map plain es'), (pclet,pc),
+                                             c.induction_vars) @@ e.at] in
 
                let nhavc = {havc with code = vs'', es'' @ List.tl es;} in
                let nc = {c with code = vs'', es'' @ List.tl es;} in
-               let iv, havc' = elim_induction_vars nhavc nc lvs in
+               let iv, havc' = induction_vars nhavc nc lvs in
+
+               print_endline "Printing induction variables";
+               print_endline (induction_vars_to_string havc'.induction_vars);
                
                (* let havc = havoc_vars lvs c in *)
                
                (* let havoc = Havoc lvs in *)
-               (* let first_pass = FirstPass (n1, [], (args, List.map plain es')) in *)
+               let first_pass = FirstPass (n1, [], (args, List.map plain es')) in
                let second_pass = SecondPass (n1, [], (args, List.map plain es')) in
                let assrt = Assert lvs in
                let vs'', es'' = vs', [
                      (* havoc @@ e.at; *)
-                     (* first_pass @@ e.at; (\* first pass *\) *)
+                     first_pass @@ e.at; (* first pass *)
                      second_pass @@ e.at;
                      assrt @@ e.at
                    ] in
@@ -161,7 +167,8 @@ let rec step (c : config) : config list =
              let n1 = Lib.List32.length ts1 in
              let args, vs' = take n1 vs e.at, drop n1 vs e.at in
              let vs', es' = vs', [Label (n1, [e' @@ e.at],
-                                         (args, List.map plain es'), (pclet,pc)) @@ e.at] in
+                                         (args, List.map plain es'), (pclet,pc),
+                                         c.induction_vars) @@ e.at] in
              [{c with code = vs', es' @ List.tl es;}]
            )
         | If (bt, es1, es2), v :: vs' ->
@@ -248,8 +255,8 @@ let rec step (c : config) : config list =
            [{c with code = vs', es' @ List.tl es}]
 
         | Call x, vs ->
-           (* print_endline "call";
-            * print_endline (string_of_int (Int32.to_int x.it)); *)
+           (* print_endline "call"; *)
+           (* print_endline (string_of_int (Int32.to_int x.it)); *)
            let vs', es' = vs, [Invoke (func frame.inst x) @@ e.at] in
            [{c with code = vs', es' @ List.tl es}]
 
@@ -678,20 +685,25 @@ let rec step (c : config) : config list =
        let havc = havoc_vars lvs c in
        [{havc with code = vs, List.tl es}]
 
-    (* | FirstPass  (n, es0, (vs', code')), vs ->
-     *    print_endline "first pass";
-     *    disable_ct := true;
-     *    let vs', es' = vs, [Label (n, es0, (vs', code'),
-     *                               (pclet, pc)) @@ e.at] in
-     *    [{c with code = vs', es' @ List.tl es}] *)
+    | FirstPass  (n, es0, (vs', code')), vs ->
+       print_endline "first pass";
+       disable_ct := true;
+       let vs', es' = vs, [Label (n, es0, (vs', code'),
+                                  (pclet, pc), c.induction_vars) @@ e.at] in
+       elim_induction_vars_loop {c with code = vs', es' @ List.tl es}
+         (* [{c with code = vs', es' @ List.tl es}] *)
     (* failwith "FirstPass: not implemented" *)
 
     | SecondPass  (n, es0, (vs', code')), vs ->
        print_endline "second pass";
+       print_endline "Printing induction variables";
+       print_endline (induction_vars_to_string c.induction_vars);
+
        disable_ct := false;
        let vs', es' = vs, [Label (n, es0, (vs', code'),
-                                  (pclet, pc)) @@ e.at] in
-       [{c with code = vs', es' @ List.tl es}]
+                                  (pclet, pc), c.induction_vars) @@ e.at] in
+       elim_induction_vars_loop {c with code = vs', es' @ List.tl es}
+       (* [{c with code = vs', es' @ List.tl es}] *)
     (* failwith "SecondPass: not implemented" *)
 
     | Returning vs', vs ->
@@ -700,45 +712,48 @@ let rec step (c : config) : config list =
     | Breaking (k, vs'), vs ->
        Crash.error e.at "undefined label"
 
-    | Label (n, es0, (vs', []), pc'), vs ->
+    | Label (n, es0, (vs', []), pc', iv'), vs ->
        (* print_endline ("lab:" ^ (string_of_int c.counter)); *)
        let vs', es' = vs' @ vs, [] in
        [{c with code = vs', es' @ List.tl es}]
        
-    | Label (n, es0, (vs', {it = Trapping msg; at} :: es'), pc'), vs ->
+    | Label (n, es0, (vs', {it = Trapping msg; at} :: es'), pc', iv'), vs ->
        (* print_endline "lab2"; *)
        let vs', es' = vs, [Trapping msg @@ at] in
        [{c with code = vs', es' @ List.tl es}]
 
-    | Label (n, es0, (vs', {it = Returning vs0; at} :: es'), pc'), vs ->
+    | Label (n, es0, (vs', {it = Returning vs0; at} :: es'), pc', iv'), vs ->
        (* print_endline ("lab3:" ^ (string_of_int c.counter)); *)
        let vs', es' = vs, [Returning vs0 @@ at] in
        [{c with code = vs', es' @ List.tl es}]
 
-    | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es'), pc'), vs ->
+    | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es'), pc', iv'), vs ->
        (* print_endline ("lab4:" ^ (string_of_int c.counter)); *)
        let vs', es' = take n vs0 e.at @ vs, List.map plain es0 in
        [{c with code = vs', es' @ List.tl es}]
 
-    | Label (n, es0, (vs', {it = Breaking (k, vs0); at} :: es'), pc'), vs ->
+    | Label (n, es0, (vs', {it = Breaking (k, vs0); at} :: es'), pc', iv'), vs ->
        (* print_endline ("lab5:" ^ (string_of_int c.counter)); *)
        let vs', es' = vs, [Breaking (Int32.sub k 1l, vs0) @@ at] in
        [{c with code = vs', es' @ List.tl es}]
 
-    | Label (n, es0, code', pc'), vs ->
+    | Label (n, es0, code', pc', iv'), vs ->
        (* print_endline ("lab6:" ^ (string_of_int c.counter)); *)
        (*TODO(Romy): not sure if correct to change the pc *)
-       let c' = step {c with code = code'; pc = pc'; counter = c.counter + 1} in
+       let c' = step {c with code = code'; pc = pc';
+                             induction_vars = iv';
+                             counter = c.counter + 1} in
        (* print_endline ("lab6_end:" ^ (string_of_int c.counter)); *)
        List.map (fun ci -> {c with code = vs,
-                                          [Label (n, es0, ci.code, ci.pc) @@ e.at]
+                                          [Label (n, es0, ci.code, ci.pc, ci.induction_vars) @@ e.at]
                                           @ List.tl es;
                                    pc = ci.pc; (*  *)
                                    observations = ci.observations;
+                                   induction_vars = ci.induction_vars;
                                    frame = ci.frame
          }) c'
 
-    | Frame (n, frame', (vs', []), pc'), vs ->
+    | Frame (n, frame', (vs', []), pc', iv'), vs ->
        (* print_endline ("frame1:" ^ (string_of_int c.counter)); *)
        let vs', es' = vs' @ vs, [] in
        [{c with code = vs', es' @ List.tl es;
@@ -749,15 +764,16 @@ let rec step (c : config) : config list =
                                          sglobals = frame'.inst.sglobals
                                     }
                         };
-                pc = pc'
+                pc = pc';
+                induction_vars = iv'
        }]
 
-    | Frame (n, frame', (vs', {it = Trapping msg; at} :: es'), _), vs ->
+    | Frame (n, frame', (vs', {it = Trapping msg; at} :: es'), _, _), vs ->
        (* print_endline "frame trappping"; *)
        let vs', es' = vs, [Trapping msg @@ at] in
        [{c with code = vs', es' @ List.tl es}]
 
-    | Frame (n, frame', (vs', {it = Returning vs0; at} :: es'), pc'), vs ->
+    | Frame (n, frame', (vs', {it = Returning vs0; at} :: es'), pc', iv'), vs ->
        (* print_endline "frame returning"; *)
        (* print_endline ("frame3:" ^ (string_of_int c.counter)); *)
        let vs', es' = take n vs0 e.at @ vs, [] in
@@ -769,9 +785,10 @@ let rec step (c : config) : config list =
                                          sglobals = frame'.inst.sglobals
                                     }
                         };
-                pc = pc'}]
+                pc = pc';
+                induction_vars = iv'}]
 
-    | Frame (n, frame', code', pc'), vs ->
+    | Frame (n, frame', code', pc', iv'), vs ->
        (* print_endline "frame normal"; *)
        (* print_endline ("frame4:" ^ (string_of_int c.counter)); *)
 
@@ -782,9 +799,10 @@ let rec step (c : config) : config list =
        (* TODO(Romy): the pc etc  should probably not be here *)
        List.map (fun ci ->
            {c with code = vs, [Frame (n, ci.frame,
-                                      ci.code, ci.pc) @@ e.at] @ List.tl es;
+                                      ci.code, ci.pc, ci.induction_vars) @@ e.at] @ List.tl es;
                    (* pc = ci.pc; *)
                    observations = ci.observations;
+                   induction_vars = iv'
                    (* frame = ci.frame *)
          }) c'
 
@@ -816,8 +834,9 @@ let rec step (c : config) : config list =
                        } in
 
            let frame' = {inst = inst'; locals = locals'} in
-           let instr' = [Label (n2, [], ([], List.map plain f.it.body), c.pc) @@ f.at] in 
-           let vs', es' = vs', [Frame (n2, frame', ([], instr'), c.pc) @@ e.at] in
+           let instr' = [Label (n2, [], ([], List.map plain f.it.body),
+                                c.pc, c.induction_vars) @@ f.at] in 
+           let vs', es' = vs', [Frame (n2, frame', ([], instr'), c.pc, c.induction_vars) @@ e.at] in
            [{c with code = vs', es' @ List.tl es}]
 
         (* | Func.HostFunc (t, f) ->
