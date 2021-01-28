@@ -176,5 +176,8 @@
   (export "encrypt" (func 0))
   (export "decrypt" (func 1)))
 
-(assert_failure (symb_exec "encrypt") "Trying to write high values in low memory")
-(assert_failure (symb_exec "decrypt") "Trying to write high values in low memory")
+(symb_exec "encrypt")
+(symb_exec "decrypt")
+
+;;(assert_failure (symb_exec "encrypt") "Trying to write high values in low memory")
+;;(assert_failure (symb_exec "decrypt") "Trying to write high values in low memory")

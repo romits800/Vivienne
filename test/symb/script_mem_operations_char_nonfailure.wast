@@ -57,5 +57,6 @@
   (data (;0;) (i32.const 0) "\01\02\03\04\05\06\07\08"))
 
 
-(assert_failure (symb_exec "test6" (i32.sconst l1)) "BrIf: Constant-time failure")
+(symb_exec "test6" (i32.sconst l1))
+;;(assert_failure (symb_exec "test6" (i32.sconst l1)) "BrIf: Constant-time failure")
 

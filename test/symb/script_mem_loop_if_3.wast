@@ -194,4 +194,5 @@
   (data (;0;) (i32.const 0) "\01\00\00\00\02\00\00\00\03\00\00\00\04\00\00\00\05\00\00\00\06\00\00\00\07\00\00\00\08\00\00\00"))
 
 (symb_exec "test11" (i32.sconst h1) (i32.sconst l2) (i32.sconst l3))
-(assert_failure (symb_exec "test115" (i32.sconst h1) (i32.sconst l2) (i32.sconst l3)) "BrIf: Constant-time failure")
+(symb_exec "test115" (i32.sconst h1) (i32.sconst l2) (i32.sconst l3)) 
+;;(assert_failure (symb_exec "test115" (i32.sconst h1) (i32.sconst l2) (i32.sconst l3)) "BrIf: Constant-time failure")
