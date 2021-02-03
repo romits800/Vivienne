@@ -36,6 +36,7 @@ let argspec = Arg.align
   "-m", Arg.Set Flags.simplify, " enable simplify from Z3";
   "-S", Arg.Set Flags.select_unsafe, " set \"select\" instruction as unsafe";
   "-Z", Arg.Set Flags.disable_portfolio, " disable portfolio solver - run Z3";
+  "--elim-indvar", Arg.Set Flags.elim_induction_variables, " perform induction variable elimination";
   "-v", Arg.Unit banner, " show version"
 ]
 

@@ -45,7 +45,7 @@ let rec elim_induction_vars_loop (c : config) : config list =
               let n2 = Lib.List32.length ts2 in
               let args, vs' = take n1 vs e.at, drop n1 vs e.at in
               let vs', es' = vs', [Label (n2, [], (args, List.map plain es'),
-                                          (pclet,pc), c.induction_vars) @@ e.at] in
+                                          (pclet,pc), c.induction_vars, c.ct_check) @@ e.at] in
               elim_induction_vars_loop  {c with code = vs', es' @ List.tl es}
            | Loop (bt, es'), vs ->
               let FuncType (ts1, ts2) = block_type frame.inst bt in
@@ -53,7 +53,7 @@ let rec elim_induction_vars_loop (c : config) : config list =
               let args, vs' = take n1 vs e.at, drop n1 vs e.at in
               let vs', es' = vs', [Label (n1, [e' @@ e.at],
                                           (args, List.map plain es'),
-                                          (pclet,pc), c.induction_vars) @@ e.at] in
+                                          (pclet,pc), c.induction_vars, c.ct_check) @@ e.at] in
               elim_induction_vars_loop {c with code = vs', es' @ List.tl es;}
 
            | If (bt, es1, es2), v :: vs' ->
@@ -74,7 +74,7 @@ let rec elim_induction_vars_loop (c : config) : config list =
               let res = if Z3_solver.is_sat (pclet, pc'') mem then
                           {c with code = vs'', es'' @ List.tl es; pc = (pclet,pc'')}::res
                         else res in
-              if (not !disable_ct) then ( 
+              if (c.ct_check) then ( 
                 (match res with
                  | [] -> failwith "If: No active path";
                  (* let vs', es' = vs, [] in
@@ -125,7 +125,7 @@ let rec elim_induction_vars_loop (c : config) : config list =
               let res = if Z3_solver.is_sat (pclet, pc'') mem then (
                           {c with code = vs'', es'' @ List.tl es; pc = pclet,pc''}::res)
                         else res in
-              if (not !disable_ct) then ( 
+              if (c.ct_check) then ( 
                 (match res with
                  | [] -> failwith "BrIf: No active path";
                  (* let vs', es' = vs, [] in
@@ -207,7 +207,7 @@ let rec elim_induction_vars_loop (c : config) : config list =
               let res = {c with code = vs', es' @ List.tl es } in
               elim_induction_vars_loop
                 (if (!Flags.select_unsafe) then (
-                   if (not !disable_ct) then (
+                   if (c.ct_check) then (
                      let mem = (frame.inst.smemories, smemlen frame.inst) in
                      if Z3_solver.is_ct_unsat (pclet, pc) v0 mem then res
                      else (
@@ -320,7 +320,7 @@ let rec elim_induction_vars_loop (c : config) : config list =
                       (smemlen frame.inst) n (Some ext)
                 )
               in
-              if (not !disable_ct) then (
+              if (c.ct_check) then (
                 if (Z3_solver.is_v_ct_unsat (pclet, pc) final_addr mem) then
                   (
                     (* with exn ->
@@ -390,7 +390,7 @@ let rec elim_induction_vars_loop (c : config) : config list =
               let c = {c with observations =
                                 CT_V_UNSAT((pclet,pc), final_addr, mems, c.observations)} in
 
-              if (not !disable_ct) then (
+              if (c.ct_check) then (
                 if (Z3_solver.is_v_ct_unsat (pclet, pc) final_addr mems) then
                   
                   let msec = Smemory.get_secrets mem in
@@ -610,7 +610,7 @@ let rec elim_induction_vars_loop (c : config) : config list =
           print_endline "trapping";
           assert false
 
-       | Assert lvs, vs ->
+       | Assert (_,_), vs ->
           failwith "Not allowed assert in elim_induction_vars_loop";
        (* print_endline "assert";
         * if assert_invar lvs c then
@@ -635,40 +635,43 @@ let rec elim_induction_vars_loop (c : config) : config list =
           [c]
        (* Crash.error e.at "undefined label" *)
 
-       | Label (n, es0, (vs', []), pc', iv'), vs ->
+       | Label (n, es0, (vs', []), pc', iv', cct'), vs ->
           (* print_endline ("lab:" ^ (string_of_int c.counter)); *)
           let vs', es' = vs' @ vs, [] in
           elim_induction_vars_loop {c with code = vs', es' @ List.tl es}
           
-       | Label (n, es0, (vs', {it = Trapping msg; at} :: es'), pc', iv'), vs ->
+       | Label (n, es0, (vs', {it = Trapping msg; at} :: es'), pc', iv', cct'), vs ->
           (* print_endline "lab2"; *)
           let vs', es' = vs, [Trapping msg @@ at] in
           elim_induction_vars_loop  {c with code = vs', es' @ List.tl es}
 
-       | Label (n, es0, (vs', {it = Returning vs0; at} :: es'), pc', iv'), vs ->
+       | Label (n, es0, (vs', {it = Returning vs0; at} :: es'), pc', iv', cct'), vs ->
           (* print_endline ("lab3:" ^ (string_of_int c.counter)); *)
           let vs', es' = vs, [Returning vs0 @@ at] in
           elim_induction_vars_loop  {c with code = vs', es' @ List.tl es}
 
-       | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es'), pc', iv'), vs ->
+       | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es'), pc', iv', cct'), vs ->
           (* print_endline ("lab4:" ^ (string_of_int c.counter)); *)
           let vs', es' = take n vs0 e.at @ vs, List.map plain es0 in
           elim_induction_vars_loop  {c with code = vs', es' @ List.tl es}
 
-       | Label (n, es0, (vs', {it = Breaking (k, vs0); at} :: es'), pc', iv'), vs ->
+       | Label (n, es0, (vs', {it = Breaking (k, vs0); at} :: es'), pc', iv', cct'), vs ->
           (* print_endline ("lab5:" ^ (string_of_int c.counter)); *)
           let vs', es' = vs, [Breaking (Int32.sub k 1l, vs0) @@ at] in
           elim_induction_vars_loop  {c with code = vs', es' @ List.tl es}
 
-       | Label (n, es0, code', pc', iv'), vs ->
+       | Label (n, es0, code', pc', iv', cct'), vs ->
           (* print_endline ("lab6:" ^ (string_of_int c.counter)); *)
           (*TODO(Romy): not sure if correct to change the pc *)
           let c' = elim_induction_vars_loop
-                     {c with code = code'; pc = pc'; counter = c.counter + 1; induction_vars = iv'} in
+                     {c with code = code'; pc = pc';
+                             counter = c.counter + 1;
+                             induction_vars = iv';
+                             ct_check = cct'} in
           (* print_endline ("lab6_end:" ^ (string_of_int c.counter)); *)
           List.map (fun ci -> {c with code = vs,
                                              [Label (n, es0, ci.code,
-                                                     ci.pc, ci.induction_vars) @@ e.at]
+                                                     ci.pc, ci.induction_vars, ci.ct_check) @@ e.at]
                                              @ List.tl es;
                                       pc = ci.pc; (*  *)
                                       observations = ci.observations;
@@ -760,8 +763,10 @@ let rec elim_induction_vars_loop (c : config) : config list =
                           } in
 
               let frame' = {inst = inst'; locals = locals'} in
-              let instr' = [Label (n2, [], ([], List.map plain f.it.body), c.pc, c.induction_vars) @@ f.at] in 
-              let vs', es' = vs', [Frame (n2, frame', ([], instr'), c.pc, c.induction_vars) @@ e.at] in
+              let instr' = [Label (n2, [], ([], List.map plain f.it.body),
+                                   c.pc, c.induction_vars, c.ct_check) @@ f.at] in 
+              let vs', es' = vs', [Frame (n2, frame', ([], instr'),
+                                          c.pc, c.induction_vars) @@ e.at] in
               elim_induction_vars_loop  {c with code = vs', es' @ List.tl es}
 
            (* | Func.HostFunc (t, f) ->
@@ -774,7 +779,7 @@ let rec elim_induction_vars_loop (c : config) : config list =
       * List.length res |> string_of_int |> print_endline;
       * List.iter (fun c -> Pc_type.print_pc c.pc |> print_endline;) res; *)
      res
-  | [] -> []
+  | [] -> [c]
 
 
 

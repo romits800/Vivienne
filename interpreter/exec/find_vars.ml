@@ -35,7 +35,7 @@ let compare_svalues vold vnew =
 
    
 let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config list =
-  print_endline "find_vars";
+  (* print_endline "find_vars"; *)
   let {frame; code = vs, es; pc = pclet, pc; _} = c in
   (* let s1 = Svalues.string_of_values (List.rev vs) in *)
   (* print_endline s1; *)
@@ -61,7 +61,7 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
              let n2 = Lib.List32.length ts2 in
              let args, vs' = take n1 vs e.at, drop n1 vs e.at in
              let vs', es' = vs', [Label (n2, [], (args, List.map plain es'),
-                                         (pclet,pc), c.induction_vars) @@ e.at] in
+                                         (pclet,pc), c.induction_vars, c.ct_check) @@ e.at] in
              find_vars lv {c with code = vs', es' @ List.tl es}
           | Loop (bt, es'), vs ->
              (* print_endline "Loop find_vars"; *)
@@ -70,7 +70,8 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
              let args, vs' = take n1 vs e.at, drop n1 vs e.at in
              let vs', es' = vs', [Label (n1, [],
                                          (args, List.map plain es'),
-                                         (pclet,pc), c.induction_vars) @@ e.at] in
+                                         (pclet,pc), c.induction_vars,
+                                         c.ct_check) @@ e.at] in
              find_vars lv {c with code = vs', es' @ List.tl es}
           | If (bt, es1, es2), v :: vs' ->
              (* print_endline "if"; *)
@@ -162,14 +163,14 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
              find_vars lv {c with code = vs', es' @ List.tl es; frame = frame'}
 
           | LocalTee x, v :: vs' ->
-             (* print_endline "local tee"; *)
+             print_endline "local tee";
              let vv = local frame x in
              let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
              let is_low = Z3_solver.is_v_ct_unsat c.pc vv mem in
 
              let mo = compare_svalues vv v in
              
-             let lv = (LocalVar (x,is_low, mo))::lv in
+             let lv = (LocalVar (x, is_low, mo))::lv in
              (* print_loopvar (LocalVar (x,is_low)); *)
              let frame' = update_local c.frame x v in
              let vs', es' = v :: vs', [] in
@@ -221,7 +222,7 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
              find_vars lv {c with code = vs', est}
              
           | Store {offset; ty; sz; _}, sv :: si :: vs' ->
-             (* print_endline "store"; *)
+             print_endline "store";
              let mem = smemory frame.inst (0l @@ e.at) in
              let frame = {frame with
                            inst = update_smemory frame.inst mem (0l @@ e.at)} in
@@ -255,11 +256,11 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
                    nv, lvn)
              in
 
-             let memtuple = (c.frame.inst.smemories, smemlen c.frame.inst) in
-             let is_low = Z3_solver.is_v_ct_unsat c.pc lvn memtuple in
-             let mo = compare_svalues lvn sv in
+             (* let memtuple = (c.frame.inst.smemories, smemlen c.frame.inst) in
+              * let is_low = Z3_solver.is_v_ct_unsat c.pc lvn memtuple in
+              * let mo = compare_svalues lvn sv in *)
              
-             let lv = (StoreVar (final_addr, ty, sz, is_low, mo))::lv in
+             (* let lv = (StoreVar (final_addr, ty, sz, true, Nothing))::lv in *)
 
              let mem' = Smemory.store_sind_value mem nv in
              let vs', es' = vs', [] in
@@ -341,14 +342,11 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
       | Trapping msg, vs ->
          assert false
 
-      | Assert lvs, vs ->
+      | Assert (_,_), vs ->
          failwith "Unexpected Assert in find_vars";
       
       | Havoc lvs, vs ->
          failwith "Unexpected Havoc in find_vars";
-
-      (* | FirstPass _, vs ->
-       *    failwith "Unexpected FirstPass in find_vars"; *)
 
       | SecondPass _, vs ->
          failwith "Unexpected SecondPass in find_vars";
@@ -366,40 +364,42 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
          lv, []
          (* Crash.error e.at "undefined label" *)
 
-      | Label (n, es0, (vs', []), pc', iv'), vs ->
+      | Label (n, es0, (vs', []), pc', iv', cct'), vs ->
          (* print_endline "lab"; *)
          let vs', es' = vs' @ vs, [] in
          find_vars lv {c with code = vs', es' @ List.tl es}
          
-      | Label (n, es0, (vs', {it = Trapping msg; at} :: es'), pc', iv'), vs ->
+      | Label (n, es0, (vs', {it = Trapping msg; at} :: es'), pc', iv', cct'), vs ->
          (* print_endline "lab2"; *)
          let vs', es' = vs, [Trapping msg @@ at] in
          find_vars lv {c with code = vs', es' @ List.tl es}
 
-      | Label (n, es0, (vs', {it = Returning vs0; at} :: es'), pc', iv'), vs ->
+      | Label (n, es0, (vs', {it = Returning vs0; at} :: es'), pc', iv', cct'), vs ->
          (* print_endline "lab3"; *)
          let vs', es' = vs, [Returning vs0 @@ at] in
          find_vars lv {c with code = vs', es' @ List.tl es}
 
-      | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es'), pc', iv'), vs ->
+      | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es'), pc', iv', cct'), vs ->
          (* print_endline "lab4"; *)
          let vs', es' = take n vs0 e.at @ vs, List.map plain es0 in
          find_vars lv {c with code = vs', es' @ List.tl es}
 
-      | Label (n, es0, (vs', {it = Breaking (k, vs0); at} :: es'), pc', iv'), vs ->
+      | Label (n, es0, (vs', {it = Breaking (k, vs0); at} :: es'), pc', iv', cct'), vs ->
          (* print_endline "lab5"; *)
          let vs', es' = vs, [Breaking (Int32.sub k 1l, vs0) @@ at] in
          find_vars lv {c with code = vs', es' @ List.tl es}
 
-      | Label (n, es0, code', pc', iv'), vs ->
+      | Label (n, es0, code', pc', iv', cct'), vs ->
          (* print_endline "lab6"; *)
          (* TODO(Romy): not sure if correct to change the pc *)
          let lv', c' = find_vars lv {c with code = code'; pc = pc'; induction_vars = iv'} in
          (* print_endline "lab6_back"; *)
          let res =
            List.fold_left (fun (lvi, cprev) ci ->
-             let lvi', ci' = find_vars lvi {c with code = vs,
-                                            [Label (n, es0, ci.code, ci.pc, ci.induction_vars) @@ e.at]
+               let lvi', ci' = find_vars lvi
+                                 {c with code = vs,
+                                                [Label (n, es0, ci.code, ci.pc,
+                                                        ci.induction_vars, ci.ct_check) @@ e.at]
                                             @ List.tl es;
                                      pc = ci.pc; 
                                      frame = ci.frame}
@@ -477,7 +477,8 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
              (* let locals' = List.rev args @ List.map Svalues.default_value rest in *) 
              let locals' = List.rev args @ List.map Svalues.default_value rest in
              let frame' = {inst = !inst'; locals = locals'} in
-             let instr' = [Label (n2, [], ([], List.map plain f.it.body), c.pc, c.induction_vars) @@ f.at] in 
+             let instr' = [Label (n2, [], ([], List.map plain f.it.body),
+                                  c.pc, c.induction_vars, c.ct_check) @@ f.at] in 
              let vs', es' = vs', [Frame (n2, frame', ([], instr'), c.pc, c.induction_vars) @@ e.at] in
              find_vars lv {c with code = vs', es' @ List.tl es}
 

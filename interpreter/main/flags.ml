@@ -10,3 +10,4 @@ let loop_invar = ref false
 let simplify = ref false
 let select_unsafe = ref false
 let disable_portfolio = ref false
+let elim_induction_variables = ref false

@@ -81,7 +81,9 @@ type triple = svalue * svalue * svalue * svalue (*real init value, symb init val
 
                            
 type iv_type = triple IndVarMap.t
-                           
+
+type ct_check_t = bool
+              
 type code = svalue stack * admin_instr list          
 and admin_instr = admin_instr' phrase
 and admin_instr' =
@@ -90,9 +92,9 @@ and admin_instr' =
   | Trapping of string
   | Returning of svalue stack
   | Breaking of int32 * svalue stack
-  | Label of int32 * instr list * code * pc_ext * iv_type option 
+  | Label of int32 * instr list * code * pc_ext * iv_type option * ct_check_t 
   | Frame of int32 * frame * code * pc_ext * iv_type option 
-  | Assert of loopvar_t list
+  | Assert of loopvar_t list * instr'
   | Havoc of loopvar_t list
   | FirstPass of int32 * instr list * code
   | SecondPass of int32 * instr list * code 
@@ -109,6 +111,7 @@ type config =
   code : code;
   budget : int;  (* to model stack overflow *)
   pc : pc_ext;  (* to model path condition *)
+  progc : int;
   msecrets : secret_type list;
   loops : config list;
   (* abstract_loops: admin_instr' list; *)
@@ -116,6 +119,7 @@ type config =
   observations: obs_type;
   counter : int;
   induction_vars : iv_type option;
+  ct_check : ct_check_t;
 }
 and
 secret_type = int * int
@@ -141,7 +145,8 @@ let frame inst locals = {inst; locals}
 let config inst vs es =
   {frame = frame inst []; code = vs, es; budget = 300;
    pc = empty_pc(); msecrets = inst.secrets; loops = []; abstract_loops = [];
-   observations = OBSTRUE;  counter = 0; induction_vars = None}
+   observations = OBSTRUE;  counter = 0; induction_vars = None; progc = 0;
+   ct_check = true}
 
 let plain e = Plain e.it @@ e.at
 
@@ -337,7 +342,7 @@ let rec assert_invar (lv: loopvar_t list) (c : config) : bool =
      else false
   | [] -> true
 
-let disable_ct = ref false       
+(* let disable_ct = ref false *)       
   
 (* Find variants that get updated in a loop *)
 

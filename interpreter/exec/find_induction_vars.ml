@@ -173,7 +173,9 @@ let rec find_induction_vars (lv : triple IndVarMap.t) (c : config) (c_orig : con
              let n2 = Lib.List32.length ts2 in
              let args, vs' = take n1 vs e.at, drop n1 vs e.at in
              let vs', es' = vs', [Label (n2, [], (args, List.map plain es'),
-                                         (pclet,pc), c.induction_vars) @@ e.at] in
+                                         (pclet,pc),
+                                         c.induction_vars,
+                                         c.ct_check) @@ e.at] in
              find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
           | Loop (bt, es'), vs ->
              (* print_endline "Loop find_induction_vars"; *)
@@ -183,7 +185,8 @@ let rec find_induction_vars (lv : triple IndVarMap.t) (c : config) (c_orig : con
              let vs', es' = vs', [Label (n1, [],
                                          (args, List.map plain es'),
                                          (pclet,pc),
-                                         c.induction_vars) @@ e.at] in
+                                         c.induction_vars,
+                                         c.ct_check) @@ e.at] in
              find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
           | If (bt, es1, es2), v :: vs' ->
              (* print_endline "if"; *)
@@ -446,14 +449,11 @@ let rec find_induction_vars (lv : triple IndVarMap.t) (c : config) (c_orig : con
       | Trapping msg, vs ->
          assert false
 
-      | Assert lvs, vs ->
+      | Assert (_,_), vs ->
          failwith "Unexpected Assert in find_induction_vars";
          
       | Havoc lvs, vs ->
          failwith "Unexpected Havoc in find_induction_vars";
-
-      (* | FirstPass _, vs ->
-       *    failwith "Unexpected FirstPass in find_induction_vars"; *)
 
       | SecondPass _, vs ->
          failwith "Unexpected SecondPass in find_induction_vars";
@@ -471,45 +471,49 @@ let rec find_induction_vars (lv : triple IndVarMap.t) (c : config) (c_orig : con
          lv, []
       (* Crash.error e.at "undefined label" *)
 
-      | Label (n, es0, (vs', []), pc', iv'), vs ->
+      | Label (n, es0, (vs', []), pc', iv', cct'), vs ->
          (* print_endline "lab"; *)
          let vs', es' = vs' @ vs, [] in
          find_induction_vars lv {c with code = vs', es' @ List.tl es}  c_orig
          
-      | Label (n, es0, (vs', {it = Trapping msg; at} :: es'), pc', iv'), vs ->
+      | Label (n, es0, (vs', {it = Trapping msg; at} :: es'), pc', iv', cct'), vs ->
          (* print_endline "lab2"; *)
          let vs', es' = vs, [Trapping msg @@ at] in
          find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
 
-      | Label (n, es0, (vs', {it = Returning vs0; at} :: es'), pc', iv'), vs ->
+      | Label (n, es0, (vs', {it = Returning vs0; at} :: es'), pc', iv', cct'), vs ->
          (* print_endline "lab3"; *)
          let vs', es' = vs, [Returning vs0 @@ at] in
          find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
 
-      | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es'), pc', iv'), vs ->
+      | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es'), pc', iv', cct'), vs ->
          (* print_endline "lab4"; *)
          let vs', es' = take n vs0 e.at @ vs, List.map plain es0 in
          find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
 
-      | Label (n, es0, (vs', {it = Breaking (k, vs0); at} :: es'), pc', iv'), vs ->
+      | Label (n, es0, (vs', {it = Breaking (k, vs0); at} :: es'), pc', iv', cct'), vs ->
          (* print_endline "lab5"; *)
          let vs', es' = vs, [Breaking (Int32.sub k 1l, vs0) @@ at] in
          find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
 
-      | Label (n, es0, code', pc', iv'), vs ->
+      | Label (n, es0, code', pc', iv', cct'), vs ->
          (* print_endline "lab6"; *)
          (* TODO(Romy): not sure if correct to change the pc *)
          let lv', c' = find_induction_vars lv {c with code = code'; pc = pc'; induction_vars = iv'}  c_orig in
          (* print_endline "lab6_back"; *)
          let res =
            List.fold_left (fun (lvi, cprev) ci ->
-               let lvi', ci' = find_induction_vars lvi
-                                 {c with code = vs,
-                                                [Label (n, es0, ci.code, ci.pc, ci.induction_vars) @@ e.at]
-                                                @ List.tl es;
-                                         pc = ci.pc; 
-                                         frame = ci.frame;
-                                         induction_vars = ci.induction_vars} c_orig
+               let lvi', ci' =
+                 find_induction_vars lvi
+                   {c with code = vs,
+                                  [Label (n, es0, ci.code,
+                                          ci.pc,
+                                          ci.induction_vars,
+                                          ci.ct_check) @@ e.at]
+                                  @ List.tl es;
+                           pc = ci.pc; 
+                           frame = ci.frame;
+                           induction_vars = ci.induction_vars} c_orig
                in
                lvi', ci' @ cprev
              ) (lv', []) c'
@@ -587,7 +591,8 @@ let rec find_induction_vars (lv : triple IndVarMap.t) (c : config) (c_orig : con
              (* let locals' = List.rev args @ List.map Svalues.default_value rest in *) 
              let locals' = List.rev args @ List.map Svalues.default_value rest in
              let frame' = {inst = !inst'; locals = locals'} in
-             let instr' = [Label (n2, [], ([], List.map plain f.it.body), c.pc, c.induction_vars) @@ f.at] in 
+             let instr' = [Label (n2, [], ([], List.map plain f.it.body),
+                                  c.pc, c.induction_vars, c.ct_check) @@ f.at] in 
              let vs', es' = vs', [Frame (n2, frame', ([], instr'), c.pc, c.induction_vars) @@ e.at] in
              find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
 
