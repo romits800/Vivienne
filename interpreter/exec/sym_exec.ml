@@ -126,7 +126,6 @@ let rec step (c : config) : config list =
                  [havc]
                )
                with Not_found -> (
-                           
                  let FuncType (ts1, ts2) = block_type frame.inst bt in
                  let n1 = Lib.List32.length ts1 in
                  let args, vs' = take n1 vs e.at, drop n1 vs e.at in
@@ -167,12 +166,12 @@ let rec step (c : config) : config list =
                  (* let havc = havoc_vars lvs c in *)
                  
                  (* let havoc = Havoc lvs in *)
-                 let first_pass = FirstPass (n1, [], (args, List.map plain es')) in
+                 (* let first_pass = FirstPass (n1, [], (args, List.map plain es')) in *)
                  let second_pass = SecondPass (n1, [], (args, List.map plain es')) in
                  let assrt = Assert (lvs, e') in
                  let vs'', es'' = vs', [
                        (* havoc @@ e.at; *)
-                       first_pass @@ e.at; (* first pass *)
+                       (* first_pass @@ e.at; (\* first pass *\) *)
                        second_pass @@ e.at;
                        assrt @@ e.at
                      ] in
@@ -800,14 +799,14 @@ let rec step (c : config) : config list =
                              ct_check = cct'} in
        List.map (fun ci ->
            {c with code = vs,
-                                          [Label (n, es0, ci.code, ci.pc,
-                                                  ci.induction_vars,
-                                                  ci.ct_check) @@ e.at]
-                                          @ List.tl es;
-                                   pc = ci.pc; (*  *)
-                                   observations = ci.observations;
-                                   induction_vars = ci.induction_vars;
-                                   frame = ci.frame
+                          [Label (n, es0, ci.code, ci.pc,
+                                  ci.induction_vars,
+                                  ci.ct_check) @@ e.at]
+                          @ List.tl es;
+                   pc = ci.pc; (*  *)
+                   observations = ci.observations;
+                   induction_vars = ci.induction_vars;
+                   frame = ci.frame
          }) c'
 
     | Frame (n, frame', (vs', []), pc', iv'), vs ->
