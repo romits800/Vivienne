@@ -46,7 +46,10 @@ Params.set_print_mode !ctx Z3enums.PRINT_SMTLIB2_COMPLIANT;;
 
           
 (* let test_mul = ref true *)
-             
+(* let remove fil = () *)
+
+let magic_number = 300
+                 
 let print_exp exp =
   (match exp with
       | L e ->
@@ -683,19 +686,6 @@ let read_cvc4 fname =
         with e ->
           close_in chan;
           print_endline "failed cvc4";
-          (* let open Lexing in
-           * let pos = lexbuf.lex_curr_p.pos_cnum in
-           * let width = 30 in
-           * let lo = max 0 (pos - width)
-           * and hi = min (String.length raw_model) (pos + width) in
-           * let extract =
-           *   String.sub raw_model lo (hi - lo)
-           *   |> String.map (function '\n' -> ' ' | x -> x)
-           * in
-           * let underline = String.make (pos - lo) ' ' in
-           * Printf.printf
-           *   "Parsing of solver output failed approximately here :@ @[<v>%s@,%s^@]"
-           *   extract underline; *)
           raise e
        ) in
      Some c
@@ -800,32 +790,51 @@ let read_sat solver_name fname =
 let run_solvers input_file yices z3 cvc4 boolector =
   (* print_endline "run_solvers"; *)
   try
-    let out_file = "/tmp/run_solvers.out" in
-    let err_file = "/tmp/run_solvers.err" in
+    let out_file = input_file ^ ".run_solvers.out" in
+    let err_file = input_file ^ ".run_solvers.err" in
+
+    let start = if !Flags.stats then Unix.gettimeofday () else 0.0 in
+    
     let _ = Sys.command @@ "bash " ^ !path ^ "run_solvers.sh " ^
                              input_file ^ " 1> " ^ out_file ^ " 2> " ^ err_file in
     let chan = open_in out_file in
     try
       let solver = input_line chan in
+      close_in chan;
+      remove out_file;
       if solver = "yices" then (
-        stats := {!stats with yices = !stats.yices + 1 };
+        if (!Flags.stats) then (
+          Stats.update_query_time (Unix.gettimeofday () -. start);
+          stats := {!stats with yices = !stats.yices + 1 };
+          Stats.update_query_str "Yices";
+        );
         yices input_file
       )
       else if solver = "z3" then (
-        stats := {!stats with z3 = !stats.z3 + 1 };
+        if (!Flags.stats) then (
+          Stats.update_query_time (Unix.gettimeofday () -. start);
+          stats := {!stats with z3 = !stats.z3 + 1 };
+          Stats.update_query_str "Z3";);
         z3 input_file
       )
       else if solver = "cvc4" then (
-        stats := {!stats with cvc4 = !stats.cvc4 + 1 };
+        if (!Flags.stats) then (
+          Stats.update_query_time (Unix.gettimeofday () -. start);
+          stats := {!stats with cvc4 = !stats.cvc4 + 1 };
+          Stats.update_query_str "CVC4";);
         cvc4 input_file
       )
       else if solver = "boolector" then (
-        stats := {!stats with boolector = !stats.boolector + 1 };
+        if (!Flags.stats) then (
+          Stats.update_query_time (Unix.gettimeofday () -. start);
+          stats := {!stats with boolector = !stats.boolector + 1 };
+          Stats.update_query_str "Boolector";);
         boolector input_file
       )
       else
         failwith "No solver returned";
     with e ->
+      close_in chan;
       print_endline "Solver error";
       raise e
   with e ->
@@ -927,7 +936,7 @@ let find_solutions (sv: svalue) (pc : pc_ext)
       | None -> acc
       | Some v -> find_solutions_i sv pc mem (v::acc)
     in
-    (* remove filename;            (\*  *\) *)
+    remove filename;            (*  *)
     ret
   in
   let str = find_solutions_i sv pc mem [] in
@@ -1020,7 +1029,7 @@ let simplify_pc (pc : pc_ext)
   with _ -> (false, pc)
 
           
-
+(* Not Used currently
 let is_unsat (pc : pc_ext) (mem: Smemory.t list * int) =
   (* print_endline "is_unsat"; *)
   let ctx = init_solver() in
@@ -1037,7 +1046,7 @@ let is_unsat (pc : pc_ext) (mem: Smemory.t list * int) =
   let solver = Solver.mk_solver ctx None in
   List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
 
-  if !Flags.disable_portfolio = false then (
+  if !Flags.portfolio_only then (
     let filename = write_formula_to_file solver in
     let res = not (run_solvers filename (read_sat "yices")
                      (read_sat "z3") (read_sat "cvc4")
@@ -1057,7 +1066,7 @@ let is_unsat (pc : pc_ext) (mem: Smemory.t list * int) =
           * ); *)
          false
     )
-
+ *)
   
 let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) =
   (* print_endline "is_ct_unsat"; *)
@@ -1083,19 +1092,34 @@ let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) =
       | H (pc1, pc2) ->  Goal.add g [pc1; pc2 ]
      );
      (* Printf.printf "Goal: %s\n" (Goal.to_string g); *)
+
+     let num_exprs = Goal.get_num_exprs g in
+     
+     if (!Flags.stats) then
+        Stats.add_new_query "Unknown" (num_exprs) 0.0;
+      
      let solver = Solver.mk_solver ctx None in
      List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
 
-     if !Flags.disable_portfolio = false then (
+     if !Flags.portfolio_only then (
        let filename = write_formula_to_file solver in
        let res = not (run_solvers filename (read_sat "yices")
                         (read_sat "z3") (read_sat "cvc4") (read_sat "boolector")) in
        remove filename;
        res
-     ) else (
+     ) else if !Flags.z3_only then (
+       (if (!Flags.stats) then
+          Stats.update_query_str "Z3_bindings");
+       let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
+       
        match (Solver.check solver []) with
-       | Solver.UNSATISFIABLE -> true
+       | Solver.UNSATISFIABLE ->
+          (if (!Flags.stats) then
+             Stats.update_query_time (Unix.gettimeofday () -. start));
+          true
        | _ ->
+          (if (!Flags.stats) then
+             Stats.update_query_time (Unix.gettimeofday () -. start));
           (* Printf.printf "Goal v_ct: %s\n" (Goal.to_string g); *)
           (* let model = Solver.get_model solver in *)
           (* (match model with
@@ -1103,8 +1127,30 @@ let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) =
            *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
            * ); *)
           false
+     ) else (
+       if num_exprs > magic_number then (
+         let filename = write_formula_to_file solver in
+         let res = not (run_solvers filename (read_sat "yices")
+                          (read_sat "z3") (read_sat "cvc4") (read_sat "boolector")) in
+         remove filename;
+         res
+       ) else (
+         (if (!Flags.stats) then
+            Stats.update_query_str "Z3_bindings");
+         let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
+         match (Solver.check solver []) with
+         | Solver.UNSATISFIABLE ->
+          (if (!Flags.stats) then
+             Stats.update_query_time (Unix.gettimeofday () -. start));
+          true
+         | _ ->
+          (if (!Flags.stats) then
+             Stats.update_query_time (Unix.gettimeofday () -. start));
+          false
+
+       )
      )
-  
+     
 let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool =
   (* print_endline "is_v_ct_unsat"; *) 
   (* Pc_type.print_pc (snd pc) |> print_endline;-
@@ -1131,34 +1177,85 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
       Goal.add g [v'];
       Goal.add g [pcexp'];
       let solver = Solver.mk_solver ctx None in
-      List.iter (fun f -> Solver.add solver [f])
-        (List.map (fun e -> Expr.simplify e None) (Goal.get_formulas g));
+
+      let num_exprs = Goal.get_num_exprs g in
+      (if (!Flags.stats) then
+         Stats.add_new_query "Unknown" (num_exprs) 0.0);
+      
+
+      let s_formulas = (List.map (fun e -> Expr.simplify e None) (Goal.get_formulas g)) in
+
+      List.iter (fun f -> Solver.add solver [f]) s_formulas;
 
       (* let stats = Solver.get_statistics solver in
        * print_endline (Statistics.to_string stats); *)     
 
       (* Printf.printf "Solver v_ct: %s\n" (Solver.to_string solver); *)
-
-      if !Flags.disable_portfolio = false then (
+      if !Flags.portfolio_only then (
         let filename = write_formula_to_file solver in
         (* print_endline ("is_v_ct_unsat after write formula " ^ filename); *)
         let res = not (run_solvers filename (read_sat "yices") (read_sat "z3")
                          (read_sat "cvc4") (read_sat "boolector")) in
         remove filename;
         res
-      ) else (
+      ) else if !Flags.z3_only then (
+
+        (if (!Flags.stats) then
+           Stats.update_query_str "Z3_bindings") ;
+        let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
         (* print_endline "is_v_ct_unsat_before_solving"; *) 
         match (Solver.check solver []) with
         | Solver.UNSATISFIABLE ->
+           (if (!Flags.stats) then
+              Stats.update_query_time (Unix.gettimeofday () -. start));
            true
         | Solver.SATISFIABLE ->
+           (if (!Flags.stats) then
+              Stats.update_query_time (Unix.gettimeofday () -. start));
            (* let model = Solver.get_model solver in
             * (match model with
             *  | None -> print_endline "None"
             *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
             * ); *)
            false
-        | _ -> false
+        | _ ->
+          (if (!Flags.stats) then
+             Stats.update_query_time (Unix.gettimeofday () -. start));
+           false
+      ) else (
+        if num_exprs > magic_number then (
+          let filename = write_formula_to_file solver in
+          (* print_endline ("is_v_ct_unsat after write formula " ^ filename); *)
+          let res = not (run_solvers filename (read_sat "yices") (read_sat "z3")
+                           (read_sat "cvc4") (read_sat "boolector")) in
+          remove filename;
+          res
+        ) else (
+
+          (if (!Flags.stats) then
+             Stats.update_query_str "Z3_bindings") ;
+          let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
+          (* print_endline "is_v_ct_unsat_before_solving"; *) 
+          match (Solver.check solver []) with
+          | Solver.UNSATISFIABLE ->
+             (if (!Flags.stats) then
+                Stats.update_query_time (Unix.gettimeofday () -. start));
+             true
+          | Solver.SATISFIABLE ->
+             (if (!Flags.stats) then
+                Stats.update_query_time (Unix.gettimeofday () -. start));
+             (* let model = Solver.get_model solver in
+              * (match model with
+              *  | None -> print_endline "None"
+              *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
+              * ); *)
+             false
+          | _ ->
+             (if (!Flags.stats) then
+                Stats.update_query_time (Unix.gettimeofday () -. start));
+             false
+        )
+        
       )
 
 
@@ -1184,22 +1281,58 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
   let solver = Solver.mk_solver ctx None in
   List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
   (* Printf.printf "Solver is_sat: %s\n" (Solver.to_string solver); *)
-  
-  (* let filename = write_formula_to_file solver in
-   * let res = run_solvers filename (read_sat "yices") (read_sat "z3") (read_sat "cvc4") in
-   * remove filename;
-   * res *)
 
-  let check_solver = Solver.check solver [] in
-  match check_solver with
-  | Solver.SATISFIABLE ->
-     (* let model = Solver.get_model solver in
-      * (match model with
-      *  | None -> print_endline "None"
-      *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
-      * ); *)
-     true
-  | _ -> false
+  let num_exprs = Goal.get_num_exprs g in
+  
+  (if (!Flags.stats) then
+     Stats.add_new_query "Unknown" num_exprs 0.0);
+
+  (* if !Flags.portfolio_only then (
+   *   let filename = write_formula_to_file solver in
+   *   let res = run_solvers filename (read_sat "yices") (read_sat "z3")
+   *               (read_sat "cvc4") (read_sat "boolector") in
+   *   remove filename;
+   *   res
+   * ) else if !Flags.z3_only then  ( *)
+    (if (!Flags.stats) then
+       Stats.update_query_str "Z3_bindings") ;
+    let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
+
+    let check_solver = Solver.check solver [] in
+    match check_solver with
+    | Solver.SATISFIABLE ->
+       (if (!Flags.stats) then
+          Stats.update_query_time (Unix.gettimeofday () -. start));
+       (* let model = Solver.get_model solver in
+        * (match model with
+        *  | None -> print_endline "None"
+        *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
+        * ); *)
+       true
+    | _ ->
+       (if (!Flags.stats) then
+          Stats.update_query_time (Unix.gettimeofday () -. start));
+       false
+  (* )
+   * else (
+   *   if num_exprs > magic_number then (
+   *     let filename = write_formula_to_file solver in
+   *     let res = run_solvers filename (read_sat "yices") (read_sat "z3")
+   *                 (read_sat "cvc4") (read_sat "boolector") in
+   *     remove filename;
+   *     res
+   *   ) else  (
+   *     (if (!Flags.stats) then
+   *        Stats.update_query_str "Z3_bindings") ;
+   * 
+   *     let check_solver = Solver.check solver [] in
+   *     match check_solver with
+   *     | Solver.SATISFIABLE -> true
+   *     | _ -> false
+   *   )
+   * ) *)
+
+       
 
 
               

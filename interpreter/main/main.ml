@@ -35,8 +35,10 @@ let argspec = Arg.align
   "-l", Arg.Set Flags.loop_invar, " use loop invariant";
   "-m", Arg.Set Flags.simplify, " enable simplify from Z3";
   "-S", Arg.Set Flags.select_unsafe, " set \"select\" instruction as unsafe";
-  "-Z", Arg.Set Flags.disable_portfolio, " disable portfolio solver - run Z3";
+  "--z3-only", Arg.Set Flags.z3_only, " run using the z3 bindings";
+  "--portfolio-only", Arg.Set Flags.portfolio_only, " run using the portfolio solver";
   "--elim-indvar", Arg.Set Flags.elim_induction_variables, " perform induction variable elimination";
+  "--stats", Arg.Set Flags.stats, " generate solver statistics";
   "-v", Arg.Unit banner, " show version"
 ]
 
