@@ -39,6 +39,7 @@ let argspec = Arg.align
   "--portfolio-only", Arg.Set Flags.portfolio_only, " run using the portfolio solver";
   "--elim-indvar", Arg.Set Flags.elim_induction_variables, " perform induction variable elimination";
   "--unroll-one", Arg.Set Flags.unroll_one, " use with -l to unroll the first iteration of each loop";
+  "--no-clean", Arg.Set Flags.no_clean, " don't clean the solver tmp files from the /tmp fs";
   "--stats", Arg.Set Flags.stats, " generate solver statistics";
   "-v", Arg.Unit banner, " show version"
 ]

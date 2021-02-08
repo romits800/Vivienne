@@ -45,8 +45,8 @@ Params.set_print_mode !ctx Z3enums.PRINT_SMTLIB2_COMPLIANT;;
    * simap := SiMap.empty; *)
 
           
-(* let test_mul = ref true *)
-(* let remove fil = () *)
+(* dissable tmp file removal *)
+let remove fil = if !Flags.no_clean then () else remove fil
 
 let magic_number = 300
                  

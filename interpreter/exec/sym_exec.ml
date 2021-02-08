@@ -808,7 +808,7 @@ let rec step (c : config) : config list =
        else failwith "Assertion failed"
        
     | Havoc lvs, vs ->
-       print_endline "havoc";
+       (* print_endline "havoc"; *)
        let havc = havoc_vars lvs c in
        [{havc with code = vs, List.tl es}]
 
