@@ -31,14 +31,18 @@ let  merge_vars (lv: loopvar_t list) : loopvar_t list =
           merge_vars_i lvs (lvh::acc) mp'
        )
 
+    (* merge store only when they happen in consecutive loops - 
+       otherwise the local/global variables take care of it
+       take care of it *)
     | (StoreVar (sv, ty, sz, is_low, mo) as lvh) :: lvs ->
        let str = "Store" ^ svalue_to_string sv in
        (try
           let _ = LoopVarMap.find str mp in
-          merge_vars_i lvs acc mp
+          merge_vars_i lvs (lvh::acc) mp
        with Not_found ->
          let mp' = LoopVarMap.add str true mp in
-         merge_vars_i lvs (lvh::acc) mp'
+         (* merge_vars_i lvs (lvh::acc) mp' *)
+         merge_vars_i lvs acc mp'
             
        )
     | [] -> acc

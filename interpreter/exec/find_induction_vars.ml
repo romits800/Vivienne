@@ -488,7 +488,7 @@ let rec find_induction_vars (lv : triple IndVarMap.t) (c : config) (c_orig : con
 
       | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es'), pc', iv', cct'), vs ->
          (* print_endline "lab4"; *)
-         let vs', es' = take n vs0 e.at @ vs, List.map plain es0 in
+         let vs', es' = take n vs0 e.at @ vs, es0 in
          find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
 
       | Label (n, es0, (vs', {it = Breaking (k, vs0); at} :: es'), pc', iv', cct'), vs ->

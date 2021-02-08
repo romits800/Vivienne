@@ -51,7 +51,7 @@ let rec elim_induction_vars_loop (c : config) : config list =
               let FuncType (ts1, ts2) = block_type frame.inst bt in
               let n1 = Lib.List32.length ts1 in
               let args, vs' = take n1 vs e.at, drop n1 vs e.at in
-              let vs', es' = vs', [Label (n1, [e' @@ e.at],
+              let vs', es' = vs', [Label (n1, [Plain e' @@ e.at],
                                           (args, List.map plain es'),
                                           (pclet,pc), c.induction_vars, c.ct_check) @@ e.at] in
               elim_induction_vars_loop {c with code = vs', es' @ List.tl es;}
@@ -652,7 +652,7 @@ let rec elim_induction_vars_loop (c : config) : config list =
 
        | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es'), pc', iv', cct'), vs ->
           (* print_endline ("lab4:" ^ (string_of_int c.counter)); *)
-          let vs', es' = take n vs0 e.at @ vs, List.map plain es0 in
+          let vs', es' = take n vs0 e.at @ vs, es0 in
           elim_induction_vars_loop  {c with code = vs', es' @ List.tl es}
 
        | Label (n, es0, (vs', {it = Breaking (k, vs0); at} :: es'), pc', iv', cct'), vs ->

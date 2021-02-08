@@ -38,6 +38,7 @@ let argspec = Arg.align
   "--z3-only", Arg.Set Flags.z3_only, " run using the z3 bindings";
   "--portfolio-only", Arg.Set Flags.portfolio_only, " run using the portfolio solver";
   "--elim-indvar", Arg.Set Flags.elim_induction_variables, " perform induction variable elimination";
+  "--unroll-one", Arg.Set Flags.unroll_one, " use with -l to unroll the first iteration of each loop";
   "--stats", Arg.Set Flags.stats, " generate solver statistics";
   "-v", Arg.Unit banner, " show version"
 ]

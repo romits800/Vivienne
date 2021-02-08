@@ -29,7 +29,7 @@ let compare_svalues vold vnew =
          when i1 > i2 -> Decrease vold                 
     | _ ->  Nothing
   in
-  modifier_to_string v |> print_endline;
+  (* modifier_to_string v |> print_endline; *)
   v
 
 
@@ -163,7 +163,7 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
              find_vars lv {c with code = vs', es' @ List.tl es; frame = frame'}
 
           | LocalTee x, v :: vs' ->
-             print_endline "local tee";
+             (* print_endline "local tee"; *)
              let vv = local frame x in
              let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
              let is_low = Z3_solver.is_v_ct_unsat c.pc vv mem in
@@ -222,7 +222,7 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
              find_vars lv {c with code = vs', est}
              
           | Store {offset; ty; sz; _}, sv :: si :: vs' ->
-             print_endline "store";
+             (* print_endline "store"; *)
              let mem = smemory frame.inst (0l @@ e.at) in
              let frame = {frame with
                            inst = update_smemory frame.inst mem (0l @@ e.at)} in
@@ -237,7 +237,6 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
              (* if (Z3_solver.is_v_ct_unsat (pclet, pc) si mems) then *)
              let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
 
-             (* let lv = (StoreVar final_addr)::lv in *)
              let nv, lvn =
                (match sz with
                 | None ->
@@ -256,11 +255,13 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
                    nv, lvn)
              in
 
-             (* let memtuple = (c.frame.inst.smemories, smemlen c.frame.inst) in
-              * let is_low = Z3_solver.is_v_ct_unsat c.pc lvn memtuple in
-              * let mo = compare_svalues lvn sv in *)
+             (* Check store variable only if they have constant index *)
+             (* We might for example be storing the loop index in memory *)
+             let memtuple = (c.frame.inst.smemories, smemlen c.frame.inst) in
+             let is_low = Z3_solver.is_v_ct_unsat c.pc lvn memtuple in
+             (* let mo = compare_svalues lvn sv in *)
              
-             (* let lv = (StoreVar (final_addr, ty, sz, true, Nothing))::lv in *)
+             let lv = (StoreVar (final_addr, ty, sz, is_low, Nothing))::lv in
 
              let mem' = Smemory.store_sind_value mem nv in
              let vs', es' = vs', [] in
@@ -381,7 +382,7 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
 
       | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es'), pc', iv', cct'), vs ->
          (* print_endline "lab4"; *)
-         let vs', es' = take n vs0 e.at @ vs, List.map plain es0 in
+         let vs', es' = take n vs0 e.at @ vs, es0 in
          find_vars lv {c with code = vs', es' @ List.tl es}
 
       | Label (n, es0, (vs', {it = Breaking (k, vs0); at} :: es'), pc', iv', cct'), vs ->

@@ -91,7 +91,7 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) : config =
        in
        let mem = smemory c.frame.inst (0l @@ Source.no_region) in
        let mem' = Smemory.store_sind_value mem nv in
-       
+
        let c' = {  c with frame = {c.frame with inst = insert_smemory c.frame.inst mem'}} in
        let c'' =
          match nv, mo with

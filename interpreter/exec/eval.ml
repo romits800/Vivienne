@@ -92,12 +92,12 @@ and admin_instr' =
   | Trapping of string
   | Returning of svalue stack
   | Breaking of int32 * svalue stack
-  | Label of int32 * instr list * code * pc_ext * iv_type option * ct_check_t 
+  | Label of int32 * admin_instr list * code * pc_ext * iv_type option * ct_check_t 
   | Frame of int32 * frame * code * pc_ext * iv_type option 
   | Assert of loopvar_t list * instr'
   | Havoc of loopvar_t list
-  | FirstPass of int32 * instr list * code
-  | SecondPass of int32 * instr list * code 
+  | FirstPass of int32 * admin_instr list * code
+  | SecondPass of int32 * admin_instr list * code 
            
 type obs_type =
   | CT_UNSAT of pc_ext * svalue * (Smemory.t list * int) * obs_type
@@ -304,7 +304,7 @@ let match_policy b1 b2 =
 (* Assert invariant *)
 let rec assert_invar (lv: loopvar_t list) (c : config) : bool =
   match lv with
-  | LocalVar (x, is_low, mo) :: lvs ->
+  | LocalVar (x, (true as is_low), mo) :: lvs ->
      (* print_endline "localvar"; *)
      let v = local c.frame x in
      let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
@@ -312,7 +312,7 @@ let rec assert_invar (lv: loopvar_t list) (c : config) : bool =
      if match_policy is_low is_low_new then assert_invar lvs c
      else false
 
-  | GlobalVar (x, is_low, mo) :: lvs ->
+  | GlobalVar (x, (true as is_low), mo) :: lvs ->
      (* print_endline "globalvar"; *)
      let v = Sglobal.load (sglobal c.frame.inst x) in
      let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
@@ -320,7 +320,7 @@ let rec assert_invar (lv: loopvar_t list) (c : config) : bool =
      if match_policy is_low is_low_new then assert_invar lvs c
      else false
 
-  | StoreVar (addr, ty, sz, is_low, mo) :: lvs ->
+  | StoreVar (addr, ty, sz, (true as is_low), mo) :: lvs ->
      (* print_endline "storevar"; *)
      let nv =
        (match sz with
@@ -340,6 +340,8 @@ let rec assert_invar (lv: loopvar_t list) (c : config) : bool =
 
      if match_policy is_low is_low_new then assert_invar lvs c
      else false
+  (* if it is high, we don't mind if it got low *)
+  | _ :: lvs -> assert_invar lvs c
   | [] -> true
 
 (* let disable_ct = ref false *)       
