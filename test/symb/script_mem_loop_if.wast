@@ -11,7 +11,7 @@
 ;;     for (int i = 0; i<100; i++)
 ;;         a[i] = n+i;
 ;;     if (j>=0 && j < 3) {
-;;         if (a[j] + a[j+3]) {
+;;         if (a[j] + a[j+3]) { // One branch not sat: ct
 ;;             a[j+4] = h;
 ;;         }
 ;;     }

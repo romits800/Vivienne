@@ -135,19 +135,20 @@ let rec step (c : config) : config list =
            if !Flags.loop_invar
            then 
              (
-               (* Check if we have already analyzed the loop *)
-               try (
-                 let lvs = AnalyzedLoopsMap.find (Obj.magic e') !analyzed_loops in
-                 (* Droping the input arguments from the value stack *)
-                 let FuncType (ts1, ts2) = block_type frame.inst bt in
-                 let n1 = Lib.List32.length ts1 in
-                 let vs' = drop n1 vs e.at in
-                 (* TODO(Romy): Add values to the value stack *)
-                 let c' = {c with code = vs', List.tl es;} in
-                 let havc = havoc_vars lvs c' in
-                 [havc]
-               )
-               with Not_found -> (
+               (* Check if we have already analyzed the loop - have to
+                  check if the whole  context is the same *)
+               (* try (
+                *   let lvs = AnalyzedLoopsMap.find (Obj.magic e') !analyzed_loops in
+                *   (\* Droping the input arguments from the value stack *\)
+                *   let FuncType (ts1, ts2) = block_type frame.inst bt in
+                *   let n1 = Lib.List32.length ts1 in
+                *   let vs' = drop n1 vs e.at in
+                *   (\* TODO(Romy): Add values to the value stack *\)
+                *   let c' = {c with code = vs', List.tl es;} in
+                *   let havc = havoc_vars lvs c' in
+                *   [havc]
+                * )
+                * with Not_found -> ( *)
                  let FuncType (ts1, ts2) = block_type frame.inst bt in
                  let n1 = Lib.List32.length ts1 in
                  let args, vs' = take n1 vs e.at, drop n1 vs e.at in
@@ -213,7 +214,7 @@ let rec step (c : config) : config list =
                    [{havc' with code = vs'', es'' @ List.tl es; progc = Obj.magic e'}]
                  ) (*No unroll_one *)
                  
-               )
+             (* ) *)               
                         (* let lvs = find_vars [] {c with code = vs'', es'' @ List.tl es;} in *)
              (*   assertX;
                   havocv1; ... ;havocvn;
@@ -840,16 +841,16 @@ let rec step (c : config) : config list =
                                         c.induction_vars, c.ct_check) @@ e.at] in
 
            let lvs, _ = find_vars [] {c with code = vs'', es'' @ List.tl es;} in
-           print_endline "loop modified variables:";
-           print_endline (string_of_int (List.length lvs));
-           List.iter print_loopvar lvs;
+           (* print_endline "loop modified variables:";
+            * print_endline (string_of_int (List.length lvs));
+            * List.iter print_loopvar lvs; *)
 
            (* print_endline "Merging vars"; *)
            let lvs = merge_vars lvs in
 
-           print_endline "loop modified variables:";
-           print_endline (string_of_int (List.length lvs));
-           List.iter print_loopvar lvs;
+           (* print_endline "loop modified variables:";
+            * print_endline (string_of_int (List.length lvs));
+            * List.iter print_loopvar lvs; *)
 
            modified_vars := ModifiedVarsMap.add (Obj.magic l) lvs !modified_vars;
            lvs
@@ -1297,14 +1298,14 @@ let init_smemory (secret : bool) (inst : module_inst) (sec : security) =
   let lo = i32 (eval_const inst const_lo) const_lo.at in
   let hi = i32 (eval_const inst const_hi) const_hi.at in
   let lo,hi = Int32.to_int lo, Int32.to_int hi in
-  let hi_list = List.init ((hi-lo+1)/4) (fun x-> 4*x + lo) in
+  let hi_list = List.init (hi-lo+1) (fun x-> x + lo) in
   let stores =
     match secret, value with
-    | true, _ -> List.map (Eval_symbolic.create_new_hstore 4) hi_list
-    | false, None -> List.map (Eval_symbolic.create_new_lstore 4) hi_list
+    | true, _ -> List.map (Eval_symbolic.create_new_hstore 1) hi_list
+    | false, None -> List.map (Eval_symbolic.create_new_lstore 1) hi_list
     | false, Some v ->
        let ev = i32 (eval_const inst v) v.at in
-       List.map (Eval_symbolic.create_new_value 4 (Int32.to_int ev)) hi_list
+       List.map (Eval_symbolic.create_new_value 1 (Int32.to_int ev)) hi_list
   in
   let smem =
     match secret with

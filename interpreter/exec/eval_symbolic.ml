@@ -229,7 +229,9 @@ let eval_cvtop = op SI32CvtOp.cvtop SI64CvtOp.cvtop F32CvtOp.cvtop F64CvtOp.cvto
 
 
 let eval_load ty ad i sz ext =
-  match ty,ad with 
+  (* print_endline (string_of_int sz); *)
+  (* print_endline (string_of_int ad); *)
+  match ty,ad with
   | I32Type, SI32 a ->
     ( match ext with
       | None -> SI32 (Si32.load a i sz ext)

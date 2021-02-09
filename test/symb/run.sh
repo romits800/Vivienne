@@ -19,7 +19,7 @@ check 3 "$WASM -i script_mem_operations_nonfailure.wast"
 check 4 "$WASM -i script_mem_operations_failure.wast"
 check 5 "$WASM -i script_mem_loop.wast"
 check 6 "$WASM -i script_mem_loop_pass.wast"
-check 7 "$WASM -i script_mem_loop_if.wast"
+check 7 "$WASM -i script_mem_loop_if.wast" # loop invar gives an extra error
 check 8 "$WASM -i script_mem_loop_if_3.wast"
 check 9 "$WASM -i script_mem_stores.wast"
 check 10 "$WASM -i script_call.wast"

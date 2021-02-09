@@ -242,8 +242,8 @@ and si_to_expr pc size ctx mem si: rel_type  =
                 with Not_found ->
                   let bva = BitVector.mk_sort ctx 32 in
                   let bvd = BitVector.mk_sort ctx 8 in
-                  let arr1 = Z3Array.mk_const_s ctx  "mem1" bva bvd in
-                  let arr2 = Z3Array.mk_const_s ctx  "mem2" bva bvd in
+                  let arr1 = Z3Array.mk_const_s ctx "mem1" bva bvd in
+                  let arr2 = Z3Array.mk_const_s ctx "mem2" bva bvd in
                   let newmem = H (arr1, arr2) in
                   let tmem = Lib.List32.nth smem (Int32.of_int (memlen - memi)) in
                   let stores = Smemory.get_stores tmem in
