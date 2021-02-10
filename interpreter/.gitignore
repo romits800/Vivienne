@@ -11,3 +11,7 @@ _build
 wasm
 wasm.debug
 *.bak
+\#*
+*.wasm
+out*
+*.smt2
