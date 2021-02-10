@@ -1,5 +1,5 @@
 (module $js 
-	(memory $memory (export "mem") 2)
+	(memory $memory (export "mem") 1)
 	(secret (i32.const 2000) (i32.const 2035)) ;; pad + s
 	(public (i32.const 2036) (i32.const 2039)) ;; leftover
 	(secret (i32.const 2040) (i32.const 2059)) ;; h
@@ -3687,6 +3687,7 @@
     local.set 17
     block  ;; label = @1
       loop  ;; label = @2
+      nop
         local.get 2
         i32.const 16
         i32.lt_u
@@ -3982,8 +3983,13 @@
         local.set 2
         br 0 (;@2;)
       end
+      nop
+      nop
     end
     local.get 0
+    nop
+    nop
+    nop
     local.get 13
     i32.store offset=40
     local.get 0
@@ -9757,9 +9763,9 @@
   (data (;10;) (i32.const 1952) "expand 32-byte k"))
 
 ;;(symb_exec "poly1305_init" (i32.sconst 2000) (i32.sconst 2080))
-;;;;(symb_exec "poly1305_finish" (i32.sconst 2000) (i32.sconst 2112)) ;; loop invariant - for (int i=leftover..; i<16; i++)
-;;(symb_exec "poly1305_blocks" (i32.sconst 2000) (i32.sconst 2128) (i32.sconst 16))
-;;(symb_exec "wrap_poly1305_update" (i32.sconst 2000) (i32.sconst 2128) (i32.sconst 16)) ;; i = 0 is not explicit before loop
-;;(symb_exec "wrap_poly1305_finish" (i32.sconst 2000) (i32.sconst 2112)) ;; loop invariant - for (int i=leftover..; i<16; i++)
+;;(symb_exec "poly1305_finish" (i32.sconst 2000) (i32.sconst 2112)) ;; loop invariant - for (int i=leftover..; i<16; i++)
+;;(symb_exec "poly1305_blocks" (i32.sconst 2000) (i32.sconst 2128) (i32.sconst 32))
+;;(symb_exec "poly1305_update" (i32.sconst 2000) (i32.sconst 2128) (i32.sconst 16)) ;; fails with invariant i = 0 is not explicit before loop
+;;(symb_exec "poly1305_finish" (i32.sconst 2000) (i32.sconst 2112)) ;; loop invariant - for (int i=leftover..; i<16; i++)
 ;;;; mac, m, bytes, key, polyobject
 (symb_exec "crypto_onetimeauth" (i32.sconst 2112) (i32.sconst 2128) (i32.sconst 16) (i32.sconst 2080) (i32.sconst 2000)) ;; loop invariant - for (int i=leftover..; i<16; i++)
