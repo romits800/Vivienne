@@ -2,8 +2,9 @@
 
 (module $js 
    (memory $memory (export "memory") 2)
-   (secret (i32.const 0) (i32.const 191))
-   (public (i32.const 192) (i32.const 255))
+   (secret (i32.const 0) (i32.const 127))
+   (secret (i32.const 128) (i32.const 255)) ;; output
+   (public (i32.const 256) (i32.const 383)) ;; input
    )
 (register "js" $js)
 
@@ -637,6 +638,6 @@
   (export "sm" (func 5))
   (export "decrypt" (func 6))
   (export "keystream" (func 7)))
-;; This is a comment
 
-(symb_exec "encrypt" (i32.sconst 64)) 
+
+(symb_exec "encrypt" (i32.sconst 128)) 
