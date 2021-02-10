@@ -159,7 +159,7 @@ let rec step (c : config) : config list =
                   *                             c.induction_vars, c.ct_check) @@ e.at] in *)
 
                  if !Flags.unroll_one then (
-
+                   
                    let second_pass = SecondPass (n1, [Plain e' @@ e.at], (args, List.map plain es')) in
 
                    let vs'', es'' = vs', [Label (n1, [second_pass @@ e.at],
@@ -170,19 +170,22 @@ let rec step (c : config) : config list =
 
                  ) else (
                  
-                   let vs'', es'' = vs', [Label (n1, [],
+                   let vs'', es'' = vs', [Label (n1, [Plain e' @@ e.at],
                                                  (args, List.map plain es'), (pclet,pc),
                                                  c.induction_vars, c.ct_check) @@ e.at] in
                    
                    (* print_endline "Finding vars"; *)
                    let lvs, _ = find_vars [] {c with code = vs'', es'' @ List.tl es;} in
+                   (* print_endline "loop modified variables:";
+                    * print_endline (string_of_int (List.length lvs));
+                    * List.iter print_loopvar lvs; *)
+
                    (* print_endline "Merging vars"; *)
                    let lvs = merge_vars lvs in
                    
-                   
-                   (* print_endline "loop modified variables:"; *)
-                   (* print_endline (string_of_int (List.length lvs)); *)
-                   (* List.iter print_loopvar lvs; *)
+                   (* print_endline "loop modified variables:";
+                    * print_endline (string_of_int (List.length lvs));
+                    * List.iter print_loopvar lvs; *)
                    
                    (* HAVOC *)
                    let havc = havoc_vars lvs c in
@@ -333,8 +336,8 @@ let rec step (c : config) : config list =
            [{c with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
 
         | Call x, vs ->
-           (* print_endline "call"; *)
-           (* print_endline (string_of_int (Int32.to_int x.it)); *)
+           (* print_endline "call";
+            * print_endline (string_of_int (Int32.to_int x.it)); *)
            let vs', es' = vs, [Invoke (func frame.inst x) @@ e.at] in
            [{c with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
 
@@ -830,11 +833,16 @@ let rec step (c : config) : config list =
        (* print_endline "Printing induction variables";
         * print_endline (induction_vars_to_string c.induction_vars); *)
 
+       (* let vv = local frame (18l @@ e.at) in
+        * let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
+        * let is_low = Z3_solver.is_v_ct_unsat c.pc vv mem in
+        * print_endline (string_of_bool is_low); *)
+
 
        let lvs = 
-         try (
-           ModifiedVarsMap.find (Obj.magic l) !modified_vars
-         ) with Not_found -> (
+         (* try (
+          *   ModifiedVarsMap.find (Obj.magic l) !modified_vars
+          * ) with Not_found -> ( *)
            (* print_endline "Finding vars"; *)
            let vs'', es'' = vs, [Label (n, [Plain l @@ loc],
                                         (vs''', code'''), (pclet,pc),
@@ -854,7 +862,7 @@ let rec step (c : config) : config list =
 
            modified_vars := ModifiedVarsMap.add (Obj.magic l) lvs !modified_vars;
            lvs
-         )
+         (* ) *)
        in
        
        (* print_endline "loop modified variables:";

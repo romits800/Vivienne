@@ -133,11 +133,11 @@ let modifier_to_string = function
                      
 let print_loopvar = function
   | LocalVar (i, tf, mo) ->
-     "Local" ^ (Int32.to_int i.it |> string_of_int) |> print_endline
+     "Local " ^ (string_of_bool tf) ^ " " ^ (Int32.to_int i.it |> string_of_int) |> print_endline
   | GlobalVar (i, tf, mo) ->
-     "Local" ^ (Int32.to_int i.it |> string_of_int) |> print_endline
+     "Global " ^ (string_of_bool tf) ^ " " ^ (Int32.to_int i.it |> string_of_int) |> print_endline
   | StoreVar (sv, ty, sz, tf, mo) ->
-     "Store" ^ (svalue_to_string sv) |> print_endline
+     "Store " ^ (string_of_bool tf) ^ " " ^ (svalue_to_string sv) |> print_endline
      
   
     
@@ -310,7 +310,9 @@ let rec assert_invar (lv: loopvar_t list) (c : config) : bool =
      let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
      let is_low_new = Z3_solver.is_v_ct_unsat c.pc v mem in
      if match_policy is_low is_low_new then assert_invar lvs c
-     else false
+     else (
+       (* print_endline (Int32.to_string x.it); *)
+       false)
 
   | GlobalVar (x, (true as is_low), mo) :: lvs ->
      (* print_endline "globalvar"; *)

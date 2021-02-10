@@ -32,11 +32,11 @@ let compare_svalues vold vnew =
   (* modifier_to_string v |> print_endline; *)
   v
 
-
+let collect_local = ref true
    
 let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config list =
-  (* print_endline "find_vars"; *)
   let {frame; code = vs, es; pc = pclet, pc; _} = c in
+
   (* let s1 = Svalues.string_of_values (List.rev vs) in *)
   (* print_endline s1; *)
   match es with
@@ -65,6 +65,7 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
              find_vars lv {c with code = vs', es' @ List.tl es}
           | Loop (bt, es'), vs ->
              (* print_endline "Loop find_vars"; *)
+
              let FuncType (ts1, ts2) = block_type frame.inst bt in
              let n1 = Lib.List32.length ts1 in
              let args, vs' = take n1 vs e.at, drop n1 vs e.at in
@@ -79,9 +80,19 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
              let vs'', es'' = vs', [Plain (Block (bt, es1)) @@ e.at] in (* True *)
              let vs', es' = vs', [Plain (Block (bt, es2)) @@ e.at] in (* False *)
              (* Don't check sat *)
+
+             let mem = (frame.inst.smemories, smemlen frame.inst) in
              
-             let lv1,c1 = find_vars lv {c with code = vs', es' @ est; pc = (pclet,pc')} in
-             let lv2,c2 = find_vars lv1 {c with code = vs'', es'' @ est; pc = (pclet,pc'')} in
+             let lv1, c1 =
+               if Z3_solver.is_sat (pclet, pc') mem then (
+                 find_vars lv {c with code = vs', es' @ est; pc = (pclet,pc')})
+               else (lv, [])
+             in
+             let lv2, c2 =
+               if Z3_solver.is_sat (pclet, pc'') mem then (
+                 find_vars lv1 {c with code = vs'', es'' @ est; pc = (pclet,pc'')})
+               else lv,[]
+             in
              lv2,c1 @ c2
 
           | Br x, vs ->
@@ -91,13 +102,23 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
              
           | BrIf x, v :: vs' ->
              (* print_endline "br_if"; *)
-             let pc', pc'' = split_condition v pc in
-             let vs'', es'' = vs', [Plain (Br x) @@ e.at] in
-             let vs', es' = vs', [] in
-             
-             let lv1, c1 = find_vars lv {c with code = vs', es' @ est; pc = (pclet,pc')} in
-             find_vars lv1 {c with code = vs'', es'' @ est; pc = (pclet,pc'')}
 
+             let pc', pc'' = split_condition v pc in (* false, true *)
+             let vs'', es'' = vs', [Plain (Br x) @@ e.at] in
+             let vs', es' = vs', [Plain Nop @@ e.at] in
+
+             let mem = (frame.inst.smemories, smemlen frame.inst) in
+             
+             let lv1, c1 =
+               if Z3_solver.is_sat (pclet, pc'') mem then (
+                 find_vars lv {c with code = vs'', es'' @ est; pc = (pclet,pc'')}
+               ) else lv,[] 
+             in
+             let lv2, c2 = if Z3_solver.is_sat (pclet, pc') mem then (
+               find_vars lv1 {c with code = vs', es' @ est; pc = (pclet,pc')}
+             ) else lv,[]
+             in
+             lv2, c1 @ c2
              
           (* | BrTable (xs, x), I32 i :: vs' when I32.ge_u i (Lib.List32.length xs) ->
            *   vs', [Plain (Br x) @@ e.at]
@@ -142,12 +163,17 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
           | LocalSet x, v :: vs' ->
              (* print_endline "local set"; *)
              let vv = local frame x in
-             let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
-             let is_low = Z3_solver.is_v_ct_unsat c.pc vv mem in
 
-             let mo = compare_svalues vv v in
+
+             let lv = if c.ct_check then (
+                        let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
+                        let is_low = Z3_solver.is_v_ct_unsat c.pc vv mem in
+                        
+                        let mo = compare_svalues vv v in
              (* print_loopvar (LocalVar (x, is_low)); *)
-             let lv = (LocalVar (x, is_low, mo))::lv in
+                        (LocalVar (x, is_low, mo))::lv)
+                      else lv
+             in
              (* let v, c =
               *   if svalue_depth v 10 then (
               *     let nl, pc' = add_let (pclet, pc) (Sv v) in
@@ -165,12 +191,14 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
           | LocalTee x, v :: vs' ->
              (* print_endline "local tee"; *)
              let vv = local frame x in
-             let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
-             let is_low = Z3_solver.is_v_ct_unsat c.pc vv mem in
-
-             let mo = compare_svalues vv v in
+             let lv = if c.ct_check then (
+                        let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
+                        let is_low = Z3_solver.is_v_ct_unsat c.pc vv mem in
+                        let mo = compare_svalues vv v in
              
-             let lv = (LocalVar (x, is_low, mo))::lv in
+                        (LocalVar (x, is_low, mo))::lv)
+                      else lv
+             in
              (* print_loopvar (LocalVar (x,is_low)); *)
              let frame' = update_local c.frame x v in
              let vs', es' = v :: vs', [] in
@@ -393,7 +421,9 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
       | Label (n, es0, code', pc', iv', cct'), vs ->
          (* print_endline "lab6"; *)
          (* TODO(Romy): not sure if correct to change the pc *)
-         let lv', c' = find_vars lv {c with code = code'; pc = pc'; induction_vars = iv'} in
+         let lv', c' = find_vars lv {c with code = code'; pc = pc';
+                                            induction_vars = iv';
+                                            ct_check = cct'} in
          (* print_endline "lab6_back"; *)
          let res =
            List.fold_left (fun (lvi, cprev) ci ->
@@ -458,7 +488,9 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
          List.fold_left
            (fun (lvi,cprev) ci ->
              let lvi', ci' =
-               find_vars lvi {c with code = vs, [Frame (n, ci.frame, ci.code, ci.pc, ci.induction_vars)
+               find_vars lvi {c with code = vs, [Frame (n, ci.frame,
+                                                        ci.code, ci.pc,
+                                                        ci.induction_vars)
                                                  @@ e.at] @ List.tl es;}
              in
              lvi', ci' @ cprev) (lv',[]) c'
@@ -479,7 +511,7 @@ let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config l
              let locals' = List.rev args @ List.map Svalues.default_value rest in
              let frame' = {inst = !inst'; locals = locals'} in
              let instr' = [Label (n2, [], ([], List.map plain f.it.body),
-                                  c.pc, c.induction_vars, c.ct_check) @@ f.at] in 
+                                  c.pc, c.induction_vars, false) @@ f.at] in 
              let vs', es' = vs', [Frame (n2, frame', ([], instr'), c.pc, c.induction_vars) @@ e.at] in
              find_vars lv {c with code = vs', es' @ List.tl es}
 
