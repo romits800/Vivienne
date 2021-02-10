@@ -644,11 +644,13 @@ let rec step (c : config) : config list =
                                 CT_V_UNSAT((pclet,pc''), sv, mems, c.observations)} in
                     
                     let nonv, found =
-                      try VulnerabilitiesMap.find (Obj.magic e') !noninter_vuln, true 
-                      with Not_found ->
-                        let solv = Z3_solver.is_v_ct_unsat (pclet, pc'') sv mems in
-                        noninter_vuln := VulnerabilitiesMap.add (Obj.magic e') solv !noninter_vuln;
-                        solv, false
+                      if (!Flags.explicit_leaks) then (
+                        try VulnerabilitiesMap.find (Obj.magic e') !noninter_vuln, true 
+                        with Not_found ->
+                          let solv = Z3_solver.is_v_ct_unsat (pclet, pc'') sv mems in
+                          noninter_vuln := VulnerabilitiesMap.add (Obj.magic e') solv !noninter_vuln;
+                          solv, false)
+                      else true, false
                     in
 
                     (if nonv then
@@ -663,7 +665,7 @@ let rec step (c : config) : config list =
                                             progc = Obj.magic e'}]
                        )
                      else (
-                       if (!Flags.explicit_leaks) && (not found) then 
+                       if not found then 
                          NonInterference.warn e.at "Trying to write high values in low memory"
                        else ();
                        [{c with code = vs', es' @ List.tl es;
