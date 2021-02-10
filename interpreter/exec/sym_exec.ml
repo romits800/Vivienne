@@ -663,7 +663,7 @@ let rec step (c : config) : config list =
                                             progc = Obj.magic e'}]
                        )
                      else (
-                       if not found then
+                       if (!Flags.explicit_leaks) && (not found) then 
                          NonInterference.warn e.at "Trying to write high values in low memory"
                        else ();
                        [{c with code = vs', es' @ List.tl es;

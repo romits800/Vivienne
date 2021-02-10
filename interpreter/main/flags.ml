@@ -15,3 +15,4 @@ let elim_induction_variables = ref false
 let stats = ref false
 let unroll_one = ref false
 let no_clean = ref false
+let explicit_leaks = ref false
