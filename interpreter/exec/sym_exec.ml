@@ -178,7 +178,7 @@ let rec step (c : config) : config list =
                      print_endline "Finding variables modified in loop..";
 
                    (* print_endline "Finding vars"; *)
-                   let lvs, _ = find_vars [] {c with code = vs'', es'' @ List.tl es;} in
+                   let lvs, _ = find_modified_vars (Obj.magic e) {c with code = vs'', es'' @ List.tl es;} in
                    (* print_endline "loop modified variables:";
                     * print_endline (string_of_int (List.length lvs));
                     * List.iter print_loopvar lvs; *)
@@ -855,7 +855,7 @@ let rec step (c : config) : config list =
                                         (vs''', code'''), (pclet,pc),
                                         c.induction_vars, c.ct_check) @@ e.at] in
 
-           let lvs, _ = find_vars [] {c with code = vs'', es'' @ List.tl es;} in
+           let lvs, _ = find_modified_vars (Obj.magic e) {c with code = vs'', es'' @ List.tl es;} in
            (* print_endline "loop modified variables:";
             * print_endline (string_of_int (List.length lvs));
             * List.iter print_loopvar lvs; *)
