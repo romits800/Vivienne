@@ -173,7 +173,10 @@ let rec step (c : config) : config list =
                    let vs'', es'' = vs', [Label (n1, [Plain e' @@ e.at],
                                                  (args, List.map plain es'), (pclet,pc),
                                                  c.induction_vars, c.ct_check) @@ e.at] in
-                   
+
+                   if !Flags.debug then 
+                     print_endline "Finding variables modified in loop..";
+
                    (* print_endline "Finding vars"; *)
                    let lvs, _ = find_vars [] {c with code = vs'', es'' @ List.tl es;} in
                    (* print_endline "loop modified variables:";
