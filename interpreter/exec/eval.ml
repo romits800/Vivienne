@@ -235,7 +235,7 @@ let split_condition (sv : svalue) (pc : pc): pc * pc =
        let zero = Si32.zero in
        PCAnd( SI32 (Si32.ne vi32 zero), pc)
     | SI64 vi64 ->
-       let zero = Si32.zero in
+       let zero = Si64.zero in
        PCAnd( SI64 (Si64.ne vi64 zero), pc)
     | SF32 vf32 -> PCAnd( SF32 ( F32.neg vf32), pc)
     | SF64 vf64 -> PCAnd( SF64 ( F64.neg vf64), pc)
