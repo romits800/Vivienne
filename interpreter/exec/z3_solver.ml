@@ -839,7 +839,7 @@ let run_solvers input_file yices z3 cvc4 boolector =
         failwith "No solver returned";
     with e ->
       close_in chan;
-      print_endline "Solver error";
+      print_endline ("Solver error " ^ input_file);
       raise e
   with e ->
     print_endline "failed";
