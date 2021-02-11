@@ -130,10 +130,10 @@ let rec step (c : config) : config list =
                                        (pclet,pc), c.induction_vars, c.ct_check) @@ e.at] in
            [{c with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
         | Loop (bt, es'), vs ->
-           (* print_endline "loop"; *)
+           if !Flags.debug then 
+             print_endline "Entering loop";
            (* print_endline ("loop: " ^ (Source.string_of_region e.at)); *)
-           if !Flags.loop_invar
-           then 
+           if !Flags.loop_invar then 
              (
                (* Check if we have already analyzed the loop - have to
                   check if the whole  context is the same *)
@@ -183,9 +183,9 @@ let rec step (c : config) : config list =
                    (* print_endline "Merging vars"; *)
                    let lvs = merge_vars lvs in
                    
-                   (* print_endline "loop modified variables:";
-                    * print_endline (string_of_int (List.length lvs));
-                    * List.iter print_loopvar lvs; *)
+                   (* print_endline "loop modified variables:"; *)
+                   (* print_endline (string_of_int (List.length lvs)); *)
+                   (* List.iter print_loopvar lvs; *)
                    
                    (* HAVOC *)
                    let havc = havoc_vars lvs c in
