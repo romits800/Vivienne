@@ -806,6 +806,8 @@ let rec step (c : config) : config list =
        assert false
 
     | Assert (lvs, e), vs ->
+       if !Flags.debug then 
+         print_endline "Asserting invariant..";
        (* print_endline "assert"; *)
        if assert_invar lvs c then (
          analyzed_loops := AnalyzedLoopsMap.add (Obj.magic e) lvs (!analyzed_loops);
