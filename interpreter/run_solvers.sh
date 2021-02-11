@@ -31,7 +31,7 @@ done
 
 rm ${filename}.bool
 
-for i in $cvc4_pid $z3_pid $boolector_pid $yices_pid
+for i in $z3_pid $boolector_pid $yices_pid $cvc4_pid
 do
     pkill -9 -P $i &
     #    kill -9 $i

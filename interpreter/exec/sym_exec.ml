@@ -131,7 +131,7 @@ let rec step (c : config) : config list =
            [{c with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
         | Loop (bt, es'), vs ->
            if !Flags.debug then 
-             print_endline "Entering loop";
+             print_endline "Entering loop..";
            (* print_endline ("loop: " ^ (Source.string_of_region e.at)); *)
            if !Flags.loop_invar then 
              (
