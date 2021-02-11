@@ -629,41 +629,45 @@ let bin_of_string str =
 
 
 
-let rec find_command = function
-  | h::tl ->
-     let cd = h.command_desc in
-     (match cd with
-      | Smtlib.CmdDefineFun fd ->
-         let FunDef (symb, sort_option, sorted_vars, sort, term) = fd.fun_def_desc in
-         (* Smtlib_pp.pp_symbol Format.std_formatter symb;
-          * Smtlib_pp.pp_term Format.std_formatter term;
-          * print_endline "done"; *)
+let find_sv cmds solver =  
+  let rec find_command = function
+    | h::tl ->
+       let cd = h.command_desc in
+       (match cd with
+        | Smtlib.CmdDefineFun fd ->
+           let FunDef (symb, sort_option, sorted_vars, sort, term) = fd.fun_def_desc in
+           (* Smtlib_pp.pp_symbol Format.std_formatter symb;
+            * Smtlib_pp.pp_term Format.std_formatter term;
+            * print_endline "done"; *)
 
-         if (match symb.symbol_desc with
-             | SimpleSymbol s when s = "sv" -> true
-             | _ -> false)
-         then (
-           (match term.term_desc with
-            | TermSpecConstant (CstBinary str) ->
-               let b64 = bin_of_string ("0b" ^ str) in
-               (* Int64.to_int b64 |> string_of_int |> print_endline; *)
-               (* Smtlib_pp.pp_symbol Format.std_formatter symb; *)
-               (* Smtlib_pp.pp_term Format.std_formatter term; *)
-               b64
-            | _ ->
-               print_endline "unknown term";
-               Smtlib_pp.pp_symbol Format.std_formatter symb;
-               Smtlib_pp.pp_term Format.std_formatter term;
-               (* print_endline "after prints"; *)
-               failwith "Unknown term");
-         ) else 
+           if (match symb.symbol_desc with
+               | SimpleSymbol s when s = "sv" -> true
+               | _ -> false)
+           then (
+             (match term.term_desc with
+              | TermSpecConstant (CstBinary str) ->
+                 let b64 = bin_of_string ("0b" ^ str) in
+                 (* Int64.to_int b64 |> string_of_int |> print_endline; *)
+                 (* Smtlib_pp.pp_symbol Format.std_formatter symb; *)
+                 (* Smtlib_pp.pp_term Format.std_formatter term; *)
+                 b64
+              | _ ->
+                 print_endline "unknown term";
+                 Smtlib_pp.pp_symbol Format.std_formatter symb;
+                 Smtlib_pp.pp_term Format.std_formatter term;
+                 (* print_endline "after prints"; *)
+                 failwith "Unknown term");
+           ) else 
              find_command tl
-      | _ ->
-         (* print_endline "No assert cmd"; *)
-         find_command tl
-     );
-  | [] -> failwith "Not found"
-
+        | _ ->
+           (* print_endline "No assert cmd"; *)
+           find_command tl
+       );
+    | [] -> failwith "Not found"
+  in
+  if !Flags.debug then
+    print_endline solver;
+  find_command cmds
         
 let read_cvc4 fname =
   (* print_endline "read_cvc4"; *)
@@ -682,7 +686,7 @@ let read_cvc4 fname =
           let m = Smtlib_parser.model Smtlib_lexer.token lexbuf in
           let mc = m.model_commands in
           close_in chan;
-          find_command mc
+          find_sv mc tmp_file
         with e ->
           close_in chan;
           print_endline "failed cvc4";
@@ -704,7 +708,7 @@ let read_boolector fname =
           let m = Smtlib_parser.model Smtlib_lexer.token lexbuf in
           let mc = m.model_commands in
           close_in chan;
-          find_command mc
+          find_sv mc tmp_file
         with e ->
           close_in chan;
           print_endline "failed boolector";
@@ -731,7 +735,7 @@ let read_z3 fname =
           (* print_endline "before close_in"; *)
           close_in chan;
           (* print_endline "after close_in"; *)
-          find_command mc
+          find_sv mc tmp_file
         with e ->
           close_in chan;
           (* print_endline "failed z3"; *)
@@ -1265,6 +1269,7 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
   let ctx = init_solver() in
 
   let v = pc_to_expr pc ctx mem in
+
   (* (match pc with
    * | (pclet, PCAnd (v',pc)) ->
    *    let sv = sv_to_expr (pclet,pc) v' ctx mem in
