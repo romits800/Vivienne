@@ -42,6 +42,7 @@ let argspec = Arg.align
   "--no-clean", Arg.Set Flags.no_clean, " don't clean the solver tmp files from the /tmp fs";
   "--explicit-leaks", Arg.Set Flags.explicit_leaks, " include explicit leaks to the memory";
   "--stats", Arg.Set Flags.stats, " generate solver statistics";
+  "--debug", Arg.Set Flags.debug, " enable debug msgs";
   "-v", Arg.Unit banner, " show version"
 ]
 
