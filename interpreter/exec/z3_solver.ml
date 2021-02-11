@@ -654,7 +654,7 @@ let rec find_command = function
                print_endline "unknown term";
                Smtlib_pp.pp_symbol Format.std_formatter symb;
                Smtlib_pp.pp_term Format.std_formatter term;
-               print_endline "after prints";
+               (* print_endline "after prints"; *)
                failwith "Unknown term");
          ) else 
              find_command tl
@@ -667,7 +667,7 @@ let rec find_command = function
         
 let read_cvc4 fname =
   (* print_endline "read_cvc4"; *)
-  let tmp_file = fname ^ "cvc4.out" in
+  let tmp_file = fname ^ ".cvc4.out" in
   (* let _ = Sys.command @@ "cvc4-1.8-x86_64-linux-opt -m /tmp/out.smt2 > " ^ tmp_file in *)
   let chan = open_in tmp_file in
   (* let ch = input_char chan in *)
@@ -931,7 +931,7 @@ let find_solutions (sv: svalue) (pc : pc_ext)
 
     (* print_endline "creating filename"; *)
     let filename = write_formula_to_file solver in
-    print_endline @@ "after writing formula to filename" ^ filename;
+    (* print_endline @@ "after writing formula to filename" ^ filename; *)
     let ret = match run_solvers filename read_yices read_z3 read_cvc4 read_boolector with
       | None -> acc
       | Some v -> find_solutions_i sv pc mem (v::acc)
