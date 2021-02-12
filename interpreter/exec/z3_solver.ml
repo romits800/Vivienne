@@ -1298,13 +1298,14 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
   (if (!Flags.stats) then
      Stats.add_new_query "Unknown" num_exprs 0.0);
 
-  (* if !Flags.portfolio_only then (
-   *   let filename = write_formula_to_file solver in
-   *   let res = run_solvers filename (read_sat "yices") (read_sat "z3")
-   *               (read_sat "cvc4") (read_sat "boolector") in
-   *   remove filename;
-   *   res
-   * ) else if !Flags.z3_only then  ( *)
+   if !Flags.portfolio_only then (
+     let filename = write_formula_to_file solver in
+     let res = run_solvers filename (read_sat "yices") (read_sat "z3")
+                 (read_sat "cvc4") (read_sat "boolector") in
+     remove filename;
+     res
+   ) else ( 
+
     (if (!Flags.stats) then
        Stats.update_query_str "Z3_bindings") ;
     let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
@@ -1324,6 +1325,7 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
        (if (!Flags.stats) then
           Stats.update_query_time (Unix.gettimeofday () -. start));
        false
+  )
   (* )
    * else (
    *   if num_exprs > magic_number then (
