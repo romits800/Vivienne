@@ -178,7 +178,8 @@ let rec step (c : config) : config list =
                      print_endline "Finding variables modified in loop..";
 
                    (* print_endline "Finding vars"; *)
-                   let lvs, _ = find_modified_vars (Obj.magic e) {c with code = vs'', es'' @ List.tl es;} in
+                   let lvs, _ = find_modified_vars (Obj.magic e)
+                                  {c with code = vs'', es'' @ List.tl es;} in
                    (* print_endline "loop modified variables:";
                     * print_endline (string_of_int (List.length lvs));
                     * List.iter print_loopvar lvs; *)
@@ -312,8 +313,6 @@ let rec step (c : config) : config list =
                 Z3_solver.is_sat (pclet, pc) mem |> string_of_bool |> print_endline;
                 *)
                 failwith "BrIf: No active path";
-               (* let vs', es' = vs, [] in
-                * [{c with code = vs', es' @ List.tl es}] *)
             | _::[] -> res
             | _ ->
                if (c.ct_check) then (

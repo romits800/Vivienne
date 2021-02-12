@@ -717,6 +717,29 @@ let read_boolector fname =
      Some c
     | _ -> failwith @@ "Error output of file " ^ tmp_file
 
+let read_bitwuzla fname =
+  (* print_endline "read_boolector"; *)
+  let tmp_file = fname ^ ".bitwuzla.out" in
+  let chan = open_in tmp_file in
+  match input_line chan with
+  | "unsat" -> None
+  | "sat" ->
+     let lexbuf = Lexing.from_channel chan in
+     let c =
+       (try
+          let m = Smtlib_parser.model Smtlib_lexer.token lexbuf in
+          let mc = m.model_commands in
+          close_in chan;
+          find_sv mc tmp_file
+        with e ->
+          close_in chan;
+          print_endline "failed bitwuzla";
+          raise e
+       ) in
+     Some c
+    | _ -> failwith @@ "Error output of file " ^ tmp_file
+
+         
          
 let read_z3 fname =
   (* print_endline "read_z3"; *)
@@ -791,7 +814,7 @@ let read_sat solver_name fname =
   ret
 
 
-let run_solvers input_file yices z3 cvc4 boolector =
+let run_solvers input_file yices z3 cvc4 boolector bitwuzla =
   (* print_endline "run_solvers"; *)
   try
     let out_file = input_file ^ ".run_solvers.out" in
@@ -835,6 +858,14 @@ let run_solvers input_file yices z3 cvc4 boolector =
           Stats.update_query_str "Boolector";);
         boolector input_file
       )
+      else if solver = "bitwuzla" then (
+        if (!Flags.stats) then (
+          Stats.update_query_time (Unix.gettimeofday () -. start);
+          stats := {!stats with bitwuzla = !stats.bitwuzla + 1 };
+          Stats.update_query_str "Bitwuzla";);
+        bitwuzla input_file
+      )
+
       else
         failwith "No solver returned";
     with e ->
@@ -936,7 +967,8 @@ let find_solutions (sv: svalue) (pc : pc_ext)
     (* print_endline "creating filename"; *)
     let filename = write_formula_to_file solver in
     (* print_endline @@ "after writing formula to filename" ^ filename; *)
-    let ret = match run_solvers filename read_yices read_z3 read_cvc4 read_boolector with
+    let ret = match run_solvers filename read_yices read_z3
+                      read_cvc4 read_boolector read_bitwuzla with
       | None -> acc
       | Some v -> find_solutions_i sv pc mem (v::acc)
     in
@@ -1108,7 +1140,8 @@ let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) =
      if !Flags.portfolio_only then (
        let filename = write_formula_to_file solver in
        let res = not (run_solvers filename (read_sat "yices")
-                        (read_sat "z3") (read_sat "cvc4") (read_sat "boolector")) in
+                        (read_sat "z3") (read_sat "cvc4")
+                        (read_sat "boolector") (read_sat "bitwuzla")) in
        remove filename;
        res
      ) else if !Flags.z3_only then (
@@ -1135,7 +1168,8 @@ let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) =
        if num_exprs > magic_number then (
          let filename = write_formula_to_file solver in
          let res = not (run_solvers filename (read_sat "yices")
-                          (read_sat "z3") (read_sat "cvc4") (read_sat "boolector")) in
+                          (read_sat "z3") (read_sat "cvc4")
+                          (read_sat "boolector") (read_sat "bitwuzla")) in
          remove filename;
          res
        ) else (
@@ -1201,8 +1235,10 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
       if !Flags.portfolio_only then (
         let filename = write_formula_to_file solver in
         (* print_endline ("is_v_ct_unsat after write formula " ^ filename); *)
-        let res = not (run_solvers filename (read_sat "yices") (read_sat "z3")
-                         (read_sat "cvc4") (read_sat "boolector")) in
+        let res = not (run_solvers filename (read_sat "yices")
+                         (read_sat "z3")
+                         (read_sat "cvc4") (read_sat "boolector")
+                         (read_sat "bitwuzla")) in
         remove filename;
         res
       ) else if !Flags.z3_only then (
@@ -1234,7 +1270,8 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
           let filename = write_formula_to_file solver in
           (* print_endline ("is_v_ct_unsat after write formula " ^ filename); *)
           let res = not (run_solvers filename (read_sat "yices") (read_sat "z3")
-                           (read_sat "cvc4") (read_sat "boolector")) in
+                           (read_sat "cvc4") (read_sat "boolector")
+                           (read_sat "bitwuzla")) in
           remove filename;
           res
         ) else (
@@ -1301,7 +1338,7 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
    if !Flags.portfolio_only then (
      let filename = write_formula_to_file solver in
      let res = run_solvers filename (read_sat "yices") (read_sat "z3")
-                 (read_sat "cvc4") (read_sat "boolector") in
+                 (read_sat "cvc4") (read_sat "boolector") (read_sat "bitwuzla") in
      remove filename;
      res
    ) else ( 
