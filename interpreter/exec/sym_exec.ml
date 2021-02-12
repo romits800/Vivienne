@@ -307,7 +307,11 @@ let rec step (c : config) : config list =
 
            (* print_endline (string_of_int (List.length res)); *)
            (match res with
-            | [] -> failwith "BrIf: No active path";
+            | [] -> 
+                (*print_endline "BrIf No active path";
+                Z3_solver.is_sat (pclet, pc) mem |> string_of_bool |> print_endline;
+                *)
+                failwith "BrIf: No active path";
                (* let vs', es' = vs, [] in
                 * [{c with code = vs', es' @ List.tl es}] *)
             | _::[] -> res
