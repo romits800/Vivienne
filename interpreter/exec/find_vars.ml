@@ -536,3 +536,38 @@ let find_modified_vars (analyzed_loop : int ) (c : config) : loopvar_t list * co
   find_vars [] c 
 
 
+let find_policy lvs c  =
+  let rec find_policy_i lvs acc =
+    match lvs with
+    | (LocalVar (x,_,mo)) :: lvs' ->
+       let vv = local c.frame x in
+       let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
+       let is_low = Z3_solver.is_v_ct_unsat c.pc vv mem in                   
+       let mo = Nothing in
+       find_policy_i lvs' (LocalVar (x,is_low,mo)::acc)
+    | (GlobalVar (x,_,mo)) :: lvs' ->
+       let vv = Sglobal.load (sglobal c.frame.inst x) in
+       let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
+       let is_low = Z3_solver.is_v_ct_unsat c.pc vv mem in                   
+       let mo = Nothing in
+       find_policy_i lvs' (GlobalVar (x,is_low,mo)::acc)
+    | (StoreVar (final_addr, ty, sz, is_low, mo)) :: lvs' ->
+       let vv =
+         (match sz with
+          | None ->
+             Eval_symbolic.eval_load ty final_addr
+               (smemlen c.frame.inst) (Types.size ty) None
+          | Some (sz) ->
+             assert (packed_size sz <= Types.size ty);
+             let n = packed_size sz in
+             let lvn = Eval_symbolic.eval_load ty final_addr
+                         (smemlen c.frame.inst) n None in
+             lvn)
+       in
+       let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
+       let is_low = Z3_solver.is_v_ct_unsat c.pc vv mem in                   
+       let mo = Nothing in
+       find_policy_i lvs' (StoreVar (final_addr, ty, sz, is_low, mo)::acc)
+    | [] -> acc
+  in
+  find_policy_i lvs []

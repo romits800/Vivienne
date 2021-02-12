@@ -48,12 +48,12 @@ module ModifiedVarsMap = Map.Make(struct
                             end)
 let modified_vars = ref ModifiedVarsMap.empty 
                        
-module AnalyzedLoopsMap = Map.Make(struct
-                              type t = int
-                              let compare = compare
-                            end)
-                        
-let analyzed_loops = ref AnalyzedLoopsMap.empty 
+(* module AnalyzedLoopsMap = Map.Make(struct
+ *                               type t = int
+ *                               let compare = compare
+ *                             end)
+ *                         
+ * let analyzed_loops = ref AnalyzedLoopsMap.empty *) 
 
 
 
@@ -178,14 +178,29 @@ let rec step (c : config) : config list =
                      print_endline "Finding variables modified in loop..";
 
                    (* print_endline "Finding vars"; *)
-                   let lvs, _ = find_modified_vars (Obj.magic e)
-                                  {c with code = vs'', es'' @ List.tl es;} in
-                   (* print_endline "loop modified variables:";
-                    * print_endline (string_of_int (List.length lvs));
-                    * List.iter print_loopvar lvs; *)
 
-                   (* print_endline "Merging vars"; *)
-                   let lvs = merge_vars lvs in
+                   let lvs = 
+                     try (
+                       let lvs = ModifiedVarsMap.find (Obj.magic e) !modified_vars in
+                       (* check if we have different initial policy *)
+                       find_policy lvs c
+                     ) with Not_found -> (
+                       let lvs, _ = find_modified_vars (Obj.magic e)
+                                      {c with code = vs'', es'' @ List.tl es;} in
+                       let lvs = merge_vars lvs in
+                       modified_vars := ModifiedVarsMap.add (Obj.magic e) lvs !modified_vars;
+                       lvs
+                     )
+                   in
+                   
+                   (* let lvs, _ = find_modified_vars (Obj.magic e)
+                    *                {c with code = vs'', es'' @ List.tl es;} in
+                    * (\* print_endline "loop modified variables:";
+                    *  * print_endline (string_of_int (List.length lvs));
+                    *  * List.iter print_loopvar lvs; *\)
+                    * 
+                    * (\* print_endline "Merging vars"; *\)
+                    * let lvs = merge_vars lvs in *)
                    
                    (* print_endline "loop modified variables:"; *)
                    (* print_endline (string_of_int (List.length lvs)); *)
@@ -815,7 +830,7 @@ let rec step (c : config) : config list =
          print_endline "Asserting invariant..";
        (* print_endline "assert"; *)
        if assert_invar lvs c then (
-         analyzed_loops := AnalyzedLoopsMap.add (Obj.magic e) lvs (!analyzed_loops);
+         (* analyzed_loops := AnalyzedLoopsMap.add (Obj.magic e) lvs (!analyzed_loops); *)
          [{c with code = vs, List.tl es}]
        )
        else failwith "Assertion failed"
@@ -848,30 +863,21 @@ let rec step (c : config) : config list =
         * print_endline (string_of_bool is_low); *)
 
 
-       let lvs = 
-         (* try (
-          *   ModifiedVarsMap.find (Obj.magic l) !modified_vars
-          * ) with Not_found -> ( *)
-           (* print_endline "Finding vars"; *)
-           let vs'', es'' = vs, [Label (n, [Plain l @@ loc],
-                                        (vs''', code'''), (pclet,pc),
-                                        c.induction_vars, c.ct_check) @@ e.at] in
-
-           let lvs, _ = find_modified_vars (Obj.magic e) {c with code = vs'', es'' @ List.tl es;} in
-           (* print_endline "loop modified variables:";
-            * print_endline (string_of_int (List.length lvs));
-            * List.iter print_loopvar lvs; *)
-
-           (* print_endline "Merging vars"; *)
+       let vs'', es'' = vs, [Label (n, [Plain l @@ loc],
+                                    (vs''', code'''), (pclet,pc),
+                                    c.induction_vars, c.ct_check) @@ e.at] in
+       let lvs =
+         try (
+           let lvs = ModifiedVarsMap.find (Obj.magic l) !modified_vars in
+           find_policy lvs c
+         ) with Not_found -> (
+           
+           let lvs, _ = find_modified_vars (Obj.magic e)
+                          {c with code = vs'', es'' @ List.tl es;} in
            let lvs = merge_vars lvs in
-
-           (* print_endline "loop modified variables:";
-            * print_endline (string_of_int (List.length lvs));
-            * List.iter print_loopvar lvs; *)
-
            modified_vars := ModifiedVarsMap.add (Obj.magic l) lvs !modified_vars;
            lvs
-         (* ) *)
+         )
        in
        
        (* print_endline "loop modified variables:";
