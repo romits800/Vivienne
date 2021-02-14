@@ -49,6 +49,7 @@ Params.set_print_mode !ctx Z3enums.PRINT_SMTLIB2_COMPLIANT;;
 let remove fil = if !Flags.no_clean then () else remove fil
 
 let magic_number = 300
+let magic_number_2 = 3000
                  
 let print_exp exp =
   (match exp with
@@ -1341,28 +1342,51 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
                  (read_sat "cvc4") (read_sat "boolector") (read_sat "bitwuzla") in
      remove filename;
      res
-   ) else ( 
+   ) else if !Flags.z3_only then ( 
 
-    (if (!Flags.stats) then
-       Stats.update_query_str "Z3_bindings") ;
-    let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
+     (if (!Flags.stats) then
+        Stats.update_query_str "Z3_bindings") ;
+     let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
 
-    let check_solver = Solver.check solver [] in
-    match check_solver with
-    | Solver.SATISFIABLE ->
+     let check_solver = Solver.check solver [] in
+     match check_solver with
+     | Solver.SATISFIABLE ->
+        (if (!Flags.stats) then
+           Stats.update_query_time (Unix.gettimeofday () -. start));
+        (* let model = Solver.get_model solver in
+         * (match model with
+         *  | None -> print_endline "None"
+         *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
+         * ); *)
+        true
+     | _ ->
+        (if (!Flags.stats) then
+           Stats.update_query_time (Unix.gettimeofday () -. start));
+        false
+   ) else (
+     if  num_exprs > magic_number_2  then (
+       let filename = write_formula_to_file solver in
+       let res = run_solvers filename (read_sat "yices") (read_sat "z3")
+                   (read_sat "cvc4") (read_sat "boolector") (read_sat "bitwuzla") in
+       remove filename;
+       res
+     ) else (
        (if (!Flags.stats) then
-          Stats.update_query_time (Unix.gettimeofday () -. start));
-       (* let model = Solver.get_model solver in
-        * (match model with
-        *  | None -> print_endline "None"
-        *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
-        * ); *)
-       true
-    | _ ->
-       (if (!Flags.stats) then
-          Stats.update_query_time (Unix.gettimeofday () -. start));
-       false
-  )
+          Stats.update_query_str "Z3_bindings") ;
+       let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
+
+       let check_solver = Solver.check solver [] in
+       match check_solver with
+       | Solver.SATISFIABLE ->
+          (if (!Flags.stats) then
+             Stats.update_query_time (Unix.gettimeofday () -. start));
+          true
+       | _ ->
+          (if (!Flags.stats) then
+             Stats.update_query_time (Unix.gettimeofday () -. start));
+          false
+     )
+   )
   (* )
    * else (
    *   if num_exprs > magic_number then (
