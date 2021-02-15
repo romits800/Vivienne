@@ -6,7 +6,8 @@ open Sys
 (* open Unix *)
 open Smtlib
 open Stats  
-
+open Config
+   
 let path = ref (getenv "VIV_PATH")
 
    
@@ -47,9 +48,6 @@ Params.set_print_mode !ctx Z3enums.PRINT_SMTLIB2_COMPLIANT;;
           
 (* dissable tmp file removal *)
 let remove fil = if !Flags.no_clean then () else remove fil
-
-let magic_number = 300
-let magic_number_2 = 3000
                  
 let print_exp exp =
   (match exp with
