@@ -49,6 +49,7 @@ Params.set_print_mode !ctx Z3enums.PRINT_SMTLIB2_COMPLIANT;;
 let remove fil = if !Flags.no_clean then () else remove fil
 
 let magic_number = 300
+let magic_number_2 = 3000
                  
 let print_exp exp =
   (match exp with
@@ -1106,8 +1107,8 @@ let is_unsat (pc : pc_ext) (mem: Smemory.t list * int) =
   
 let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) =
   (* print_endline "is_ct_unsat"; *)
-  (* Pc_type.print_pc pc |> print_endline;
-   * svalue_to_string sv |> print_endline; *)
+  (* Pc_type.print_pc (snd pc) |> print_endline; *)
+  (* svalue_to_string sv |> print_endline; *)
   let ctx = init_solver() in
 
   let v = sv_to_expr pc sv ctx mem in
@@ -1136,7 +1137,7 @@ let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) =
       
      let solver = Solver.mk_solver ctx None in
      List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
-
+     
      if !Flags.portfolio_only then (
        let filename = write_formula_to_file solver in
        let res = not (run_solvers filename (read_sat "yices")
@@ -1194,7 +1195,7 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
       print_endline "Checking if value is CT..";
  
   (* print_endline "is_v_ct_unsat"; *) 
-  (* Pc_type.print_pc (snd pc) |> print_endline;-
+  (* Pc_type.print_pc (snd pc) |> print_endline;
    * svalue_to_string sv |> print_endline; *)
 
   let ctx = init_solver() in
@@ -1341,28 +1342,51 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
                  (read_sat "cvc4") (read_sat "boolector") (read_sat "bitwuzla") in
      remove filename;
      res
-   ) else ( 
+   ) else if !Flags.z3_only then ( 
 
-    (if (!Flags.stats) then
-       Stats.update_query_str "Z3_bindings") ;
-    let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
+     (if (!Flags.stats) then
+        Stats.update_query_str "Z3_bindings") ;
+     let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
 
-    let check_solver = Solver.check solver [] in
-    match check_solver with
-    | Solver.SATISFIABLE ->
+     let check_solver = Solver.check solver [] in
+     match check_solver with
+     | Solver.SATISFIABLE ->
+        (if (!Flags.stats) then
+           Stats.update_query_time (Unix.gettimeofday () -. start));
+        (* let model = Solver.get_model solver in
+         * (match model with
+         *  | None -> print_endline "None"
+         *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
+         * ); *)
+        true
+     | _ ->
+        (if (!Flags.stats) then
+           Stats.update_query_time (Unix.gettimeofday () -. start));
+        false
+   ) else (
+     if  num_exprs > magic_number_2  then (
+       let filename = write_formula_to_file solver in
+       let res = run_solvers filename (read_sat "yices") (read_sat "z3")
+                   (read_sat "cvc4") (read_sat "boolector") (read_sat "bitwuzla") in
+       remove filename;
+       res
+     ) else (
        (if (!Flags.stats) then
-          Stats.update_query_time (Unix.gettimeofday () -. start));
-       (* let model = Solver.get_model solver in
-        * (match model with
-        *  | None -> print_endline "None"
-        *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
-        * ); *)
-       true
-    | _ ->
-       (if (!Flags.stats) then
-          Stats.update_query_time (Unix.gettimeofday () -. start));
-       false
-  )
+          Stats.update_query_str "Z3_bindings") ;
+       let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
+
+       let check_solver = Solver.check solver [] in
+       match check_solver with
+       | Solver.SATISFIABLE ->
+          (if (!Flags.stats) then
+             Stats.update_query_time (Unix.gettimeofday () -. start));
+          true
+       | _ ->
+          (if (!Flags.stats) then
+             Stats.update_query_time (Unix.gettimeofday () -. start));
+          false
+     )
+   )
   (* )
    * else (
    *   if num_exprs > magic_number then (

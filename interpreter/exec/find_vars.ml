@@ -5,36 +5,37 @@ open Instance
 open Ast
 open Source
 
-let compare_svalues vold vnew =
+let compare_svalues vold vnew = Nothing
   (* print_endline "compare_values";
    * svalue_to_string vold |> print_endline;
    * svalue_to_string vnew |> print_endline; *)
-  let v = 
-    match vold, vnew with
-    | SI32 v1, SI32 (Smt_type.App (Smt_type.BvAdd, [v2;v3]))
-         when v1 = v2 || v1 = v3 -> Increase vold
-    | SI32 (Smt_type.BitVec(i1,nd1)), SI32 (Smt_type.BitVec(i2,nd2))
-         when i1 < i2 -> Increase vold
-    | SI32 v1, SI32 (Smt_type.App (Smt_type.BvSub, [v2;v3]))
-         when v1 = v2 -> Decrease vold
-    | SI32 (Smt_type.BitVec(i1,nd1)), SI32 (Smt_type.BitVec(i2,nd2))
-         when i1 > i2 -> Decrease vold
-    | SI64 v1, SI64 (Smt_type.App (Smt_type.BvAdd, [v2;v3]))
-         when v1 = v2 || v1 = v3 -> Increase vold
-    | SI64 (Smt_type.BitVec(i1,nd1)), SI64 (Smt_type.BitVec(i2,nd2))
-         when i1 < i2 -> Increase vold
-    | SI64 v1, SI64 (Smt_type.App (Smt_type.BvSub, [v2;v3]))
-         when v1 = v2 -> Decrease vold
-    | SI64 (Smt_type.BitVec(i1,nd1)), SI64 (Smt_type.BitVec(i2,nd2))
-         when i1 > i2 -> Decrease vold                 
-    | _ ->  Nothing
-  in
+  (* let v = 
+   *   match vold, vnew with
+   *   | SI32 v1, SI32 (Smt_type.App (Smt_type.BvAdd, [v2;v3]))
+   *        when v1 = v2 || v1 = v3 -> Increase vold
+   *   | SI32 (Smt_type.BitVec(i1,nd1)), SI32 (Smt_type.BitVec(i2,nd2))
+   *        when i1 < i2 -> Increase vold
+   *   | SI32 v1, SI32 (Smt_type.App (Smt_type.BvSub, [v2;v3]))
+   *        when v1 = v2 -> Decrease vold
+   *   | SI32 (Smt_type.BitVec(i1,nd1)), SI32 (Smt_type.BitVec(i2,nd2))
+   *        when i1 > i2 -> Decrease vold
+   *   | SI64 v1, SI64 (Smt_type.App (Smt_type.BvAdd, [v2;v3]))
+   *        when v1 = v2 || v1 = v3 -> Increase vold
+   *   | SI64 (Smt_type.BitVec(i1,nd1)), SI64 (Smt_type.BitVec(i2,nd2))
+   *        when i1 < i2 -> Increase vold
+   *   | SI64 v1, SI64 (Smt_type.App (Smt_type.BvSub, [v2;v3]))
+   *        when v1 = v2 -> Decrease vold
+   *   | SI64 (Smt_type.BitVec(i1,nd1)), SI64 (Smt_type.BitVec(i2,nd2))
+   *        when i1 > i2 -> Decrease vold                 
+   *   | _ ->  Nothing
+   * in *)
   (* modifier_to_string v |> print_endline; *)
-  v
+  (* v *)
 
 let collect_local = ref true
 
-let find_modified_vars (analyzed_loop : int ) (c : config) : loopvar_t list * config list =
+let find_modified_vars (analyzed_loop : int ) (c : config) :
+      loopvar_t list * config list =
   let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config list =
     let {frame; code = vs, es; pc = pclet, pc; _} = c in
 

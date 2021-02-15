@@ -699,9 +699,9 @@ let induction_vars (c : config) (c_orig : config) (lv : loopvar_t list) :
       triple *  config =
   (*(triple IndVarMap.t) = *) 
   let ivs,_ = find_induction_vars IndVarMap.empty c c_orig in  
-  let iv,c' = create_induction_variable c in
+  let iv, c' = create_induction_variable c in
   let ivs' = replace_induction_vars iv ivs in
   let c' = { c' with  induction_vars = Some ivs' } in
-  (iv, c')
+  iv, c'
   (* eliminate_vars c lv ivs' *)
 
