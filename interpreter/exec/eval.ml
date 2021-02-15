@@ -97,7 +97,8 @@ and admin_instr' =
   | Assert of loopvar_t list * instr'
   | Havoc of loopvar_t list
   | FirstPass of int32 * admin_instr list * code
-  | SecondPass of int32 * admin_instr list * code 
+  | NonCheckPass of int32 * admin_instr list * code * loopvar_t list 
+  | SecondPass of int32 * admin_instr list * code
            
 type obs_type =
   | CT_UNSAT of pc_ext * svalue * (Smemory.t list * int) * obs_type

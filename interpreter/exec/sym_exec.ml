@@ -149,7 +149,8 @@ let rec step (c : config) : config list =
 
                  if !Flags.unroll_one then (
                    
-                   let second_pass = SecondPass (n1, [Plain e' @@ e.at], (args, List.map plain es')) in
+                   let second_pass = SecondPass (n1, [Plain e' @@ e.at],
+                                                 (args, List.map plain es')) in
 
                    let vs'', es'' = vs', [Label (n1, [second_pass @@ e.at],
                                                  (args, List.map plain es'), (pclet,pc),
@@ -185,35 +186,47 @@ let rec step (c : config) : config list =
                    (* HAVOC *)
                    let havc = havoc_vars lvs c in
                  
-                   let havc' =
-                     if !Flags.elim_induction_variables then
-                       let vs'', es'' = vs', [Label (n1, [],
-                                                     (args, List.map plain es'), (pclet,pc),
-                                                     c.induction_vars, c.ct_check) @@ e.at] in
-                       let nhavc = {havc with code = vs'', es'' @ List.tl es;} in
-                       let nc = {c with code = vs'', es'' @ List.tl es;} in
-                       let iv, havc' = induction_vars nhavc nc lvs in
-                       print_endline "Printing induction vars.";
-                       print_endline (triple_to_string iv);
-                       ( match havc'.induction_vars with
-                         | None -> ()
-                         | Some ivs ->
-                            IndVarMap.iter (fun k iv -> print_endline (svalue_to_string k ^ " " ^ triple_to_string iv)) ivs
-                       );
-                       print_endline "Done printing.";
-                       havc'
-                     else
-                       havc
-                   in
-                   
-                   let assrt = Assert (lvs, e') in
-                   let first_pass = FirstPass (n1, [assrt @@ e.at],
-                                               (args, List.map plain es')) in
-                   let vs'', es'' = vs', [
-                         first_pass @@ e.at; (* first pass *)
-                       ] in
-                   [{havc' with code = vs'', es'' @ List.tl es; progc = Obj.magic e'}]
-                 ) (*No unroll *)
+                   if !Flags.elim_induction_variables then (
+                     let vs'', es'' = vs', [Label (n1, [],
+                                                   (args, List.map plain es'), (pclet,pc),
+                                                   c.induction_vars, c.ct_check) @@ e.at] in
+                     let nhavc = {havc with code = vs'', es'' @ List.tl es;} in
+                     let nc = {c with code = vs'', es'' @ List.tl es;} in
+                     let iv, havc' = induction_vars nhavc nc lvs in
+
+                     (* print_endline "Printing induction vars.";
+                      * print_endline (triple_to_string iv);
+                      * ( match havc'.induction_vars with
+                      *   | None -> ()
+                      *   | Some ivs ->
+                      *      IndVarMap.iter (fun k iv -> print_endline (svalue_to_string k ^ " " ^ triple_to_string iv)) ivs
+                      * );
+                      * print_endline "Done printing."; *)
+
+
+                     (* let assrt = Assert (lvs, e') in *)
+                     let nc_pass = NonCheckPass (n1, [Plain e' @@ e.at],
+                                                 (args, List.map plain es'), lvs) in
+                     (* let vs'', es'' = vs', [
+                      *       nc_pass @@ e.at; 
+                      *     ] in *)
+                     let vs', es' = vs', [Label (n1, [nc_pass @@ e.at],
+                                                 (args, List.map plain es'),
+                                                 (pclet, pc),
+                                                 c.induction_vars, false) @@ e.at ] in
+                     [{havc' with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
+
+                   )
+                   else (                     
+                     let assrt = Assert (lvs, e') in
+                     let vs', es' = vs', [Label (n1, [assrt @@ e.at],
+                                                 (args, List.map plain es'),
+                                                 (pclet, pc),
+                                                 c.induction_vars, true) @@ e.at ] in
+                     [{havc with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
+
+                   ) (* No elim induction vars *)
+                 ) (* No unroll *)
                  
 
              (*   assertX;
@@ -396,13 +409,13 @@ let rec step (c : config) : config list =
            if !Flags.elim_induction_variables then (
              (try 
                 let oldv = local frame x in
-                print_endline "local set";
-                print_endline (svalue_to_string oldv);
+                (* print_endline "local set";
+                 * print_endline (svalue_to_string oldv); *)
                 let ivs = match c.induction_vars with Some ivs -> ivs | None -> failwith "No ivs"; in
                 let init_val, iv, b1, b2 = IndVarMap.find oldv ivs in
-                print_endline (triple_to_string (init_val, iv, b1, b2));
+                (* print_endline (triple_to_string (init_val, iv, b1, b2)); *)
                 let v = multiply_triple iv b1 b2 in
-                print_endline (Pc_type.svalue_to_string v);
+                (* print_endline (Pc_type.svalue_to_string v); *)
                 let frame' = update_local c.frame x v in
                 let vs', es' = vs', [] in
                 [{c with code = vs', es' @ List.tl es; frame = frame'; progc = Obj.magic e'}]
@@ -420,14 +433,14 @@ let rec step (c : config) : config list =
            (* print_endline "localtee"; *)
            if !Flags.elim_induction_variables then (
              (try
-                print_endline "local tee";
+                (* print_endline "local tee"; *)
                 let oldv = local frame x in
-                print_endline (svalue_to_string oldv);
+                (* print_endline (svalue_to_string oldv); *)
                 let ivs = match c.induction_vars with Some ivs -> ivs | None -> failwith "No ivs"; in
                 let init_val, iv, b1, b2 = IndVarMap.find oldv ivs in
-                print_endline (triple_to_string (init_val, iv, b1, b2));
+                (* print_endline (triple_to_string (init_val, iv, b1, b2)); *)
                 let v = multiply_triple iv b1 b2 in
-                print_endline (Pc_type.svalue_to_string v);
+                (* print_endline (Pc_type.svalue_to_string v); *)
                 let frame' = update_local c.frame x v in
                 let vs', es' = v :: vs', [] in
                 [{c with code = vs', es' @ List.tl es; frame = frame'; progc = Obj.magic e'}]
@@ -670,7 +683,7 @@ let rec step (c : config) : config list =
                               CT_V_UNSAT((pclet,pc''), sv, mems, c.observations)} in
                   
                   let nonv, found =
-                    if (!Flags.explicit_leaks) then (
+                    if (!Flags.explicit_leaks && c.ct_check) then (
                       try VulnerabilitiesMap.find (Obj.magic e') !noninter_vuln, true 
                       with Not_found ->
                             let solv = Z3_solver.is_v_ct_unsat (pclet, pc'') sv mems in
@@ -692,7 +705,7 @@ let rec step (c : config) : config list =
                                           progc = Obj.magic e'}]
                      )
                    else (
-                     if not found && not nonv then 
+                     if not found then 
                        NonInterference.warn e.at "Trying to write high values in low memory"
                      else ();
                      [{c with code = vs', es' @ List.tl es;
@@ -844,16 +857,11 @@ let rec step (c : config) : config list =
 
     | FirstPass  (n, es0, (vs', code')), vs ->
        (* print_endline "first pass"; *)
-
+       (* Not used right now *)
        let vs', es' = vs, [Label (n, es0, (vs', code'),
                                   (pclet, pc), c.induction_vars, true) @@ e.at] in
-       if (!Flags.elim_induction_variables && false ) then (
-           let c' = elim_induction_vars_loop {c with code = vs', es'} in
-           List.map (fun ci -> {c with code = vs, List.tl es}) c'
-         )
-       else (
-         [{c with code = vs', es' @ List.tl es}]
-       )
+       [{c with code = vs', es' @ List.tl es}]
+
     | SecondPass  (n, [{it=Plain ((Loop _) as l); at=loc}], (vs''', code''')), vs ->
        (* print_endline "second pass"; *)
        (* print_endline "Printing induction variables";
@@ -863,14 +871,14 @@ let rec step (c : config) : config list =
         * let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
         * let is_low = Z3_solver.is_v_ct_unsat c.pc vv mem in
         * print_endline (string_of_bool is_low); *)
-
+       let args, vs' = take n vs e.at, drop n vs e.at in
        let lvs =
          try (
            let lvs = ModifiedVarsMap.find (Obj.magic l) !modified_vars in
            find_policy lvs c
          ) with Not_found -> (
-           let vs'', es'' = vs, [Label (n, [Plain l @@ loc],
-                                        (vs''', code'''), (pclet,pc),
+           let vs'', es'' = vs', [Label (n, [Plain l @@ loc],
+                                        (args, code'''), (pclet,pc),
                                         c.induction_vars, c.ct_check) @@ e.at] in
            
            let lvs, _ = find_modified_vars (Obj.magic e)
@@ -889,68 +897,67 @@ let rec step (c : config) : config list =
        (* HAVOC *)
        let havc = havoc_vars lvs c in
 
-       let havc' =
-         if !Flags.elim_induction_variables then
-           let vs'', es'' = vs, [Label (n, [],
-                                        (vs''', code'''), (pclet,pc),
-                                        c.induction_vars, c.ct_check) @@ e.at] in
-           let nhavc = {havc with code = vs'', es'' @ List.tl es;} in
-           let nc = {c with code = vs'', es'' @ List.tl es;} in
-           let iv, havc' = induction_vars nhavc nc lvs in
-           print_endline "Printing induction vars.";
-           print_endline (triple_to_string iv);
-           ( match havc'.induction_vars with
-             | None -> ()
-             | Some ivs ->
-                IndVarMap.iter (fun k iv ->
-                    print_endline (svalue_to_string k ^ " " ^ triple_to_string iv)) ivs
-           );
-           print_endline "Done printing.";
-           havc'
-         else
-           havc
-       in
-       let assrt = Assert (lvs, l) in
-      
-       let vs'', es'' = vs, [Label (n, [assrt @@ e.at],
-                                     (vs''', code'''), (pclet,pc),
-                                     havc'.induction_vars, c.ct_check) @@ e.at] in
 
-       (* print_endline "Finish second pass"; *)
-       let havc' = {havc' with code = vs'', es'' @ List.tl es;} in
+       if !Flags.elim_induction_variables then (
+         let vs'', es'' = vs', [Label (n, [],
+                                       (args, code'''), (pclet,pc),
+                                       c.induction_vars, c.ct_check) @@ e.at] in
+         let nhavc = {havc with code = vs'', es'' @ List.tl es;} in
+         let nc = {c with code = vs'', es'' @ List.tl es;} in
+         let iv, havc' = induction_vars nhavc nc lvs in
 
-       (* let havc' =
-        *   if !Flags.elim_induction_variables then
-        *     let nc = {c with code = vs'', es'' @ List.tl es;} in
-        *     let iv, havc' = induction_vars nhavc nc lvs in
-        *     havc'
-        *   else
-        *     nhavc
-        * in *)
-       
-       (* let first_pass = FirstPass (n1, [], (args, List.map plain es')) in *)
-       (* let second_pass = SecondPass (n1, [], (args, List.map plain es')) in *)
-       (* let vs'', es'' = vs, [
-        *       (\* havoc @@ e.at; *\)
-        *       (\* first_pass @@ e.at; (\\* first pass *\\) *\)
-        *       (\* second_pass @@ e.at; *\)
-        *       assrt @@ e.at
-        *     ] in *)
-       [{havc' with code = vs'', es'' @ List.tl es; progc = Obj.magic l}]
+         (* print_endline "Printing induction vars.";
+          * print_endline (triple_to_string iv);
+          * ( match havc'.induction_vars with
+          *   | None -> ()
+          *   | Some ivs ->
+          *      IndVarMap.iter (fun k iv -> print_endline (svalue_to_string k ^ " " ^ triple_to_string iv)) ivs
+          * );
+          * print_endline "Done printing."; *)
 
-       (* let vs', es' = vs, [Label (n, es0, (vs', code'),
-        *                            (pclet, pc), c.induction_vars, true) @@ e.at] in *)
-       
-       (* if (!Flags.elim_induction_variables) then (
-        *   let c' = elim_induction_vars_loop {c with code = vs', es'} in
-        *   List.map (fun ci -> {c with code = vs, List.tl es}) c'
-        * )
-        * else (
-        *   [{c with code = vs', es' @ List.tl es}]
-        * ) *)
+
+         (* let assrt = Assert (lvs, e') in *)
+         let nc_pass = NonCheckPass (n, [Plain l @@ e.at],
+                                     (args, code'''), lvs) in
+         (* let vs'', es'' = vs', [
+          *       nc_pass @@ e.at; 
+          *     ] in *)
+         let vs', es' = vs', [Label (n, [nc_pass @@ e.at],
+                                     (args, code'''),
+                                     (pclet, pc),
+                                     c.induction_vars, false) @@ e.at ] in
+         [{havc' with code = vs', es' @ List.tl es; progc = Obj.magic l}]
+
+       ) else (
+         let assrt = Assert (lvs, l) in
+         
+         let vs'', es'' = vs', [Label (n, [assrt @@ e.at],
+                                       (args, code'''), (pclet,pc),
+                                       havc.induction_vars, c.ct_check) @@ e.at] in
+
+         (* print_endline "Finish second pass"; *)
+         let havc' = {havc with code = vs'', es'' @ List.tl es;} in
+
+         [{havc' with code = vs'', es'' @ List.tl es; progc = Obj.magic l}]
+       )
     | SecondPass  (n, _, (vs''', code''')), vs ->
        Crash.error e.at "Unexpected SecondPass without loop"
-      
+
+
+    | NonCheckPass  (n, [{it=Plain ((Loop _) as l); at=loc}],
+                     (vs''', code'''), lvs), vs ->
+
+       let args, vs' = take n vs e.at, drop n vs e.at in
+       let assrt = Assert (lvs, l) in
+       let vs'', es'' = vs', [Label (n, [assrt @@ e.at],
+                                   (args, code'''),
+                                   (pclet, pc),
+                                   c.induction_vars, true) @@ e.at ] in
+       [{c with code = vs'', es'' @ List.tl es; progc = Obj.magic l}]
+
+    | NonCheckPass  (n, _, (vs''', code'''), _), vs ->
+       Crash.error e.at "Unexpected NonCheckPass without loop"
+
     | Returning vs', vs ->
        Crash.error e.at "undefined frame"
 

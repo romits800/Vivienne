@@ -14,7 +14,7 @@ let compare_svalues vold vnew = Nothing
    *   | SI32 v1, SI32 (Smt_type.App (Smt_type.BvAdd, [v2;v3]))
    *        when v1 = v2 || v1 = v3 -> Increase vold
    *   | SI32 (Smt_type.BitVec(i1,nd1)), SI32 (Smt_type.BitVec(i2,nd2))
-   *        when i1 < i2 -> Increase vold
+   *        when i1 < i2 -> Increasge vold
    *   | SI32 v1, SI32 (Smt_type.App (Smt_type.BvSub, [v2;v3]))
    *        when v1 = v2 -> Decrease vold
    *   | SI32 (Smt_type.BitVec(i1,nd1)), SI32 (Smt_type.BitVec(i2,nd2))
@@ -390,6 +390,9 @@ let find_modified_vars (analyzed_loop : int ) (c : config) :
 
         | SecondPass _, vs ->
            failwith "Unexpected SecondPass in find_vars";
+
+        | NonCheckPass _, vs ->
+           failwith "Unexpected NonCheck in find_vars";
 
         | FirstPass _, vs ->
            failwith "Unexpected FirstPass in find_vars";

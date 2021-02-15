@@ -458,6 +458,9 @@ let rec find_induction_vars (lv : triple IndVarMap.t) (c : config) (c_orig : con
       | SecondPass _, vs ->
          failwith "Unexpected SecondPass in find_induction_vars";
 
+      | NonCheckPass _, vs ->
+         failwith "Unexpected NonCheckPass in find_induction_vars";
+
       | FirstPass _, vs ->
          failwith "Unexpected FirstPass in find_induction_vars";
 
