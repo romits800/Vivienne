@@ -549,37 +549,41 @@ let rec step (c : config) : config list =
                try VulnerabilitiesMap.find (Obj.magic e') !memindex_vuln, true 
                with Not_found ->
                  let solv = Z3_solver.is_v_ct_unsat (pclet, pc) final_addr mem in
-                 memindex_vuln := VulnerabilitiesMap.add (Obj.magic e') solv !memindex_vuln;
+                 if not solv then 
+                   memindex_vuln := VulnerabilitiesMap.add (Obj.magic e') solv !memindex_vuln;
                  solv, false
              in
 
-             if memind then
-               (
-                 (* with exn ->
-                  *    let vs', es' = vs', [Trapped (memory_error e.at exn) @@ e.at] in 
-                  *    [{c with code = vs', es' @ List.tl es}]
-                  * ) *)
-                 let vs', es' =  nv :: vs', [] in 
-                 let res =
-                   match Z3_solver.is_sat (pclet, pc') mem,  Z3_solver.is_sat (pclet, pc'') mem with
-                   | true,true ->
-                      [{c with code = vs', es' @ List.tl es;
-                               frame = frame;
-                               pc = pclet, pc;
-                               progc = Obj.magic e'}]
-                   | true, false ->
-                      [{c with code = vs', es' @ List.tl es;
-                               frame = frame;
-                               pc = pclet, pc';
-                               progc = Obj.magic e'}]
-                   | false, true ->
-                      [{c with code = vs', es' @ List.tl es;
-                               frame = frame;
-                               pc = pclet, pc'';
-                               progc = Obj.magic e'}]
-                   | false, false -> failwith "Load No path left";
-                 in
-                 res)
+             if not found && not memind then 
+               ConstantTime.warn e.at "Load: Constant-time violation"
+             else ();
+             
+             (* with exn ->
+              *    let vs', es' = vs', [Trapped (memory_error e.at exn) @@ e.at] in 
+              *    [{c with code = vs', es' @ List.tl es}]
+              * ) *)
+             let vs', es' =  nv :: vs', [] in 
+             let res =
+               match Z3_solver.is_sat (pclet, pc') mem,  Z3_solver.is_sat (pclet, pc'') mem with
+               | true,true ->
+                  [{c with code = vs', es' @ List.tl es;
+                           frame = frame;
+                           pc = pclet, pc;
+                           progc = Obj.magic e'}]
+               | true, false ->
+                  [{c with code = vs', es' @ List.tl es;
+                           frame = frame;
+                           pc = pclet, pc';
+                           progc = Obj.magic e'}]
+               | false, true ->
+                  [{c with code = vs', es' @ List.tl es;
+                           frame = frame;
+                           pc = pclet, pc'';
+                           progc = Obj.magic e'}]
+               | false, false -> failwith "Load No path left";
+             in
+             res
+           )
                  (* let res = if Z3_solver.is_sat (pclet, pc'') mem then
                   *             (\* low values *\)
                   *             {c with code = vs', es' @ List.tl es;
@@ -587,17 +591,7 @@ let rec step (c : config) : config list =
                   *                     pc = pclet,pc''}:: res
                   *           else res in
                   * res) *)
-             else (
-               if not found then 
-                 ConstantTime.warn e.at "Load: Constant-time violation"
-               else ();
-               
-               [{c with code = nv :: vs', [] @ List.tl es;
-                        frame = frame;
-                        pc = pclet, pc;
-                        progc = Obj.magic e'}]
-             )
-           )
+           
            else (
              let nv =
                (match sz with
@@ -646,100 +640,101 @@ let rec step (c : config) : config list =
                try VulnerabilitiesMap.find (Obj.magic e') !memindex_vuln, true 
                with Not_found ->
                  let solv = Z3_solver.is_v_ct_unsat (pclet, pc) final_addr mems in
-                 memindex_vuln := VulnerabilitiesMap.add (Obj.magic e') solv !memindex_vuln;
+                 if not solv then 
+                   memindex_vuln := VulnerabilitiesMap.add (Obj.magic e') solv !memindex_vuln;
                  solv, false
              in
 
              
-             if memind then
-               
-               let msec = Smemory.get_secrets mem in
-               let mpub = Smemory.get_public mem in
-               (* print_endline "c.msecrets";
-                * List.length msec |> string_of_int |> print_endline; *)
-               let pc', pc'' = split_msec final_addr msec mpub pc in
-               (* print_endline "Store:";
-                * svalue_to_string sv |> print_endline;
-                * svalue_to_string final_addr |> print_endline; *)
-               (* print_pc pc' |> print_endline; *)
-               (* print_pc pc'' |> print_endline; *)
 
-               let nv =
-                 (match sz with
-                  | None -> Eval_symbolic.eval_store ty final_addr sv
-                              (smemlen frame.inst) (Types.size ty)
-                  | Some (sz) ->
-                     assert (packed_size sz <= Types.size ty);
-                     let n = packed_size sz in
-                     Eval_symbolic.eval_store ty final_addr sv
-                       (smemlen frame.inst) n
-                 )
-               in
+             if not memind && not found then
+               ConstantTime.warn e.at "Store: Constant-time violation";
+             
+             (* [{c with code = vs', [] @ List.tl es;
+              *          frame = frame;
+              *          pc = pclet, pc;
+              *          progc = Obj.magic e'}] *)
+             (* ) *)
+             let msec = Smemory.get_secrets mem in
+             let mpub = Smemory.get_public mem in
+             (* print_endline "c.msecrets";
+              * List.length msec |> string_of_int |> print_endline; *)
+             let pc', pc'' = split_msec final_addr msec mpub pc in
+             (* print_endline "Store:";
+              * svalue_to_string sv |> print_endline;
+              * svalue_to_string final_addr |> print_endline; *)
+             (* print_pc pc' |> print_endline; *)
+             (* print_pc pc'' |> print_endline; *)
 
-               (* let nv = Eval_symbolic.eval_store ty final_addr sv
-                *            (smemlen frame.inst) 4 in *)
-               let mem' = Smemory.store_sind_value mem nv in
-               let vs', es' = vs', [] in
-               (* Update memory with a store *)
-               let nframe = {frame with inst = insert_smemory frame.inst mem'} in
+             let nv =
+               (match sz with
+                | None -> Eval_symbolic.eval_store ty final_addr sv
+                            (smemlen frame.inst) (Types.size ty)
+                | Some (sz) ->
+                   assert (packed_size sz <= Types.size ty);
+                   let n = packed_size sz in
+                   Eval_symbolic.eval_store ty final_addr sv
+                     (smemlen frame.inst) n
+               )
+             in
 
-               (* Path1: we store the value in secret memory *)
-               let res =
-                 (* match Z3_solver.is_sat (pclet, pc') mems, *)
-                 match Z3_solver.is_sat (pclet, pc'') mems with
-                 | true ->
-                    let c =
-                      {c with observations =
-                                CT_V_UNSAT((pclet,pc''), sv, mems, c.observations)} in
-                    
-                    let nonv, found =
-                      if (!Flags.explicit_leaks) then (
-                        try VulnerabilitiesMap.find (Obj.magic e') !noninter_vuln, true 
-                        with Not_found ->
-                          let solv = Z3_solver.is_v_ct_unsat (pclet, pc'') sv mems in
-                          noninter_vuln := VulnerabilitiesMap.add (Obj.magic e') solv !noninter_vuln;
-                          solv, false)
-                      else true, false
-                    in
+             (* let nv = Eval_symbolic.eval_store ty final_addr sv
+              *            (smemlen frame.inst) 4 in *)
+             let mem' = Smemory.store_sind_value mem nv in
+             let vs', es' = vs', [] in
+             (* Update memory with a store *)
+             let nframe = {frame with inst = insert_smemory frame.inst mem'} in
 
-                    (if nonv then
-                       (match Z3_solver.is_sat (pclet, pc') mems with
-                        | true -> [{c with code = vs', es' @ List.tl es;
-                                           frame = nframe;
-                                           pc = pclet, pc;
-                                           progc = Obj.magic e'}]
-                        | false -> [{c with code = vs', es' @ List.tl es;
-                                            frame = nframe;
-                                            pc = pclet, pc'';
-                                            progc = Obj.magic e'}]
-                       )
-                     else (
-                       if not found then 
-                         NonInterference.warn e.at "Trying to write high values in low memory"
-                       else ();
-                       [{c with code = vs', es' @ List.tl es;
-                                           frame = nframe;
-                                           pc = pclet, pc;
-                                           progc = Obj.magic e'}]
+             (* Path1: we store the value in secret memory *)
+             let res =
+               (* match Z3_solver.is_sat (pclet, pc') mems, *)
+               match Z3_solver.is_sat (pclet, pc'') mems with
+               | true ->
+                  let c =
+                    {c with observations =
+                              CT_V_UNSAT((pclet,pc''), sv, mems, c.observations)} in
+                  
+                  let nonv, found =
+                    if (!Flags.explicit_leaks) then (
+                      try VulnerabilitiesMap.find (Obj.magic e') !noninter_vuln, true 
+                      with Not_found ->
+                            let solv = Z3_solver.is_v_ct_unsat (pclet, pc'') sv mems in
+                            if not solv then 
+                              noninter_vuln := VulnerabilitiesMap.add (Obj.magic e') solv !noninter_vuln;
+                            solv, false)
+                    else true, false
+                  in
+
+                  (if nonv then
+                     (match Z3_solver.is_sat (pclet, pc') mems with
+                      | true -> [{c with code = vs', es' @ List.tl es;
+                                         frame = nframe;
+                                         pc = pclet, pc;
+                                         progc = Obj.magic e'}]
+                      | false -> [{c with code = vs', es' @ List.tl es;
+                                          frame = nframe;
+                                          pc = pclet, pc'';
+                                          progc = Obj.magic e'}]
                      )
-                    )
-                 | false ->
-                    (match Z3_solver.is_sat (pclet, pc') mems with
-                     | true -> [{c with code = vs', es' @ List.tl es;
-                                        frame = nframe;
-                                        pc = pclet, pc';
-                                        progc = Obj.magic e'}]
-                     | false -> failwith "No possible path available"
-                    )
-               in res
-             else (
-               if not found then ConstantTime.warn e.at "Store: Constant-time violation"
-               else ();
-               [{c with code = vs', [] @ List.tl es;
-                        frame = frame;
-                        pc = pclet, pc;
-                        progc = Obj.magic e'}]
-             )
+                   else (
+                     if not found && not nonv then 
+                       NonInterference.warn e.at "Trying to write high values in low memory"
+                     else ();
+                     [{c with code = vs', es' @ List.tl es;
+                              frame = nframe;
+                              pc = pclet, pc;
+                              progc = Obj.magic e'}]
+                   )
+                  )
+               | false ->
+                  (match Z3_solver.is_sat (pclet, pc') mems with
+                   | true -> [{c with code = vs', es' @ List.tl es;
+                                      frame = nframe;
+                                      pc = pclet, pc';
+                                      progc = Obj.magic e'}]
+                   | false -> failwith "No possible path available"
+                  )
+             in res
            )
            else (
              let nv =

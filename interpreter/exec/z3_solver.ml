@@ -1195,7 +1195,7 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
       print_endline "Checking if value is CT..";
  
   (* print_endline "is_v_ct_unsat"; *) 
-  (* Pc_type.print_pc (snd pc) |> print_endline;-
+  (* Pc_type.print_pc (snd pc) |> print_endline;
    * svalue_to_string sv |> print_endline; *)
 
   let ctx = init_solver() in
