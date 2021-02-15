@@ -143,28 +143,9 @@ let rec step (c : config) : config list =
            (* print_endline ("loop: " ^ (Source.string_of_region e.at)); *)
            if !Flags.loop_invar then 
              (
-               (* Check if we have already analyzed the loop - have to
-                  check if the whole  context is the same *)
-               (* try (
-                *   let lvs = AnalyzedLoopsMap.find (Obj.magic e') !analyzed_loops in
-                *   (\* Droping the input arguments from the value stack *\)
-                *   let FuncType (ts1, ts2) = block_type frame.inst bt in
-                *   let n1 = Lib.List32.length ts1 in
-                *   let vs' = drop n1 vs e.at in
-                *   (\* TODO(Romy): Add values to the value stack *\)
-                *   let c' = {c with code = vs', List.tl es;} in
-                *   let havc = havoc_vars lvs c' in
-                *   [havc]
-                * )
-                * with Not_found -> ( *)
                  let FuncType (ts1, ts2) = block_type frame.inst bt in
                  let n1 = Lib.List32.length ts1 in
                  let args, vs' = take n1 vs e.at, drop n1 vs e.at in
-
-                 (* Normal loop *)
-                 (* let vs', es' = vs', [Label (n1, [e' @@ e.at],
-                  *                             (args, List.map plain es'), (pclet,pc),
-                  *                             c.induction_vars, c.ct_check) @@ e.at] in *)
 
                  if !Flags.unroll_one then (
                    
@@ -522,7 +503,7 @@ let rec step (c : config) : config list =
             * let load = Eval_symbolic.eval_load I32Type test_addr (smemlen frame.inst) (Types.size I32Type) None in
             * let i_sol = Z3_solver.find_solutions load (pclet, pc) mem  in
             * List.iter (fun x-> string_of_int x |> print_endline) i_sol; *)
-           if (c.ct_check) then (
+           (* if (c.ct_check) then ( *)
              
              let c = {c with observations = CT_V_UNSAT((pclet, pc), final_addr,
                                                        mem, c.observations)} in
@@ -544,19 +525,20 @@ let rec step (c : config) : config list =
                      (smemlen frame.inst) n (Some ext)
                )
              in
-             
-             let memind, found =
-               try VulnerabilitiesMap.find (Obj.magic e') !memindex_vuln, true 
-               with Not_found ->
-                 let solv = Z3_solver.is_v_ct_unsat (pclet, pc) final_addr mem in
-                 if not solv then 
-                   memindex_vuln := VulnerabilitiesMap.add (Obj.magic e') solv !memindex_vuln;
-                 solv, false
-             in
 
-             if not found && not memind then 
-               ConstantTime.warn e.at "Load: Constant-time violation"
-             else ();
+             if (c.ct_check) then (
+               let memind, found =
+                 try VulnerabilitiesMap.find (Obj.magic e') !memindex_vuln, true 
+                 with Not_found ->
+                       let solv = Z3_solver.is_v_ct_unsat (pclet, pc) final_addr mem in
+                       if not solv then 
+                         memindex_vuln := VulnerabilitiesMap.add (Obj.magic e') solv !memindex_vuln;
+                       solv, false
+               in
+
+               if not found && not memind then 
+                 ConstantTime.warn e.at "Load: Constant-time violation"
+               else (););
              
              (* with exn ->
               *    let vs', es' = vs', [Trapped (memory_error e.at exn) @@ e.at] in 
@@ -583,32 +565,25 @@ let rec step (c : config) : config list =
                | false, false -> failwith "Load No path left";
              in
              res
-           )
-                 (* let res = if Z3_solver.is_sat (pclet, pc'') mem then
-                  *             (\* low values *\)
-                  *             {c with code = vs', es' @ List.tl es;
-                  *                     frame = frame;
-                  *                     pc = pclet,pc''}:: res
-                  *           else res in
-                  * res) *)
+           (* ) *)
            
-           else (
-             let nv =
-               (match sz with
-                | None -> Eval_symbolic.eval_load ty final_addr
-                            (smemlen frame.inst) (Types.size ty) None
-                | Some (sz, ext) ->
-                   assert (packed_size sz <= Types.size ty);
-                   let n = packed_size sz in 
-                   Eval_symbolic.eval_load ty final_addr
-                     (smemlen frame.inst) n (Some ext)
-               )
-             in
-
-             let vs', es' =  nv :: vs', [] in 
-             [{c with code = vs', es' @ List.tl es;
-                      progc = Obj.magic e'}]
-           )
+           (* else (
+            *   let nv =
+            *     (match sz with
+            *      | None -> Eval_symbolic.eval_load ty final_addr
+            *                  (smemlen frame.inst) (Types.size ty) None
+            *      | Some (sz, ext) ->
+            *         assert (packed_size sz <= Types.size ty);
+            *         let n = packed_size sz in 
+            *         Eval_symbolic.eval_load ty final_addr
+            *           (smemlen frame.inst) n (Some ext)
+            *     )
+            *   in
+            * 
+            *   let vs', es' =  nv :: vs', [] in 
+            *   [{c with code = vs', es' @ List.tl es;
+            *            progc = Obj.magic e'}]
+            * ) *)
            
         | Store {offset; ty; sz; _}, sv :: si :: vs' ->
            (* print_endline "store"; *)
@@ -630,26 +605,26 @@ let rec step (c : config) : config list =
 
            
            
-           if (c.ct_check) then (
+           (* if (c.ct_check) then ( *)
              
              let c = {c with observations =
                                CT_V_UNSAT((pclet,pc), final_addr, mems, c.observations)} in
 
+             if (c.ct_check) then (
+               let memind, found =
+                 try VulnerabilitiesMap.find (Obj.magic e') !memindex_vuln, true 
+                 with Not_found ->
+                       let solv = Z3_solver.is_v_ct_unsat (pclet, pc) final_addr mems in
+                       if not solv then 
+                         memindex_vuln := VulnerabilitiesMap.add (Obj.magic e') solv !memindex_vuln;
+                       solv, false
+               in
 
-             let memind, found =
-               try VulnerabilitiesMap.find (Obj.magic e') !memindex_vuln, true 
-               with Not_found ->
-                 let solv = Z3_solver.is_v_ct_unsat (pclet, pc) final_addr mems in
-                 if not solv then 
-                   memindex_vuln := VulnerabilitiesMap.add (Obj.magic e') solv !memindex_vuln;
-                 solv, false
-             in
+               
 
-             
-
-             if not memind && not found then
-               ConstantTime.warn e.at "Store: Constant-time violation";
-             
+               if not memind && not found then
+                 ConstantTime.warn e.at "Store: Constant-time violation";
+             );
              (* [{c with code = vs', [] @ List.tl es;
               *          frame = frame;
               *          pc = pclet, pc;
@@ -709,7 +684,7 @@ let rec step (c : config) : config list =
                      (match Z3_solver.is_sat (pclet, pc') mems with
                       | true -> [{c with code = vs', es' @ List.tl es;
                                          frame = nframe;
-                                         pc = pclet, pc;
+                                         pc = pclet, pc';
                                          progc = Obj.magic e'}]
                       | false -> [{c with code = vs', es' @ List.tl es;
                                           frame = nframe;
@@ -735,30 +710,30 @@ let rec step (c : config) : config list =
                    | false -> failwith "No possible path available"
                   )
              in res
-           )
-           else (
-             let nv =
-               (match sz with
-                | None ->
-                   Eval_symbolic.eval_store ty final_addr sv
-                     (smemlen frame.inst) (Types.size ty)
-                | Some (sz) ->
-                   assert (packed_size sz <= Types.size ty);
-                   let n = packed_size sz in
-                   Eval_symbolic.eval_store ty final_addr sv
-                     (smemlen frame.inst) n
-               )
-             in
-
-             let mem' = Smemory.store_sind_value mem nv in
-             let vs', es' = vs', [] in
-             (* Update memory with a store *)
-             let nframe = {frame with inst = insert_smemory frame.inst mem'} in
-
-             [{c with code = vs', es' @ List.tl es;
-                      frame = nframe;
-                      progc = Obj.magic e'}]
-           )
+           (* ) *)
+           (* else (
+            *   let nv =
+            *     (match sz with
+            *      | None ->
+            *         Eval_symbolic.eval_store ty final_addr sv
+            *           (smemlen frame.inst) (Types.size ty)
+            *      | Some (sz) ->
+            *         assert (packed_size sz <= Types.size ty);
+            *         let n = packed_size sz in
+            *         Eval_symbolic.eval_store ty final_addr sv
+            *           (smemlen frame.inst) n
+            *     )
+            *   in
+            * 
+            *   let mem' = Smemory.store_sind_value mem nv in
+            *   let vs', es' = vs', [] in
+            *   (\* Update memory with a store *\)
+            *   let nframe = {frame with inst = insert_smemory frame.inst mem'} in
+            * 
+            *   [{c with code = vs', es' @ List.tl es;
+            *            frame = nframe;
+            *            progc = Obj.magic e'}]
+            * ) *)
         (* | MemorySize, vs ->
          *   let mem = smemory frame.inst (0l @@ e.at) in
          *   let vs', es' = (Si32.of_int_s (Smemory.size mem)) :: vs, [] in
