@@ -1107,8 +1107,8 @@ let is_unsat (pc : pc_ext) (mem: Smemory.t list * int) =
   
 let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) =
   (* print_endline "is_ct_unsat"; *)
-  (* Pc_type.print_pc pc |> print_endline;
-   * svalue_to_string sv |> print_endline; *)
+  (* Pc_type.print_pc (snd pc) |> print_endline; *)
+  (* svalue_to_string sv |> print_endline; *)
   let ctx = init_solver() in
 
   let v = sv_to_expr pc sv ctx mem in
@@ -1137,7 +1137,7 @@ let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) =
       
      let solver = Solver.mk_solver ctx None in
      List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
-
+     
      if !Flags.portfolio_only then (
        let filename = write_formula_to_file solver in
        let res = not (run_solvers filename (read_sat "yices")
