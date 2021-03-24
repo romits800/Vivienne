@@ -709,7 +709,7 @@ let get_maximum_loop_size iv c =
   (* (match maxl with
    *    Some v -> print_endline ("Maxl: " ^ (string_of_int v))
    *  | None -> print_endline ("No value")); *)
-  (* print_endline (string_of_bool maxl); *)
+  (* print_endline (string_of_int maxl); *)
   maxl
   
 let induction_vars (c : config) (c_orig : config) (lv : loopvar_t list) :
