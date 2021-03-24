@@ -11,11 +11,27 @@ let multiply_triple iv b1 b2 =
     SI32 iv, SI32 b1, SI32 b2 ->
      let add = Si32.add in
      let mul = Si32.mul in
-     SI32 (mul iv b1 |> add b2)
+
+     let cond = Si32.gt_s b1 Si32.zero in
+     let cond_zero = Si32.eq b1 Si32.zero in
+     let iv_m = Si32.sub iv Si32.one in
+     let cond1 = Si32.gt_s (mul iv_m b1) iv_m in
+     let cond2 = Si32.lt_s (mul iv_m b1) iv_m in
+     let ite = Si32.ite cond cond1 (Si32.ite cond_zero cond_zero cond2) in
+
+     SI32 (mul iv b1 |> add b2), SI32 ite
   | SI64 iv, SI64 b1, SI64 b2 ->
      let add = Si64.add in
      let mul = Si64.mul in
-     SI64 (mul iv b1 |> add b2)
+
+     let cond = Si64.gt_s b1 Si64.zero in
+     let cond_zero = Si64.eq b1 Si64.zero in
+     let iv_m = Si64.sub iv Si64.one in
+     let cond1 = Si64.gt_s (mul iv_m b1) iv_m in
+     let cond2 = Si64.lt_s (mul iv_m b1) iv_m in
+     let ite = Si64.ite cond cond1 (Si64.ite cond_zero cond_zero cond2) in
+
+     SI64 (mul iv b1 |> add b2), SI64 ite
   | _ -> failwith "floating points not supported."
 
 

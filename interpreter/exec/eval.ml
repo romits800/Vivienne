@@ -71,19 +71,38 @@ type loopvar_t = LocalVar of int32 Source.phrase * bool * modifier (* local x * 
                | StoreVar of svalue * Types.value_type * Types.pack_size option * bool * modifier
 
 
-module IndVarMap = Map.Make(struct
-                       type t = svalue
+module MaxLoopSize = Map.Make(struct
+                       type t = int
                        let compare = compare
                      end)
 
+let maxloop :  int MaxLoopSize.t ref = ref MaxLoopSize.empty
 
-type triple = svalue * svalue * svalue * svalue (*real init value, symb init value, mul, add*)
+let empty_maxloop () =
+  maxloop := MaxLoopSize.empty
+
+
+let update_maxloop addr maxl =
+  maxloop := MaxLoopSize.add addr maxl !maxloop
+
+let find_maxloop addr =
+  MaxLoopSize.find addr !maxloop
+                           
+module IndVarMap = Map.Make(struct
+                       type t = svalue * Source.region
+                       let compare = compare
+                     end)
+                 
+type triple = svalue * svalue * svalue * svalue
+(*real init value, symb init value, mul, add*)
 
                            
 type iv_type = triple IndVarMap.t
 
 type ct_check_t = bool
-              
+
+
+                
 type code = svalue stack * admin_instr list          
 and admin_instr = admin_instr' phrase
 and admin_instr' =
@@ -97,16 +116,16 @@ and admin_instr' =
   | Assert of loopvar_t list * instr'
   | Havoc of loopvar_t list
   | FirstPass of int32 * admin_instr list * code
-  | NonCheckPass of int32 * admin_instr list * code * loopvar_t list 
+  | NonCheckPass of int32 * admin_instr list * code * triple * loopvar_t list * config 
   | SecondPass of int32 * admin_instr list * code
            
-type obs_type =
+and obs_type =
   | CT_UNSAT of pc_ext * svalue * (Smemory.t list * int) * obs_type
   | CT_V_UNSAT of pc_ext * svalue * (Smemory.t list * int) * obs_type
   (* | CT_SAT of pc * obs_type *)
   | OBSTRUE
 
-type config =
+and config =
 {
   frame : frame;
   code : code;
@@ -254,6 +273,19 @@ let split_condition (sv : svalue) (pc : pc): pc * pc =
   in
   (pc'', pc') (* false, true *)
 
+
+let add_equality (sv1 : svalue) (sv2 : svalue) (pc : pc): pc =
+    match sv1, sv2 with
+    | SI32 vi1, SI32 vi2 ->
+       PCAnd( SI32 (Si32.eq vi1 vi2), pc)
+    | SI64 vi1, SI64 vi2 ->
+       PCAnd( SI64 (Si64.eq vi1 vi2), pc)
+    | _, _-> failwith "Equality different types or floats is not supported."
+
+let add_condition (c : svalue) (pc : pc): pc =
+  PCAnd( c, pc)
+
+  
 let split_msec (sv : svalue)
       (msec : (int * int) list )
       (mpub : (int * int) list ) (pc : pc) : pc * pc =  

@@ -21,7 +21,7 @@ open Source
 let lowbound_ind_var v c =
   let open Pc_type in
   let pclet, pc = c.pc in
-  let pc' = PCAnd (SI32 (Si32.ge_u v Si32.zero), pc) in
+  let pc' = PCAnd (SI32 (Si32.ge_s v Si32.zero), pc) in
   { c with pc = pclet,pc' }
                   
 
@@ -29,10 +29,11 @@ let lowbound_ind_var v c =
 let create_induction_variable c =
   let v' = Si32.of_low() in
   let c' = lowbound_ind_var v' c in
-  (SI32 v', SI32 v', SI32 Si32.one, SI32 Si32.one), c'
+  let reg = Source.no_region in
+  (SI32 v', SI32 v', SI32 Si32.one, SI32 Si32.one), c', reg
   
 (* TODO(Romy): add the same patterns for SI64 *)
-let get_iv_triple vold_orig vold vnew ivs =
+let get_iv_triple vold_orig vold vnew ivs loc =
   (* print_endline "compare_values";
    * svalue_to_string vold |> print_endline;
    * svalue_to_string vnew |> print_endline; *)
@@ -58,12 +59,12 @@ let get_iv_triple vold_orig vold vnew ivs =
 
        if (v1 = v2) then
          let tr = (vold_orig, vold, SI32 v2', SI32 v3) in
-         IndVarMap.add vold tr ivs
+         IndVarMap.add (vold,loc) tr ivs
        else 
          (try
-            let _ = IndVarMap.find (SI32 v2) ivs in
+            let _ = IndVarMap.find (SI32 v2,loc) ivs in
             let tr = (vold_orig, SI32 v2, SI32 v2', SI32 v3) in
-            IndVarMap.add vold tr ivs
+            IndVarMap.add (vold,loc) tr ivs
           with Not_found ->
             ivs
          )
@@ -87,12 +88,12 @@ let get_iv_triple vold_orig vold vnew ivs =
        let v3 = Si32.sub Si32.zero v3 in
        if (v1 = v2) then
          let tr = (vold_orig, vold, SI32 v2', SI32 v3) in
-         IndVarMap.add vold tr ivs
+         IndVarMap.add (vold,loc) tr ivs
        else 
          (try
-            let _ = IndVarMap.find (SI32 v2) ivs in
+            let _ = IndVarMap.find (SI32 v2,loc) ivs in
             let tr = (vold_orig, SI32 v2, SI32 v2', SI32 v3) in
-            IndVarMap.add vold tr ivs
+            IndVarMap.add (vold,loc) tr ivs
           with Not_found ->
             ivs
          )
@@ -102,12 +103,12 @@ let get_iv_triple vold_orig vold vnew ivs =
 
        if (v1 = v2) then
          let tr = (vold_orig, vold, SI32 (Si32.one), SI32 v3) in
-         IndVarMap.add vold tr ivs
+         IndVarMap.add (vold,loc) tr ivs
        else 
          (try
-            let _ = IndVarMap.find (SI32 v2) ivs in
+            let _ = IndVarMap.find (SI32 v2,loc) ivs in
             let tr = (vold_orig, SI32 v2, SI32 (Si32.one), SI32 v3) in
-            IndVarMap.add vold tr ivs
+            IndVarMap.add (vold,loc) tr ivs
           with Not_found ->
             ivs
          )
@@ -117,12 +118,12 @@ let get_iv_triple vold_orig vold vnew ivs =
        let v3 = Si32.sub Si32.zero v3 in
        if (v1 = v2) then
          let tr = (vold_orig, vold, SI32 (Si32.one), SI32 v3) in
-         IndVarMap.add vold tr ivs
+         IndVarMap.add (vold,loc) tr ivs
        else 
          (try
-            let _ = IndVarMap.find (SI32 v2) ivs in
+            let _ = IndVarMap.find (SI32 v2,loc) ivs in
             let tr = (vold_orig, SI32 v2, SI32 (Si32.one), SI32 v3) in
-            IndVarMap.add vold tr ivs
+            IndVarMap.add (vold,loc) tr ivs
           with Not_found ->
             ivs
          )
@@ -131,16 +132,16 @@ let get_iv_triple vold_orig vold vnew ivs =
       | SI32 v1, SI32 (App (BvMul, [BitVec(_) as v3;v2])) ->
        if (v2 = v2) then
          let tr = (vold_orig, vold, SI32 v3, SI32 (Si32.zero)) in
-         IndVarMap.add vold tr ivs
+         IndVarMap.add (vold,loc) tr ivs
        else 
          (try
-            let _ = IndVarMap.find (SI32 v2) ivs in
+            let _ = IndVarMap.find (SI32 v2,loc) ivs in
             let tr = (vold_orig, SI32 v2, SI32 v3, SI32 (Si32.zero)) in
-            IndVarMap.add vold tr ivs
+            IndVarMap.add (vold,loc) tr ivs
           with Not_found ->
             ivs
          )
-    | _ -> IndVarMap.remove vold ivs
+    | _ -> IndVarMap.remove (vold,loc) ivs
   in
   v
 
@@ -262,7 +263,7 @@ let rec find_induction_vars (lv : triple IndVarMap.t) (c : config) (c_orig : con
              let vv = local frame x in
              let vv_orig = local c_orig.frame x in
 
-             let lv' = get_iv_triple vv_orig vv v lv in
+             let lv' = get_iv_triple vv_orig vv v lv e.at in
              let frame' = update_local c.frame x v in
              let vs', es' = vs', [] in
              find_induction_vars lv' {c with code = vs', es' @ List.tl es; frame = frame'} c_orig
@@ -272,7 +273,7 @@ let rec find_induction_vars (lv : triple IndVarMap.t) (c : config) (c_orig : con
              let vv = local frame x in
              let vv_orig = local c_orig.frame x in
              
-             let lv' = get_iv_triple vv_orig vv v lv in
+             let lv' = get_iv_triple vv_orig vv v lv e.at in
 
              (* print_loopvar (LocalVar (x,is_low)); *)
              let frame' = update_local c.frame x v in
@@ -288,7 +289,7 @@ let rec find_induction_vars (lv : triple IndVarMap.t) (c : config) (c_orig : con
              let vv = Sglobal.load (sglobal c.frame.inst x) in
              let vv_orig = Sglobal.load (sglobal c_orig.frame.inst x) in
              
-             let lv' = get_iv_triple vv_orig vv v lv in
+             let lv' = get_iv_triple vv_orig vv v lv e.at in
              let newg, vs', es' =
                (try Sglobal.store (sglobal frame.inst x) v, vs', []
                 with Sglobal.NotMutable -> Crash.error e.at "write to immutable global"
@@ -361,7 +362,7 @@ let rec find_induction_vars (lv : triple IndVarMap.t) (c : config) (c_orig : con
                                (smemlen c_orig.frame.inst) n None in
                    nv, lvn, lvn_orig)
              in
-             let lv' = get_iv_triple lvn_orig lvn sv lv in
+             let lv' = get_iv_triple lvn_orig lvn sv lv e.at in
              
              (* let memtuple = (c.frame.inst.smemories, smemlen c.frame.inst) in
               * let is_low = Z3_solver.is_v_ct_unsat c.pc lvn memtuple in
@@ -608,7 +609,7 @@ let rec find_induction_vars (lv : triple IndVarMap.t) (c : config) (c_orig : con
   | [] -> lv, []
 
 (*vold, mul, add*)
-let rec replace_induction_vars (iv : triple) (ivs : triple IndVarMap.t):
+let rec replace_induction_vars (iv : triple) (loc : Source.region) (ivs : triple IndVarMap.t):
           triple IndVarMap.t =
   let _,ivvar, _, _ = iv in
   let ivk =
@@ -617,7 +618,7 @@ let rec replace_induction_vars (iv : triple) (ivs : triple IndVarMap.t):
     | _ -> failwith "Not supported"
   in
   let ivs' =
-    IndVarMap.mapi (fun k (vorig, v, b1, b2) ->
+    IndVarMap.mapi (fun (k,l) (vorig, v, b1, b2) ->
         if (k = SI32 ivk || k = SI64 ivk) then
           (vorig, v, b1, b2)
         else if (k = v) then
@@ -633,7 +634,7 @@ let rec replace_induction_vars (iv : triple) (ivs : triple IndVarMap.t):
           )
         else
           (try
-             let vorig, v',b1',b2' = IndVarMap.find v ivs in
+             let vorig, v',b1',b2' = IndVarMap.find (v,loc) ivs in
              if (v' = SI32 ivk || v' = SI64 ivk) then 
                (match v', b1', b2', b1, b2 with
                 | SI32 v', SI32 b1', SI32 b2', SI32 b1, SI32 b2 ->
@@ -662,7 +663,7 @@ let rec replace_induction_vars (iv : triple) (ivs : triple IndVarMap.t):
   if IndVarMap.equal (fun a b -> a = b) ivs ivs' then
     ivs'
   else
-    replace_induction_vars iv ivs'
+    replace_induction_vars iv loc ivs' 
 
   (* ivs *)
 
@@ -691,19 +692,39 @@ let triple_to_string v =
   
 let induction_vars_to_string ivs : string =
   let iv_to_string ivs =
-    IndVarMap.fold (fun k v str -> Pc_type.svalue_to_string k ^
+    IndVarMap.fold (fun (k,l) v str -> Pc_type.svalue_to_string k ^ string_of_region l ^
                                      ":" ^ triple_to_string v ^ ";" ^ str) ivs ""
   in
   match ivs with
   | None -> "_"
   | Some ivs -> iv_to_string ivs
 
+
+
+let get_maximum_loop_size iv c =
+  let _, v, _, _ = iv in
+  let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
+  (* let maxl = Z3_solver.is_v_ct_unsat (pclet, pc) v mem in *)
+  let maxl = Z3_solver.optimize Z3_solver.max c.pc mem v in
+  (* (match maxl with
+   *    Some v -> print_endline ("Maxl: " ^ (string_of_int v))
+   *  | None -> print_endline ("No value")); *)
+  (* print_endline (string_of_bool maxl); *)
+  maxl
+  
 let induction_vars (c : config) (c_orig : config) (lv : loopvar_t list) :
       triple *  config =
-  (*(triple IndVarMap.t) = *) 
+  (* Find values that change *) 
   let ivs,_ = find_induction_vars IndVarMap.empty c c_orig in  
-  let iv, c' = create_induction_variable c in
-  let ivs' = replace_induction_vars iv ivs in
+
+  (* Create new induction variable *)
+  let iv, c', loc = create_induction_variable c in
+
+  (* (\* return the maximum size of the loop *\)
+   * let _ = get_maximum_loop_size iv c' in *)
+
+  (* reduce the induction variables with the known sizes *)
+  let ivs' = replace_induction_vars iv loc ivs in
   let c' = { c' with  induction_vars = Some ivs' } in
   iv, c'
   (* eliminate_vars c lv ivs' *)

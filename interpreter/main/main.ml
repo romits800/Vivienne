@@ -41,6 +41,7 @@ let argspec = Arg.align
   "--unroll-one", Arg.Set Flags.unroll_one, " use with -l to unroll the first iteration of each loop";
   "--no-clean", Arg.Set Flags.no_clean, " don't clean the solver tmp files from the /tmp fs";
   "--explicit-leaks", Arg.Set Flags.explicit_leaks, " include explicit leaks to the memory";
+  "--estimate-loop-size", Arg.Set Flags.estimate_loop_size, " estimate the loop size and deside on whether to apply the invariant or not ";
   "--stats", Arg.Set Flags.stats, " generate solver statistics";
   "--debug", Arg.Set Flags.debug, " enable debug msgs";
   "-v", Arg.Unit banner, " show version"
