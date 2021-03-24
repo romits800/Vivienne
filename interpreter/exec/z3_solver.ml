@@ -1466,6 +1466,7 @@ let optimize (f : Z3.Optimize.optimize -> Z3.Expr.expr -> Z3.Optimize.handle)
       let ex2 = Optimize.get_upper h in
       if Expr.equal ex1 ex2 then
         let i = Arithmetic.Integer.get_big_int ex1 in
+        print_endline (Arithmetic.Integer.numeral_to_string ex1);
         let bi = Big_int.sub_big_int i (Big_int.big_int_of_int64 2147483648L) in
         let i = Big_int.int_of_big_int bi in
         (* print_endline "max/min sat"; *)
