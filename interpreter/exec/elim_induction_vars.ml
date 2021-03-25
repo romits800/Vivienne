@@ -15,8 +15,8 @@ let multiply_triple iv b1 b2 =
      let cond = Si32.gt_s b1 Si32.zero in
      let cond_zero = Si32.eq b1 Si32.zero in
      let iv_m = Si32.sub iv Si32.one in
-     let cond1 = Si32.gt_s (mul iv_m b1) iv_m in
-     let cond2 = Si32.lt_s (mul iv_m b1) iv_m in
+     let cond1 = Si32.ge_s (mul iv_m b1) iv_m in
+     let cond2 = Si32.le_s (mul iv_m b1) iv_m in
      let ite = Si32.ite cond cond1 (Si32.ite cond_zero cond_zero cond2) in
 
      SI32 (mul iv b1 |> add b2), SI32 ite

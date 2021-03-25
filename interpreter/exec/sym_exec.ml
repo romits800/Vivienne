@@ -199,6 +199,7 @@ let rec step (c : config) : config list =
 
 
                (* RUN ONE PASS TO REPLACE THE INDUCTION VARIABLES *)
+               (* print_endline "NonCheckPass Putting checkpass in the queue"; *)
                let nc_pass = NonCheckPass (n1, [Plain e' @@ e.at],
                                            (args, List.map plain es'), iv, lvs, c) in
                let vs', es' = vs', [Label (n1, [nc_pass @@ e.at],
@@ -267,11 +268,16 @@ let rec step (c : config) : config list =
                       * ( match havc'.induction_vars with
                       *   | None -> ()
                       *   | Some ivs ->
-                      *      IndVarMap.iter (fun k iv -> print_endline (svalue_to_string k ^ " " ^ triple_to_string iv)) ivs
+                      *      IndVarMap.iter (fun (k,loc) iv ->
+                      *          print_endline
+                      *            (svalue_to_string k ^ " " ^ string_of_region loc ^ " " ^ triple_to_string iv)) ivs
                       * );
                       * print_endline "Done printing."; *)
 
                      (* let assrt = Assert (lvs, e') in *)
+                     (* print_endline "Starting the noncheck pass..";
+                      * print_endline (string_of_region e.at); *)
+
                      let nc_pass = NonCheckPass (n1, [Plain e' @@ e.at],
                                                  (args, List.map plain es'), iv, lvs, c) in
                      let vs', es' = vs', [Label (n1, [nc_pass @@ e.at],
@@ -485,8 +491,8 @@ let rec step (c : config) : config list =
                 let nv, cond = multiply_triple iv b1 b2 in
                 (* let pc' = add_equality nv v pc in *)
                 let pc' = add_condition cond pc in
-                (* print_endline (Pc_type.svalue_to_string nv);
-                 * print_endline (Pc_type.svalue_to_string v); *)
+                (* print_endline (Pc_type.svalue_to_string cond); *)
+                (* print_endline (Pc_type.svalue_to_string v); *)
                 let frame' = update_local c.frame x nv in
                 let vs', es' = vs', [] in
                 [{c with code = vs', es' @ List.tl es;
@@ -685,7 +691,8 @@ let rec step (c : config) : config list =
             * ) *)
            
         | Store {offset; ty; sz; _}, sv :: si :: vs' ->
-           (* print_endline "store"; *)
+           (* print_endline "store";
+            * print_endline (string_of_region e.at); *)
 
            let mem = smemory frame.inst (0l @@ e.at) in
            let frame = {frame with
@@ -1063,7 +1070,7 @@ let rec step (c : config) : config list =
           *  | None -> print_endline ("No value")); *)
        ) else (
        (* print_endline (string_of_bool maxl); *)
-         
+         (* print_endline "Check pass: Putting assert in the queue"; *)
          let args, vs' = take n vs e.at, drop n vs e.at in
          let assrt = Assert (lvs, l) in
          let vs'', es'' = vs', [Label (n, [assrt @@ e.at],

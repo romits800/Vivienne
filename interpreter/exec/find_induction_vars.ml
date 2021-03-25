@@ -195,11 +195,16 @@ let rec find_induction_vars (lv : triple IndVarMap.t) (c : config) (c_orig : con
              let vs'', es'' = vs', [Plain (Block (bt, es1)) @@ e.at] in (* True *)
              let vs', es' = vs', [Plain (Block (bt, es2)) @@ e.at] in (* False *)
              (* Don't check sat *)
+             let mem = (frame.inst.smemories, smemlen frame.inst) in 
              
-             let lv1,c1 = find_induction_vars lv
-                            {c with code = vs', es' @ est; pc = (pclet,pc')} c_orig in
-             let lv2,c2 = find_induction_vars lv1
-                            {c with code = vs'', es'' @ est; pc = (pclet,pc'')} c_orig in
+             let lv1,c1 = if Z3_solver.is_sat (pclet, pc') mem then
+                            find_induction_vars lv
+                              {c with code = vs', es' @ est; pc = (pclet,pc')} c_orig
+                          else lv,[c] in
+             let lv2,c2 = if Z3_solver.is_sat (pclet, pc'') mem then
+                            find_induction_vars lv1
+                              {c with code = vs'', es'' @ est; pc = (pclet,pc'')} c_orig
+                          else lv1,c1 in
              lv2,c1 @ c2
 
           | Br x, vs ->
@@ -212,10 +217,19 @@ let rec find_induction_vars (lv : triple IndVarMap.t) (c : config) (c_orig : con
              let pc', pc'' = split_condition v pc in
              let vs'', es'' = vs', [Plain (Br x) @@ e.at] in
              let vs', es' = vs', [] in
-             
-             let lv1, c1 = find_induction_vars lv
-                             {c with code = vs', es' @ est; pc = (pclet,pc')} c_orig in
-             find_induction_vars lv1 {c with code = vs'', es'' @ est; pc = (pclet,pc'')} c_orig
+
+             let mem = (frame.inst.smemories, smemlen frame.inst) in 
+             let lv1, c1 = if Z3_solver.is_sat (pclet, pc') mem then
+                             find_induction_vars lv
+                               {c with code = vs', es' @ est; pc = (pclet,pc')} c_orig
+                           else lv, []
+             in
+             let lv2, c2 = if Z3_solver.is_sat (pclet, pc'') mem then
+                             find_induction_vars lv1
+                               {c with code = vs'', es'' @ est; pc = (pclet,pc'')} c_orig
+                           else lv1, []
+             in
+             lv2, c1 @ c2
 
              
           (* | BrTable (xs, x), I32 i :: vs' when I32.ge_u i (Lib.List32.length xs) ->
