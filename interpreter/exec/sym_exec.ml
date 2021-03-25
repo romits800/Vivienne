@@ -320,7 +320,9 @@ let rec step (c : config) : config list =
            )
            )
         | If (bt, es1, es2), v :: vs' ->
-           (* print_endline "if"; *)
+           if (!Flags.debug) then (
+             print_endline "if";
+             print_endline (string_of_region e.at));
            let pc', pc'' = split_condition v pc in (* false, true *)
            let vs'', es'' = vs', [Plain (Block (bt, es1)) @@ e.at] in (* True *)
            let vs', es' = vs', [Plain (Block (bt, es2)) @@ e.at] in (* False *)
@@ -365,6 +367,10 @@ let rec step (c : config) : config list =
            [{c with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
            
         | BrIf x, v :: vs' ->
+           if (!Flags.debug) then (
+             print_endline "br_if";
+             print_endline (string_of_region e.at));
+
            (* print_endline "br_if"; *)
            (* svalue_to_string v |> print_endline; *)
            let pc', pc'' = split_condition v pc in (* false, true *)
