@@ -77,7 +77,14 @@ let find_modified_vars (analyzed_loop : int ) (c : config) :
                  if !Flags.debug then 
                       print_endline "Find_modified_vars: Found other loop.";
                  (* TODO(Romy): fix for return not 0 args to the value stack *)
-                 find_vars lv {c with code = vs, List.tl es}
+                 let vs', es' = vs', [Label (n1, [],
+                                             (args, List.map plain es'),
+                                             (pclet,pc), c.induction_vars,
+                                             c.ct_check) @@ e.at] in
+
+                 (* find_vars lv {c with code = vs, List.tl es} *)
+                 find_vars lv {c with code = vs', es'}
+
                )
                else (                 
 
