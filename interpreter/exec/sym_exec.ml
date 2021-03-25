@@ -591,6 +591,10 @@ let rec step (c : config) : config list =
            )
            
         | Load {offset; ty; sz; _}, si :: vs' ->
+           if (!Flags.debug) then (
+             print_endline "load";
+             print_endline (string_of_region e.at));
+
            (* print_endline "load"; *)
            let imem = smemory frame.inst (0l @@ e.at) in
 
@@ -697,6 +701,10 @@ let rec step (c : config) : config list =
             * ) *)
            
         | Store {offset; ty; sz; _}, sv :: si :: vs' ->
+           if (!Flags.debug) then (
+             print_endline "store";
+             print_endline (string_of_region e.at));
+
            (* print_endline "store";
             * print_endline (string_of_region e.at); *)
 
