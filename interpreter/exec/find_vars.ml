@@ -39,6 +39,10 @@ let find_modified_vars (analyzed_loop : int ) (c : config) :
   let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config list =
     let {frame; code = vs, es; pc = pclet, pc; _} = c in
 
+    if !Flags.debug then (
+      print_endline "Finding modified variables..";
+      print_endline (string_of_int analyzed_loop));
+
     (* let s1 = Svalues.string_of_values (List.rev vs) in *)
     (* print_endline s1; *)
     match es with
