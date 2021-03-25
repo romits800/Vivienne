@@ -146,8 +146,7 @@ let rec step (c : config) : config list =
              print_endline "Entering loop..";
              print_endline (string_of_region e.at));
            (* print_endline ("loop: " ^ (Source.string_of_region e.at)); *)
-           if !Flags.estimate_loop_size then (
-         
+           if !Flags.estimate_loop_size then (         
              try (
                (* print_endline (string_of_int (Obj.magic e')); *)
                let maxl = find_maxloop (Obj.magic e') in
@@ -167,7 +166,6 @@ let rec step (c : config) : config list =
                let FuncType (ts1, ts2) = block_type frame.inst bt in
                let n1 = Lib.List32.length ts1 in
                let args, vs' = take n1 vs e.at, drop n1 vs e.at in
-
 
                (* HAVOC *)
                let lvs = 
@@ -256,7 +254,7 @@ let rec step (c : config) : config list =
                    let havc = havoc_vars lvs c in
                  
                    if !Flags.elim_induction_variables then (
-                     let vs'', es'' = vs', [Label (n1, [],
+                     let vs'', es'' = vs', [Label (n1, [Plain e' @@ e.at],
                                                    (args, List.map plain es'), (pclet,pc),
                                                    c.induction_vars, c.ct_check) @@ e.at] in
                      let nhavc = {havc with code = vs'', es'' @ List.tl es;} in
@@ -1001,7 +999,7 @@ let rec step (c : config) : config list =
 
 
        if !Flags.elim_induction_variables then (
-         let vs'', es'' = vs', [Label (n, [],
+         let vs'', es'' = vs', [Label (n, [Plain l @@ loc],
                                        (args, code'''), (pclet,pc),
                                        c.induction_vars, c.ct_check) @@ e.at] in
          let nhavc = {havc with code = vs'', es'' @ List.tl es;} in
@@ -1017,6 +1015,7 @@ let rec step (c : config) : config list =
           * );
           * print_endline "Done printing."; *)
 
+         (* print_endline "Starting NonCheckPass"; *) 
 
          (* let assrt = Assert (lvs, e') in *)
          let nc_pass = NonCheckPass (n, [Plain l @@ e.at],
@@ -1050,6 +1049,7 @@ let rec step (c : config) : config list =
     | NonCheckPass  (n, [{it=Plain ((Loop _) as l); at=loc}],
                      (vs''', code'''), iv, lvs, c_old), vs ->
 
+       (* print_endline "Done NonCheckPass"; *) 
        (* TODO(Romy): estimation of loop size *)
        (* estimating loop size *)
        if !Flags.estimate_loop_size then (

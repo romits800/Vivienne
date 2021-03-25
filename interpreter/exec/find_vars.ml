@@ -39,9 +39,9 @@ let find_modified_vars (analyzed_loop : int ) (c : config) :
   let rec find_vars (lv : loopvar_t list) (c : config) : loopvar_t list * config list =
     let {frame; code = vs, es; pc = pclet, pc; _} = c in
 
-    if !Flags.debug then (
-      print_endline "Finding modified variables..";
-      print_endline (string_of_int analyzed_loop));
+    (* if !Flags.debug then (
+     *   print_endline "Finding modified variables..";
+     *   print_endline (string_of_int analyzed_loop)); *)
 
     (* let s1 = Svalues.string_of_values (List.rev vs) in *)
     (* print_endline s1; *)
@@ -100,6 +100,10 @@ let find_modified_vars (analyzed_loop : int ) (c : config) :
                )
             | If (bt, es1, es2), v :: vs' ->
                (* print_endline "if"; *)
+               if (!Flags.debug) then (
+                 print_endline "if fv";
+                 print_endline (string_of_region e.at));
+
                let pc', pc'' = split_condition v pc in
                let vs'', es'' = vs', [Plain (Block (bt, es1)) @@ e.at] in (* True *)
                let vs', es' = vs', [Plain (Block (bt, es2)) @@ e.at] in (* False *)
@@ -126,6 +130,9 @@ let find_modified_vars (analyzed_loop : int ) (c : config) :
                
             | BrIf x, v :: vs' ->
                (* print_endline "br_if"; *)
+               if (!Flags.debug) then (
+                 print_endline "brif fv";
+                 print_endline (string_of_region e.at));
 
                let pc', pc'' = split_condition v pc in (* false, true *)
                let vs'', es'' = vs', [Plain (Br x) @@ e.at] in

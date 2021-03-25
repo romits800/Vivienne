@@ -179,7 +179,7 @@ let rec find_induction_vars (lv : triple IndVarMap.t) (c : config) (c_orig : con
                                          c.ct_check) @@ e.at] in
              find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
           | Loop (bt, es'), vs ->
-             (* print_endline "Loop find_induction_vars"; *)
+             print_endline "Loop find_induction_vars";
              let FuncType (ts1, ts2) = block_type frame.inst bt in
              let n1 = Lib.List32.length ts1 in
              let args, vs' = take n1 vs e.at, drop n1 vs e.at in
@@ -191,6 +191,10 @@ let rec find_induction_vars (lv : triple IndVarMap.t) (c : config) (c_orig : con
              find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
           | If (bt, es1, es2), v :: vs' ->
              (* print_endline "if"; *)
+             if (!Flags.debug) then (
+               print_endline "if fiv";
+               print_endline (string_of_region e.at));
+
              let pc', pc'' = split_condition v pc in
              let vs'', es'' = vs', [Plain (Block (bt, es1)) @@ e.at] in (* True *)
              let vs', es' = vs', [Plain (Block (bt, es2)) @@ e.at] in (* False *)
@@ -200,20 +204,36 @@ let rec find_induction_vars (lv : triple IndVarMap.t) (c : config) (c_orig : con
              let lv1,c1 = if Z3_solver.is_sat (pclet, pc') mem then
                             find_induction_vars lv
                               {c with code = vs', es' @ est; pc = (pclet,pc')} c_orig
-                          else lv,[c] in
+                          else lv,[] in
+             if (!Flags.debug) then (
+               print_endline "if fiv2";
+               print_endline (string_of_region e.at));
+             
              let lv2,c2 = if Z3_solver.is_sat (pclet, pc'') mem then
                             find_induction_vars lv1
                               {c with code = vs'', es'' @ est; pc = (pclet,pc'')} c_orig
-                          else lv1,c1 in
+                          else lv1,[] in
+             if (!Flags.debug) then (
+               print_endline "if fiv3";
+               print_endline (string_of_region e.at));
+
              lv2,c1 @ c2
 
           | Br x, vs ->
              (* print_endline "br"; *)
+             if (!Flags.debug) then (
+               print_endline "br fiv";
+               print_endline (string_of_region e.at));
+
              let vs', es' = [], [Breaking (x.it, vs) @@ e.at] in
              lv, [{c with code = vs', es' @ List.tl es}]
              
           | BrIf x, v :: vs' ->
              (* print_endline "br_if"; *)
+             if (!Flags.debug) then (
+               print_endline "brif fiv";
+               print_endline (string_of_region e.at));
+
              let pc', pc'' = split_condition v pc in
              let vs'', es'' = vs', [Plain (Br x) @@ e.at] in
              let vs', es' = vs', [] in
@@ -339,6 +359,10 @@ let rec find_induction_vars (lv : triple IndVarMap.t) (c : config) (c_orig : con
              
           | Store {offset; ty; sz; _}, sv :: si :: vs' ->
              (* print_endline "store"; *)
+             if (!Flags.debug) then (
+               print_endline "store fiv";
+               print_endline (string_of_region e.at));
+
              let mem = smemory frame.inst (0l @@ e.at) in
              let frame = {frame with
                            inst = update_smemory frame.inst mem (0l @@ e.at)} in
@@ -506,11 +530,21 @@ let rec find_induction_vars (lv : triple IndVarMap.t) (c : config) (c_orig : con
 
       | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es'), pc', iv', cct'), vs ->
          (* print_endline "lab4"; *)
+         if (!Flags.debug) then (
+           print_endline "l1 fiv";
+           print_endline (string_of_region e.at));
+
          let vs', es' = take n vs0 e.at @ vs, es0 in
          find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
 
       | Label (n, es0, (vs', {it = Breaking (k, vs0); at} :: es'), pc', iv', cct'), vs ->
          (* print_endline "lab5"; *)
+         if (!Flags.debug) then (
+           print_endline "l2 fiv";
+           print_endline (string_of_region e.at);
+           print_endline (string_of_int (Int32.to_int (Int32.sub k 1l)))
+         );
+
          let vs', es' = vs, [Breaking (Int32.sub k 1l, vs0) @@ at] in
          find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
 
