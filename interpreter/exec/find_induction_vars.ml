@@ -179,7 +179,7 @@ let rec find_induction_vars (lv : triple IndVarMap.t) (c : config) (c_orig : con
                                          c.ct_check) @@ e.at] in
              find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
           | Loop (bt, es'), vs ->
-             print_endline "Loop find_induction_vars";
+             (* print_endline "Loop find_induction_vars"; *)
              let FuncType (ts1, ts2) = block_type frame.inst bt in
              let n1 = Lib.List32.length ts1 in
              let args, vs' = take n1 vs e.at, drop n1 vs e.at in
