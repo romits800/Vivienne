@@ -1053,7 +1053,7 @@ let rec step (c : config) : config list =
        (* TODO(Romy): estimation of loop size *)
        (* estimating loop size *)
        if !Flags.estimate_loop_size then (
-         let maxl = Some 10 in (*get_maximum_loop_size iv c in*)
+         let maxl = get_maximum_loop_size iv c in
          match maxl with
          | Some ml when ml < magic_number_loop_inv -> (
            if !Flags.debug then print_endline ("MaxL: " ^ (string_of_int ml));
