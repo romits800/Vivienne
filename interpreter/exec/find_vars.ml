@@ -72,7 +72,8 @@ let find_modified_vars (analyzed_loop : int ) (c : config) :
             | Loop (bt, es'), vs ->
                (* print_endline "Loop find_vars"; *)
                if !Flags.debug then 
-                 print_endline ("Loop: " ^ (string_of_int (Obj.magic e) ) ^ " loc: " ^ (string_of_region e.at));
+                 print_endline ("Loop: " ^ (string_of_int (Obj.magic e) )
+                                ^ " loc: " ^ (string_of_region e.at));
 
                let FuncType (ts1, ts2) = block_type frame.inst bt in
                let n1 = Lib.List32.length ts1 in
