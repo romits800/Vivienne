@@ -1471,6 +1471,7 @@ let optimize (f : Z3.Optimize.optimize -> Z3.Expr.expr -> Z3.Optimize.handle)
    | Solver.SATISFIABLE ->
       let ex1 = Optimize.get_lower h in
       let ex2 = Optimize.get_upper h in
+      (*print_endline ("Maxl" ^ (Expr.to_string ex1) ^ "upper:" ^ (Expr.to_string ex2));*)
       if Expr.equal ex1 ex2 then
         (* let i = Arithmetic.Integer.mk_const_s ctx "2147483648" in *)
         let bi = BitVector.mk_numeral ctx "2147483648" 64 in
@@ -1481,6 +1482,7 @@ let optimize (f : Z3.Optimize.optimize -> Z3.Expr.expr -> Z3.Optimize.handle)
         let sb = BitVector.mk_sub ctx bi1 bi in
         let si = Expr.simplify sb None in
         let i = int_of_string (BitVector.numeral_to_string si) in
+        (*print_endline (string_of_int i);*) 
         
         (* print_endline (Arithmetic.Integer.numeral_to_string ex1); *)
         (* let bi = Big_int.sub_big_int i (Big_int.big_int_of_int64 2147483648L) in *)

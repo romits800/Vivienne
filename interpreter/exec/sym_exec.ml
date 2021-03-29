@@ -1053,11 +1053,13 @@ let rec step (c : config) : config list =
        (* TODO(Romy): estimation of loop size *)
        (* estimating loop size *)
        if !Flags.estimate_loop_size then (
-         let maxl = get_maximum_loop_size iv c in
+         let maxl = Some 10 in (*get_maximum_loop_size iv c in*)
          match maxl with
          | Some ml when ml < magic_number_loop_inv -> (
-           let args, vs' = take n vs''' e.at, drop n vs''' e.at in
-           let vs'', es'' = vs''', [Label (n, [Plain l @@ e.at],
+           if !Flags.debug then print_endline ("MaxL: " ^ (string_of_int ml));
+          let {frame; code = vs, es; pc = pclet, pc; _} = c_old in
+           let args, vs' = take n vs e.at, drop n vs e.at in
+           let vs'', es'' = vs', [Label (n, [Plain l @@ e.at],
                                            (args, code'''), (pclet,pc),
                                            c_old.induction_vars, c_old.ct_check) @@ e.at]
            in
@@ -1066,6 +1068,7 @@ let rec step (c : config) : config list =
            [{c_old with code = vs'', es'' @ List.tl es; progc = Obj.magic l}]
          )
          | _ -> ( 
+           if !Flags.debug then print_endline ("No MaxL");
            let args, vs' = take n vs e.at, drop n vs e.at in
            let assrt = Assert (lvs, l) in
            let vs'', es'' = vs', [Label (n, [assrt @@ e.at],
