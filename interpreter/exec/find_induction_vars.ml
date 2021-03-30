@@ -146,519 +146,1033 @@ let get_iv_triple vold_orig vold vnew ivs loc =
   v
 
 
-let rec find_induction_vars (lv : triple IndVarMap.t) (c : config) (c_orig : config) :
-          (triple IndVarMap.t) * config list =
+(* let rec find_induction_vars (lv : triple IndVarMap.t) (c : config) (c_orig : config) :
+ *           (triple IndVarMap.t) * config list =
+ *   (\* print_endline "find_induction_vars"; *\)
+ *   let {frame; code = vs, es; pc = pclet, pc; _} = c in
+ *   (\* let s1 = Svalues.string_of_values (List.rev vs) in *\)
+ *   (\* print_endline s1; *\)
+ *   match es with
+ *   | e::est -> 
+ *      (match e.it, vs with
+ *       | Plain e', vs ->
+ *          (\* let no = Arrange.instr (e'@@e.at) in
+ *           * (match no with | Sexpr.Node(h,inner) -> print_endline h
+ *           *                | _ -> print_endline "no node"); *\)
+ *          (match e', vs with
+ *           | Unreachable, vs ->
+ *              let vs', es' = vs, [Trapping "unreachable executed" @@ e.at] in
+ *              find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+ *           | Nop, vs ->
+ *              (\* print_endline "nop"; *\)
+ *              let vs', es' = vs, [] in
+ *              find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+ *           | Block (bt, es'), vs ->
+ *              (\* print_endline "block"; *\)
+ *              let FuncType (ts1, ts2) = block_type frame.inst bt in
+ *              let n1 = Lib.List32.length ts1 in
+ *              let n2 = Lib.List32.length ts2 in
+ *              let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+ *              let vs', es' = vs', [Label (n2, [], (args, List.map plain es'),
+ *                                          (pclet,pc),
+ *                                          c.induction_vars,
+ *                                          c.ct_check) @@ e.at] in
+ *              find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+ *           | Loop (bt, es'), vs ->
+ *              (\* print_endline "Loop find_induction_vars"; *\)
+ *              let FuncType (ts1, ts2) = block_type frame.inst bt in
+ *              let n1 = Lib.List32.length ts1 in
+ *              let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+ *              let vs', es' = vs', [Label (n1, [],
+ *                                          (args, List.map plain es'),
+ *                                          (pclet,pc),
+ *                                          c.induction_vars,
+ *                                          c.ct_check) @@ e.at] in
+ *              find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+ *           | If (bt, es1, es2), v :: vs' ->
+ *              (\* print_endline "if"; *\)
+ *              if (!Flags.debug) then (
+ *                print_endline "if fiv";
+ *                print_endline (string_of_region e.at));
+ * 
+ *              let pc', pc'' = split_condition v pc in
+ *              let vs'', es'' = vs', [Plain (Block (bt, es1)) @@ e.at] in (\* True *\)
+ *              let vs', es' = vs', [Plain (Block (bt, es2)) @@ e.at] in (\* False *\)
+ *              (\* Don't check sat *\)
+ *              let mem = (frame.inst.smemories, smemlen frame.inst) in 
+ *              
+ *              let lv1,c1 = if Z3_solver.is_sat (pclet, pc') mem then
+ *                             find_induction_vars lv
+ *                               {c with code = vs', es' @ est; pc = (pclet,pc')} c_orig
+ *                           else lv,[] in
+ *              if (!Flags.debug) then (
+ *                print_endline "if fiv2";
+ *                print_endline (string_of_region e.at));
+ *              
+ *              let lv2,c2 = if Z3_solver.is_sat (pclet, pc'') mem then
+ *                             find_induction_vars lv1
+ *                               {c with code = vs'', es'' @ est; pc = (pclet,pc'')} c_orig
+ *                           else lv1,[] in
+ *              if (!Flags.debug) then (
+ *                print_endline "if fiv3";
+ *                print_endline (string_of_region e.at));
+ * 
+ *              lv2,c1 @ c2
+ * 
+ *           | Br x, vs ->
+ *              (\* print_endline "br"; *\)
+ *              if (!Flags.debug) then (
+ *                print_endline "br fiv";
+ *                print_endline (string_of_region e.at));
+ * 
+ *              let vs', es' = [], [Breaking (x.it, vs) @@ e.at] in
+ *              lv, [{c with code = vs', es' @ List.tl es}]
+ *              
+ *           | BrIf x, v :: vs' ->
+ *              (\* print_endline "br_if"; *\)
+ *              if (!Flags.debug) then (
+ *                print_endline "brif fiv";
+ *                print_endline (string_of_region e.at));
+ * 
+ *              let pc', pc'' = split_condition v pc in
+ *              let vs'', es'' = vs', [Plain (Br x) @@ e.at] in
+ *              let vs', es' = vs', [] in
+ * 
+ *              let mem = (frame.inst.smemories, smemlen frame.inst) in 
+ *              let lv1, c1 = if Z3_solver.is_sat (pclet, pc') mem then
+ *                              find_induction_vars lv
+ *                                {c with code = vs', es' @ est; pc = (pclet,pc')} c_orig
+ *                            else lv, []
+ *              in
+ *              let lv2, c2 = if Z3_solver.is_sat (pclet, pc'') mem then
+ *                              find_induction_vars lv1
+ *                                {c with code = vs'', es'' @ est; pc = (pclet,pc'')} c_orig
+ *                            else lv1, []
+ *              in
+ *              lv2, c1 @ c2
+ * 
+ *              
+ *           (\* | BrTable (xs, x), I32 i :: vs' when I32.ge_u i (Lib.List32.length xs) ->
+ *            *   vs', [Plain (Br x) @@ e.at]
+ *            * 
+ *            * | BrTable (xs, x), I32 i :: vs' ->
+ *            *   vs', [Plain (Br (Lib.List32.nth xs i)) @@ e.at] *\)
+ * 
+ *           | Return, vs ->
+ *              (\* print_endline "return"; *\)
+ *              let vs', es' = [], [Returning vs @@ e.at] in
+ *              find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+ * 
+ *           | Call x, vs ->
+ *              (\* print_endline "call"; *\)
+ *              let vs', es' = vs, [Invoke (func frame.inst x) @@ e.at] in
+ *              find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+ * 
+ *           (\* | CallIndirect x, I32 i :: vs ->
+ *            *   let func = func_elem frame.inst (0l @@ e.at) i e.at in
+ *            *   if type_ frame.inst x <> Func.type_of func then
+ *            *     vs, [Trapping "indirect call type mismatch" @@ e.at]
+ *            *   else
+ *            *     vs, [Invoke func @@ e.at] *\)
+ * 
+ *           | Drop, v :: vs' ->
+ *              (\* print_endline "drop"; *\)
+ *              let vs', es' = vs', [] in
+ *              find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+ *              
+ *           | Select, v0 :: v2 :: v1 :: vs' ->
+ *              (\* print_endline "select"; *\)
+ *              let vselect = select_condition v0 v1 v2 in
+ *              (\* let pc' = PCAnd(cond, pc) in *\)
+ *              let vs', es' = vselect :: vs', [] in
+ *              find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+ *              
+ *           | LocalGet x, vs ->
+ *              (\* print_endline "local get"; *\)
+ *              let vs', es' = (local frame x) :: vs, [] in
+ *              find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+ * 
+ *           | LocalSet x, v :: vs' ->
+ *              (\* print_endline "local set"; *\)
+ *              let vv = local frame x in
+ *              let vv_orig = local c_orig.frame x in
+ * 
+ *              let lv' = get_iv_triple vv_orig vv v lv e.at in
+ *              let frame' = update_local c.frame x v in
+ *              let vs', es' = vs', [] in
+ *              find_induction_vars lv' {c with code = vs', es' @ List.tl es; frame = frame'} c_orig
+ * 
+ *           | LocalTee x, v :: vs' ->
+ *              (\* print_endline "local tee"; *\)
+ *              let vv = local frame x in
+ *              let vv_orig = local c_orig.frame x in
+ *              
+ *              let lv' = get_iv_triple vv_orig vv v lv e.at in
+ * 
+ *              (\* print_loopvar (LocalVar (x,is_low)); *\)
+ *              let frame' = update_local c.frame x v in
+ *              let vs', es' = v :: vs', [] in
+ *              find_induction_vars lv' {c with code = vs', es' @ List.tl es; frame = frame'} c_orig
+ * 
+ *           | GlobalGet x, vs ->
+ *              let vs', es' = Sglobal.load (sglobal frame.inst x) :: vs, [] in
+ *              find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+ * 
+ *           | GlobalSet x, v :: vs' ->
+ * 
+ *              let vv = Sglobal.load (sglobal c.frame.inst x) in
+ *              let vv_orig = Sglobal.load (sglobal c_orig.frame.inst x) in
+ *              
+ *              let lv' = get_iv_triple vv_orig vv v lv e.at in
+ *              let newg, vs', es' =
+ *                (try Sglobal.store (sglobal frame.inst x) v, vs', []
+ *                 with Sglobal.NotMutable -> Crash.error e.at "write to immutable global"
+ *                    | Sglobal.Type -> Crash.error e.at "type mismatch at global write")
+ *              in
+ *              let frame' = {frame with inst = update_sglobal c.frame.inst newg x} in
+ *              find_induction_vars lv' {c with code = vs', es' @ List.tl es; frame = frame'} c_orig
+ * 
+ *           | Load {offset; ty; sz; _}, si :: vs' ->
+ *              (\* print_endline "load"; *\)
+ *              let addr =
+ *                (match si with
+ *                 | SI32 v -> v
+ *                 | _ -> failwith "Error: Address should be 32-bit integer"
+ *                ) in (\* I64_convert.extend_i32_u i in *\)
+ *              let offset = Int32.to_int offset in        
+ *              let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
+ *              let nv =
+ *                (match sz with
+ *                 | None -> Eval_symbolic.eval_load ty final_addr
+ *                             (smemlen frame.inst) (Types.size ty) None
+ *                 | Some (sz, ext) ->
+ *                    assert (packed_size sz <= Types.size ty);
+ *                    let n = packed_size sz in 
+ *                    Eval_symbolic.eval_load ty final_addr
+ *                      (smemlen frame.inst) n (Some ext)
+ *                )
+ *              in
+ * 
+ *              let vs', es' =  nv :: vs', [] in 
+ * 
+ *              find_induction_vars lv {c with code = vs', est}  c_orig
+ *              
+ *           | Store {offset; ty; sz; _}, sv :: si :: vs' ->
+ *              (\* print_endline "store"; *\)
+ *              if (!Flags.debug) then (
+ *                print_endline "store fiv";
+ *                print_endline (string_of_region e.at));
+ * 
+ *              let mem = smemory frame.inst (0l @@ e.at) in
+ *              let frame = {frame with
+ *                            inst = update_smemory frame.inst mem (0l @@ e.at)} in
+ *              let addr =
+ *                (match si with
+ *                 | SI32 v -> v
+ *                 | _ -> failwith "Error: Address should be 32-bit integer"
+ *                ) in (\* I64_convert.extend_i32_u i in *\)
+ *              let offset = Int32.to_int offset in
+ *              (\* check if we satisfy CT  for the index *\)
+ * 
+ *              (\* if (Z3_solver.is_v_ct_unsat (pclet, pc) si mems) then *\)
+ *              let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
+ * 
+ *              (\* let lv = (StoreVar final_addr)::lv in *\)
+ *              let nv, lvn, lvn_orig =
+ *                (match sz with
+ *                 | None ->
+ *                    let nv = Eval_symbolic.eval_store ty final_addr sv
+ *                               (smemlen frame.inst) (Types.size ty) in
+ *                    let lvn = (Eval_symbolic.eval_load ty final_addr
+ *                                 (smemlen frame.inst) (Types.size ty) None) in
+ *                    let lvn_orig = (Eval_symbolic.eval_load ty final_addr
+ *                                      (smemlen c_orig.frame.inst) (Types.size ty) None) in
+ * 
+ *                    nv,lvn,lvn_orig
+ *                 | Some (sz) ->
+ *                    assert (packed_size sz <= Types.size ty);
+ *                    let n = packed_size sz in
+ *                    let nv = Eval_symbolic.eval_store ty final_addr sv
+ *                               (smemlen frame.inst) n in
+ *                    let lvn = Eval_symbolic.eval_load ty final_addr
+ *                                (smemlen frame.inst) n None in
+ *                    let lvn_orig = Eval_symbolic.eval_load ty final_addr
+ *                                (smemlen c_orig.frame.inst) n None in
+ *                    nv, lvn, lvn_orig)
+ *              in
+ *              let lv' = get_iv_triple lvn_orig lvn sv lv e.at in
+ *              
+ *              (\* let memtuple = (c.frame.inst.smemories, smemlen c.frame.inst) in
+ *               * let is_low = Z3_solver.is_v_ct_unsat c.pc lvn memtuple in
+ *               * let mo = compare_svalues lvn sv in
+ *               * 
+ *               * let lv = (StoreVar (final_addr, ty, sz, is_low, mo))::lv in *\)
+ * 
+ *              let mem' = Smemory.store_sind_value mem nv in
+ *              let vs', es' = vs', [] in
+ *              (\* Update memory with a store *\)
+ *              let nframe = {frame with inst = insert_smemory frame.inst mem'} in
+ * 
+ *              find_induction_vars lv' {c with code = vs', es' @ est;
+ *                                                frame = nframe}  c_orig
+ * 
+ *           (\*TODO(Romy): Implement Const*\)
+ *           | Const v, vs ->
+ *              (\* print_endline "const"; *\)
+ *              let va = 
+ *                match v.it with
+ *                | Values.I32 i ->
+ *                   let ii = Int32.to_int i in
+ *                   let ii' = Int64.of_int ii in
+ *                   SI32 (Si32.bv_of_int ii' 32)
+ *                | Values.I64 i ->
+ *                   SI64 (Si64.bv_of_int i 64)
+ *                | Values.F32 i -> SF32 i
+ *                | Values.F64 i -> SF64 i
+ *              in
+ *              let vs', es' = va :: vs, [] in
+ *              find_induction_vars lv {c with code = vs', es' @ List.tl es}  c_orig
+ *              
+ *           (\* | Const v, vs ->
+ *            *    v.it :: vs, [] *\)
+ * 
+ *           | Test testop, v :: vs' ->
+ *              (\* print_endline "testop"; *\)
+ *              let vs', es' =
+ *                (try (Eval_symbolic.eval_testop testop v) :: vs', []
+ *                 with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
+ *              find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+ *              
+ *           | Compare relop, v2 :: v1 :: vs' ->
+ *              (\* print_endline "relop"; *\)
+ *              let vs', es' =
+ *                (try (Eval_symbolic.eval_relop relop v1 v2) :: vs', []
+ *                 with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
+ *              find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+ * 
+ *           | Unary unop, v :: vs' ->
+ *              (\* print_endline "unop"; *\)
+ *              let vs', es' = 
+ *                (try Eval_symbolic.eval_unop unop v :: vs', []
+ *                 with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
+ *              find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+ * 
+ *           | Binary binop, v2 :: v1 :: vs' ->
+ *              (\* print_endline "binop"; *\)
+ *              let vs', es' = 
+ *                (try
+ *                   let nv = Eval_symbolic.eval_binop binop v1 v2 in
+ *                   (\* "Printing binop" |> print_endline; *\)
+ *                   (\* Pc_type.svalue_to_string nv |> print_endline; *\)
+ *                   nv :: vs', []
+ *                 with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
+ *              find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+ *           | Convert cvtop, v :: vs' ->
+ *              let vs', es' = 
+ *                (try Eval_symbolic.eval_cvtop cvtop v :: vs', []
+ *                 with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at])
+ *              in
+ *              find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+ * 
+ *           | _ ->
+ *              let s1 = Svalues.string_of_values (List.rev vs) in
+ *              let s2 = Types.string_of_svalue_types (List.map Svalues.type_of (List.rev vs)) in
+ *              let no = Arrange.instr (e' @@ e.at) in
+ *              (match no with | Sexpr.Node(h,inner) -> print_endline h
+ *                             | _ -> print_endline "no node");
+ * 
+ *              Crash.error e.at
+ *                ("missing or ill-typed operand on stack (" ^ s1 ^ " : " ^ s2 ^ ")")
+ *          )
+ * 
+ *       | Trapping msg, vs ->
+ *          assert false
+ * 
+ *       | Assert (_,_), vs ->
+ *          failwith "Unexpected Assert in find_induction_vars";
+ *          
+ *       | Havoc lvs, vs ->
+ *          failwith "Unexpected Havoc in find_induction_vars";
+ * 
+ *       | SecondPass _, vs ->
+ *          failwith "Unexpected SecondPass in find_induction_vars";
+ * 
+ *       | NonCheckPass _, vs ->
+ *          failwith "Unexpected NonCheckPass in find_induction_vars";
+ * 
+ *       | FirstPass _, vs ->
+ *          failwith "Unexpected FirstPass in find_induction_vars";
+ * 
+ *       (\* assert false *\)
+ * 
+ *       | Returning vs', vs ->
+ *          Crash.error e.at "undefined frame"
+ * 
+ *       | Breaking (k, vs'), vs ->
+ *          (\* print_endline "breaking"; *\)
+ *          lv, []
+ *       (\* Crash.error e.at "undefined label" *\)
+ * 
+ *       | Label (n, es0, (vs', []), pc', iv', cct'), vs ->
+ *          (\* print_endline "lab"; *\)
+ *          let vs', es' = vs' @ vs, [] in
+ *          find_induction_vars lv {c with code = vs', es' @ List.tl es}  c_orig
+ *          
+ *       | Label (n, es0, (vs', {it = Trapping msg; at} :: es'), pc', iv', cct'), vs ->
+ *          (\* print_endline "lab2"; *\)
+ *          let vs', es' = vs, [Trapping msg @@ at] in
+ *          find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+ * 
+ *       | Label (n, es0, (vs', {it = Returning vs0; at} :: es'), pc', iv', cct'), vs ->
+ *          (\* print_endline "lab3"; *\)
+ *          let vs', es' = vs, [Returning vs0 @@ at] in
+ *          find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+ * 
+ *       | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es'), pc', iv', cct'), vs ->
+ *          (\* print_endline "lab4"; *\)
+ *          if (!Flags.debug) then (
+ *            print_endline "l1 fiv";
+ *            print_endline (string_of_region e.at));
+ * 
+ *          let vs', es' = take n vs0 e.at @ vs, es0 in
+ *          find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+ * 
+ *       | Label (n, es0, (vs', {it = Breaking (k, vs0); at} :: es'), pc', iv', cct'), vs ->
+ *          (\* print_endline "lab5"; *\)
+ *          if (!Flags.debug) then (
+ *            print_endline "l2 fiv";
+ *            print_endline (string_of_region e.at);
+ *            print_endline (string_of_int (Int32.to_int (Int32.sub k 1l)))
+ *          );
+ * 
+ *          let vs', es' = vs, [Breaking (Int32.sub k 1l, vs0) @@ at] in
+ *          find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+ * 
+ *       | Label (n, es0, code', pc', iv', cct'), vs ->
+ *          (\* print_endline "lab6"; *\)
+ *          (\* TODO(Romy): not sure if correct to change the pc *\)
+ *          let lv', c' = find_induction_vars lv {c with code = code'; pc = pc'; induction_vars = iv'}  c_orig in
+ *          (\* print_endline "lab6_back"; *\)
+ *          let res =
+ *            List.fold_left (fun (lvi, cprev) ci ->
+ *                let lvi', ci' =
+ *                  find_induction_vars lvi
+ *                    {c with code = vs,
+ *                                   [Label (n, es0, ci.code,
+ *                                           ci.pc,
+ *                                           ci.induction_vars,
+ *                                           ci.ct_check) @@ e.at]
+ *                                   @ List.tl es;
+ *                            pc = ci.pc; 
+ *                            frame = ci.frame;
+ *                            induction_vars = ci.induction_vars} c_orig
+ *                in
+ *                lvi', ci' @ cprev
+ *              ) (lv', []) c'
+ *          in
+ *          (\* print_endline "lab6_end"; *\)
+ *          res
+ * 
+ *       | Frame (n, frame', (vs', []), pc', iv'), vs ->
+ *          (\* print_endline ("frame1:" ^ (string_of_int c.counter)); *\)
+ *          let vs', es' = vs' @ vs, [] in
+ *          let c = {c with code = vs', es' @ List.tl es;
+ *                          frame = {frame
+ *                                  with inst = {frame.inst
+ *                                              with smemories = frame'.inst.smemories;
+ *                                                   smemlen = frame'.inst.smemlen;
+ *                                                   sglobals = frame'.inst.sglobals
+ *                                              }
+ *                                  };
+ *                          pc = pc';
+ *                          induction_vars = iv'
+ *                  } in
+ *          find_induction_vars lv c c_orig
+ *       | Frame (n, frame', (vs', {it = Trapping msg; at} :: es'), _, _), vs ->
+ *          (\* print_endline "frame2"; *\)
+ *          let vs', es' = vs, [Trapping msg @@ at] in
+ *          find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+ * 
+ *       | Frame (n, frame', (vs', {it = Returning vs0; at} :: es'), pc', iv'), vs ->
+ *          (\* print_endline "frame returning"; *\)
+ *          (\* print_endline ("frame3:" ^ (string_of_int c.counter)); *\)
+ *          let vs', es' = take n vs0 e.at @ vs, [] in
+ *          let c = {c with code = vs', es' @ List.tl es;
+ *                          frame = {frame
+ *                                  with inst = {frame.inst
+ *                                              with smemories = frame'.inst.smemories;
+ *                                                   smemlen = frame'.inst.smemlen;
+ *                                                   sglobals = frame'.inst.sglobals
+ *                                              }
+ *                                  };
+ *                          pc = pc';
+ *                          induction_vars = iv'} in
+ *          find_induction_vars lv c c_orig
+ * 
+ *       | Frame (n, frame', code', pc', iv'), vs ->
+ *          (\* print_endline "frame4"; *\)
+ *          let lv', c' = find_induction_vars lv {c with frame = frame';
+ *                                                       code = code';
+ *                                                       budget = c.budget - 1;
+ *                                                       pc = pc';
+ *                                                       induction_vars = iv'} c_orig in
+ *          (\* print_endline "frame4_end"; *\)
+ *          (\* TODO(Romy): the pc etc  should probably not be here *\)
+ *          
+ *          List.fold_left
+ *            (fun (lvi,cprev) ci ->
+ *              let lvi', ci' =
+ *                find_induction_vars lvi {c with code = vs, [Frame (n, ci.frame, ci.code,
+ *                                                                   ci.pc, ci.induction_vars)
+ *                                                            @@ e.at] @ List.tl es;} c_orig
+ *              in
+ *              lvi', ci' @ cprev) (lv',[]) c'
+ *          
+ * 
+ *       | Invoke func, vs when c.budget = 0 ->
+ *          Exhaustion.error e.at "call stack exhausted"
+ * 
+ *       | Invoke func, vs ->
+ *          (\* print_endline "inv2"; *\)
+ *          let FuncType (ins, out) = func_type_of func in
+ *          let n1, n2 = Lib.List32.length ins, Lib.List32.length out in
+ *          let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+ *          (match func with
+ *           | Func.AstFunc (t, inst', f) ->
+ *              let rest = List.map value_to_svalue_type f.it.locals in
+ *              (\* let locals' = List.rev args @ List.map Svalues.default_value rest in *\) 
+ *              let locals' = List.rev args @ List.map Svalues.default_value rest in
+ *              let frame' = {inst = !inst'; locals = locals'} in
+ *              let instr' = [Label (n2, [], ([], List.map plain f.it.body),
+ *                                   c.pc, c.induction_vars, c.ct_check) @@ f.at] in 
+ *              let vs', es' = vs', [Frame (n2, frame', ([], instr'), c.pc, c.induction_vars) @@ e.at] in
+ *              find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+ * 
+ *           (\* | Func.HostFunc (t, f) ->
+ *            *   (try List.rev (f (List.rev args)) @ vs', []
+ *            *   with Crash (_, msg) -> Crash.error e.at msg) *\)
+ *           | _ -> Crash.error e.at "Func.Hostfunc not implemented yet."
+ *          )
+ *      )
+ *   | [] -> lv, [] *)
+
+
+
+let rec fiv_step (lv : triple IndVarMap.t) (c : config) (c_orig : config) :
+          (triple IndVarMap.t) * config list * config =
   (* print_endline "find_induction_vars"; *)
   let {frame; code = vs, es; pc = pclet, pc; _} = c in
   (* let s1 = Svalues.string_of_values (List.rev vs) in *)
   (* print_endline s1; *)
-  match es with
-  | e::est -> 
-     (match e.it, vs with
-      | Plain e', vs ->
-         (* let no = Arrange.instr (e'@@e.at) in
-          * (match no with | Sexpr.Node(h,inner) -> print_endline h
-          *                | _ -> print_endline "no node"); *)
-         (match e', vs with
-          | Unreachable, vs ->
-             let vs', es' = vs, [Trapping "unreachable executed" @@ e.at] in
-             find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
-          | Nop, vs ->
-             (* print_endline "nop"; *)
-             let vs', es' = vs, [] in
-             find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
-          | Block (bt, es'), vs ->
-             (* print_endline "block"; *)
-             let FuncType (ts1, ts2) = block_type frame.inst bt in
-             let n1 = Lib.List32.length ts1 in
-             let n2 = Lib.List32.length ts2 in
-             let args, vs' = take n1 vs e.at, drop n1 vs e.at in
-             let vs', es' = vs', [Label (n2, [], (args, List.map plain es'),
-                                         (pclet,pc),
-                                         c.induction_vars,
-                                         c.ct_check) @@ e.at] in
-             find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
-          | Loop (bt, es'), vs ->
-             (* print_endline "Loop find_induction_vars"; *)
-             let FuncType (ts1, ts2) = block_type frame.inst bt in
-             let n1 = Lib.List32.length ts1 in
-             let args, vs' = take n1 vs e.at, drop n1 vs e.at in
-             let vs', es' = vs', [Label (n1, [],
-                                         (args, List.map plain es'),
-                                         (pclet,pc),
-                                         c.induction_vars,
-                                         c.ct_check) @@ e.at] in
-             find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
-          | If (bt, es1, es2), v :: vs' ->
-             (* print_endline "if"; *)
-             if (!Flags.debug) then (
-               print_endline "if fiv";
-               print_endline (string_of_region e.at));
+  let e = List.hd es in
+  let est = List.tl es in
+  (match e.it, vs with
+   | Plain e', vs ->
+      (* let no = Arrange.instr (e'@@e.at) in
+       * (match no with | Sexpr.Node(h,inner) -> print_endline h
+       *                | _ -> print_endline "no node"); *)
+      (match e', vs with
+       | Unreachable, vs ->
+          let vs', es' = vs, [Trapping "unreachable executed" @@ e.at] in
+          lv, [{c with code = vs', es' @ List.tl es}], c_orig
+       | Nop, vs ->
+          (* print_endline "nop"; *)
+          let vs', es' = vs, [] in
+          lv, [{c with code = vs', es' @ List.tl es}], c_orig
+       | Block (bt, es'), vs ->
+          (* print_endline "block"; *)
+          let FuncType (ts1, ts2) = block_type frame.inst bt in
+          let n1 = Lib.List32.length ts1 in
+          let n2 = Lib.List32.length ts2 in
+          let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+          let vs', es' = vs', [Label (n2, [], (args, List.map plain es'),
+                                      (pclet,pc),
+                                      c.induction_vars,
+                                      c.ct_check) @@ e.at] in
+          lv, [{c with code = vs', es' @ List.tl es}], c_orig
+       | Loop (bt, es'), vs ->
+          (* print_endline "Loop find_induction_vars"; *)
+          let FuncType (ts1, ts2) = block_type frame.inst bt in
+          let n1 = Lib.List32.length ts1 in
+          let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+          let vs', es' = vs', [Label (n1, [],
+                                      (args, List.map plain es'),
+                                      (pclet,pc),
+                                      c.induction_vars,
+                                      c.ct_check) @@ e.at] in
+          lv, [{c with code = vs', es' @ List.tl es}], c_orig
+       | If (bt, es1, es2), v :: vs' ->
+          (* print_endline "if"; *)
+          if (!Flags.debug) then (
+            print_endline "if fiv";
+            print_endline (string_of_region e.at));
 
-             let pc', pc'' = split_condition v pc in
-             let vs'', es'' = vs', [Plain (Block (bt, es1)) @@ e.at] in (* True *)
-             let vs', es' = vs', [Plain (Block (bt, es2)) @@ e.at] in (* False *)
-             (* Don't check sat *)
-             let mem = (frame.inst.smemories, smemlen frame.inst) in 
-             
-             let lv1,c1 = if Z3_solver.is_sat (pclet, pc') mem then
-                            find_induction_vars lv
-                              {c with code = vs', es' @ est; pc = (pclet,pc')} c_orig
-                          else lv,[] in
-             if (!Flags.debug) then (
-               print_endline "if fiv2";
-               print_endline (string_of_region e.at));
-             
-             let lv2,c2 = if Z3_solver.is_sat (pclet, pc'') mem then
-                            find_induction_vars lv1
-                              {c with code = vs'', es'' @ est; pc = (pclet,pc'')} c_orig
-                          else lv1,[] in
-             if (!Flags.debug) then (
-               print_endline "if fiv3";
-               print_endline (string_of_region e.at));
+          let pc', pc'' = split_condition v pc in
+          let vs'', es'' = vs', [Plain (Block (bt, es1)) @@ e.at] in (* True *)
+          let vs', es' = vs', [Plain (Block (bt, es2)) @@ e.at] in (* False *)
+          (* Don't check sat *)
+          let mem = (frame.inst.smemories, smemlen frame.inst) in 
+          
+          let c1 = if Z3_solver.is_sat (pclet, pc') mem then
+                         [{c with code = vs', es' @ est; pc = (pclet,pc')}]
+                       else [] in
+          if (!Flags.debug) then (
+            print_endline "if fiv2";
+            print_endline (string_of_region e.at));
+          
+          let c2 = if Z3_solver.is_sat (pclet, pc'') mem then
+                     [{c with code = vs'', es'' @ est; pc = (pclet,pc'')}]
+                       else [] in
+          if (!Flags.debug) then (
+            print_endline "if fiv3";
+            print_endline (string_of_region e.at));
 
-             lv2,c1 @ c2
+          lv, c1 @ c2, c_orig
 
-          | Br x, vs ->
-             (* print_endline "br"; *)
-             if (!Flags.debug) then (
-               print_endline "br fiv";
-               print_endline (string_of_region e.at));
+       | Br x, vs ->
+          (* print_endline "br"; *)
+          if (!Flags.debug) then (
+            print_endline "br fiv";
+            print_endline (string_of_region e.at));
 
-             let vs', es' = [], [Breaking (x.it, vs) @@ e.at] in
-             lv, [{c with code = vs', es' @ List.tl es}]
-             
-          | BrIf x, v :: vs' ->
-             (* print_endline "br_if"; *)
-             if (!Flags.debug) then (
-               print_endline "brif fiv";
-               print_endline (string_of_region e.at));
+          let vs', es' = [], [Breaking (x.it, vs) @@ e.at] in
+          lv, [{c with code = vs', es' @ List.tl es}], c_orig
+          
+       | BrIf x, v :: vs' ->
+          (* print_endline "br_if"; *)
+          if (!Flags.debug) then (
+            print_endline "brif fiv";
+            print_endline (string_of_region e.at));
 
-             let pc', pc'' = split_condition v pc in
-             let vs'', es'' = vs', [Plain (Br x) @@ e.at] in
-             let vs', es' = vs', [] in
+          let pc', pc'' = split_condition v pc in
+          let vs'', es'' = vs', [Plain (Br x) @@ e.at] in
+          let vs', es' = vs', [] in
 
-             let mem = (frame.inst.smemories, smemlen frame.inst) in 
-             let lv1, c1 = if Z3_solver.is_sat (pclet, pc') mem then
-                             find_induction_vars lv
-                               {c with code = vs', es' @ est; pc = (pclet,pc')} c_orig
-                           else lv, []
-             in
-             let lv2, c2 = if Z3_solver.is_sat (pclet, pc'') mem then
-                             find_induction_vars lv1
-                               {c with code = vs'', es'' @ est; pc = (pclet,pc'')} c_orig
-                           else lv1, []
-             in
-             lv2, c1 @ c2
+          let mem = (frame.inst.smemories, smemlen frame.inst) in 
+          let c1 = if Z3_solver.is_sat (pclet, pc') mem then
+                     [{c with code = vs', es' @ est; pc = (pclet,pc')}]
+                   else []
+          in
+          let c2 = if Z3_solver.is_sat (pclet, pc'') mem then
+                     [{c with code = vs'', es'' @ est; pc = (pclet,pc'')}]
+                   else []
+          in
+          lv, c1 @ c2, c_orig
 
-             
-          (* | BrTable (xs, x), I32 i :: vs' when I32.ge_u i (Lib.List32.length xs) ->
-           *   vs', [Plain (Br x) @@ e.at]
+          
+       (* | BrTable (xs, x), I32 i :: vs' when I32.ge_u i (Lib.List32.length xs) ->
+        *   vs', [Plain (Br x) @@ e.at]
+        * 
+        * | BrTable (xs, x), I32 i :: vs' ->
+        *   vs', [Plain (Br (Lib.List32.nth xs i)) @@ e.at] *)
+
+       | Return, vs ->
+          (* print_endline "return"; *)
+          let vs', es' = [], [Returning vs @@ e.at] in
+          lv, [{c with code = vs', es' @ List.tl es}], c_orig
+
+       | Call x, vs ->
+          (* print_endline "call"; *)
+          let vs', es' = vs, [Invoke (func frame.inst x) @@ e.at] in
+          lv, [{c with code = vs', es' @ List.tl es}], c_orig
+
+       (* | CallIndirect x, I32 i :: vs ->
+        *   let func = func_elem frame.inst (0l @@ e.at) i e.at in
+        *   if type_ frame.inst x <> Func.type_of func then
+        *     vs, [Trapping "indirect call type mismatch" @@ e.at]
+        *   else
+        *     vs, [Invoke func @@ e.at] *)
+
+       | Drop, v :: vs' ->
+          (* print_endline "drop"; *)
+          let vs', es' = vs', [] in
+          lv, [{c with code = vs', es' @ List.tl es}], c_orig
+          
+       | Select, v0 :: v2 :: v1 :: vs' ->
+          (* print_endline "select"; *)
+          let vselect = select_condition v0 v1 v2 in
+          (* let pc' = PCAnd(cond, pc) in *)
+          let vs', es' = vselect :: vs', [] in
+          lv, [{c with code = vs', es' @ List.tl es}], c_orig
+          
+       | LocalGet x, vs ->
+          (* print_endline "local get"; *)
+          let vs', es' = (local frame x) :: vs, [] in
+          lv, [{c with code = vs', es' @ List.tl es}], c_orig
+
+       | LocalSet x, v :: vs' ->
+          (* print_endline "local set"; *)
+          let vv = local frame x in
+          let vv_orig = local c_orig.frame x in
+
+          let lv' = get_iv_triple vv_orig vv v lv e.at in
+          let frame' = update_local c.frame x v in
+          let vs', es' = vs', [] in
+          lv', [{c with code = vs', es' @ List.tl es; frame = frame'}], c_orig
+
+       | LocalTee x, v :: vs' ->
+          (* print_endline "local tee"; *)
+          let vv = local frame x in
+          let vv_orig = local c_orig.frame x in
+          
+          let lv' = get_iv_triple vv_orig vv v lv e.at in
+
+          (* print_loopvar (LocalVar (x,is_low)); *)
+          let frame' = update_local c.frame x v in
+          let vs', es' = v :: vs', [] in
+          lv', [{c with code = vs', es' @ List.tl es; frame = frame'}], c_orig
+
+       | GlobalGet x, vs ->
+          let vs', es' = Sglobal.load (sglobal frame.inst x) :: vs, [] in
+          lv, [{c with code = vs', es' @ List.tl es}], c_orig
+
+       | GlobalSet x, v :: vs' ->
+
+          let vv = Sglobal.load (sglobal c.frame.inst x) in
+          let vv_orig = Sglobal.load (sglobal c_orig.frame.inst x) in
+          
+          let lv' = get_iv_triple vv_orig vv v lv e.at in
+          let newg, vs', es' =
+            (try Sglobal.store (sglobal frame.inst x) v, vs', []
+             with Sglobal.NotMutable -> Crash.error e.at "write to immutable global"
+                | Sglobal.Type -> Crash.error e.at "type mismatch at global write")
+          in
+          let frame' = {frame with inst = update_sglobal c.frame.inst newg x} in
+          lv', [{c with code = vs', es' @ List.tl es; frame = frame'}], c_orig
+
+       | Load {offset; ty; sz; _}, si :: vs' ->
+          (* print_endline "load"; *)
+          let addr =
+            (match si with
+             | SI32 v -> v
+             | _ -> failwith "Error: Address should be 32-bit integer"
+            ) in (* I64_convert.extend_i32_u i in *)
+          let offset = Int32.to_int offset in        
+          let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
+          let nv =
+            (match sz with
+             | None -> Eval_symbolic.eval_load ty final_addr
+                         (smemlen frame.inst) (Types.size ty) None
+             | Some (sz, ext) ->
+                assert (packed_size sz <= Types.size ty);
+                let n = packed_size sz in 
+                Eval_symbolic.eval_load ty final_addr
+                  (smemlen frame.inst) n (Some ext)
+            )
+          in
+
+          let vs', es' =  nv :: vs', [] in 
+
+          lv, [{c with code = vs', est}], c_orig
+          
+       | Store {offset; ty; sz; _}, sv :: si :: vs' ->
+          (* print_endline "store"; *)
+          if (!Flags.debug) then (
+            print_endline "store fiv";
+            print_endline (string_of_region e.at));
+
+          let mem = smemory frame.inst (0l @@ e.at) in
+          let frame = {frame with
+                        inst = update_smemory frame.inst mem (0l @@ e.at)} in
+          let addr =
+            (match si with
+             | SI32 v -> v
+             | _ -> failwith "Error: Address should be 32-bit integer"
+            ) in (* I64_convert.extend_i32_u i in *)
+          let offset = Int32.to_int offset in
+          (* check if we satisfy CT  for the index *)
+
+          (* if (Z3_solver.is_v_ct_unsat (pclet, pc) si mems) then *)
+          let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
+
+          (* let lv = (StoreVar final_addr)::lv in *)
+          let nv, lvn, lvn_orig =
+            (match sz with
+             | None ->
+                let nv = Eval_symbolic.eval_store ty final_addr sv
+                           (smemlen frame.inst) (Types.size ty) in
+                let lvn = (Eval_symbolic.eval_load ty final_addr
+                             (smemlen frame.inst) (Types.size ty) None) in
+                let lvn_orig = (Eval_symbolic.eval_load ty final_addr
+                                  (smemlen c_orig.frame.inst) (Types.size ty) None) in
+
+                nv,lvn,lvn_orig
+             | Some (sz) ->
+                assert (packed_size sz <= Types.size ty);
+                let n = packed_size sz in
+                let nv = Eval_symbolic.eval_store ty final_addr sv
+                           (smemlen frame.inst) n in
+                let lvn = Eval_symbolic.eval_load ty final_addr
+                            (smemlen frame.inst) n None in
+                let lvn_orig = Eval_symbolic.eval_load ty final_addr
+                                 (smemlen c_orig.frame.inst) n None in
+                nv, lvn, lvn_orig)
+          in
+          let lv' = get_iv_triple lvn_orig lvn sv lv e.at in
+          
+          (* let memtuple = (c.frame.inst.smemories, smemlen c.frame.inst) in
+           * let is_low = Z3_solver.is_v_ct_unsat c.pc lvn memtuple in
+           * let mo = compare_svalues lvn sv in
            * 
-           * | BrTable (xs, x), I32 i :: vs' ->
-           *   vs', [Plain (Br (Lib.List32.nth xs i)) @@ e.at] *)
+           * let lv = (StoreVar (final_addr, ty, sz, is_low, mo))::lv in *)
 
-          | Return, vs ->
-             (* print_endline "return"; *)
-             let vs', es' = [], [Returning vs @@ e.at] in
-             find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+          let mem' = Smemory.store_sind_value mem nv in
+          let vs', es' = vs', [] in
+          (* Update memory with a store *)
+          let nframe = {frame with inst = insert_smemory frame.inst mem'} in
 
-          | Call x, vs ->
-             (* print_endline "call"; *)
-             let vs', es' = vs, [Invoke (func frame.inst x) @@ e.at] in
-             find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+          lv', [{c with code = vs', es' @ est;
+                       frame = nframe}],  c_orig
 
-          (* | CallIndirect x, I32 i :: vs ->
-           *   let func = func_elem frame.inst (0l @@ e.at) i e.at in
-           *   if type_ frame.inst x <> Func.type_of func then
-           *     vs, [Trapping "indirect call type mismatch" @@ e.at]
-           *   else
-           *     vs, [Invoke func @@ e.at] *)
+       (*TODO(Romy): Implement Const*)
+       | Const v, vs ->
+          (* print_endline "const"; *)
+          let va = 
+            match v.it with
+            | Values.I32 i ->
+               let ii = Int32.to_int i in
+               let ii' = Int64.of_int ii in
+               SI32 (Si32.bv_of_int ii' 32)
+            | Values.I64 i ->
+               SI64 (Si64.bv_of_int i 64)
+            | Values.F32 i -> SF32 i
+            | Values.F64 i -> SF64 i
+          in
+          let vs', es' = va :: vs, [] in
+          lv, [{c with code = vs', es' @ List.tl es}], c_orig
+          
+       (* | Const v, vs ->
+        *    v.it :: vs, [] *)
 
-          | Drop, v :: vs' ->
-             (* print_endline "drop"; *)
-             let vs', es' = vs', [] in
-             find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
-             
-          | Select, v0 :: v2 :: v1 :: vs' ->
-             (* print_endline "select"; *)
-             let vselect = select_condition v0 v1 v2 in
-             (* let pc' = PCAnd(cond, pc) in *)
-             let vs', es' = vselect :: vs', [] in
-             find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
-             
-          | LocalGet x, vs ->
-             (* print_endline "local get"; *)
-             let vs', es' = (local frame x) :: vs, [] in
-             find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+       | Test testop, v :: vs' ->
+          (* print_endline "testop"; *)
+          let vs', es' =
+            (try (Eval_symbolic.eval_testop testop v) :: vs', []
+             with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
+          lv, [{c with code = vs', es' @ List.tl es}], c_orig
+          
+       | Compare relop, v2 :: v1 :: vs' ->
+          (* print_endline "relop"; *)
+          let vs', es' =
+            (try (Eval_symbolic.eval_relop relop v1 v2) :: vs', []
+             with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
+          lv, [{c with code = vs', es' @ List.tl es}], c_orig
 
-          | LocalSet x, v :: vs' ->
-             (* print_endline "local set"; *)
-             let vv = local frame x in
-             let vv_orig = local c_orig.frame x in
+       | Unary unop, v :: vs' ->
+          (* print_endline "unop"; *)
+          let vs', es' = 
+            (try Eval_symbolic.eval_unop unop v :: vs', []
+             with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
+          lv, [{c with code = vs', es' @ List.tl es}], c_orig
 
-             let lv' = get_iv_triple vv_orig vv v lv e.at in
-             let frame' = update_local c.frame x v in
-             let vs', es' = vs', [] in
-             find_induction_vars lv' {c with code = vs', es' @ List.tl es; frame = frame'} c_orig
+       | Binary binop, v2 :: v1 :: vs' ->
+          (* print_endline "binop"; *)
+          let vs', es' = 
+            (try
+               let nv = Eval_symbolic.eval_binop binop v1 v2 in
+               (* "Printing binop" |> print_endline; *)
+               (* Pc_type.svalue_to_string nv |> print_endline; *)
+               nv :: vs', []
+             with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
+          lv, [{c with code = vs', es' @ List.tl es}], c_orig
+       | Convert cvtop, v :: vs' ->
+          let vs', es' = 
+            (try Eval_symbolic.eval_cvtop cvtop v :: vs', []
+             with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at])
+          in
+          lv, [{c with code = vs', es' @ List.tl es}], c_orig
 
-          | LocalTee x, v :: vs' ->
-             (* print_endline "local tee"; *)
-             let vv = local frame x in
-             let vv_orig = local c_orig.frame x in
-             
-             let lv' = get_iv_triple vv_orig vv v lv e.at in
+       | _ ->
+          let s1 = Svalues.string_of_values (List.rev vs) in
+          let s2 = Types.string_of_svalue_types (List.map Svalues.type_of (List.rev vs)) in
+          let no = Arrange.instr (e' @@ e.at) in
+          (match no with | Sexpr.Node(h,inner) -> print_endline h
+                         | _ -> print_endline "no node");
 
-             (* print_loopvar (LocalVar (x,is_low)); *)
-             let frame' = update_local c.frame x v in
-             let vs', es' = v :: vs', [] in
-             find_induction_vars lv' {c with code = vs', es' @ List.tl es; frame = frame'} c_orig
+          Crash.error e.at
+            ("missing or ill-typed operand on stack (" ^ s1 ^ " : " ^ s2 ^ ")")
+      )
 
-          | GlobalGet x, vs ->
-             let vs', es' = Sglobal.load (sglobal frame.inst x) :: vs, [] in
-             find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+   | Trapping msg, vs ->
+      assert false
 
-          | GlobalSet x, v :: vs' ->
+   | Assert (_,_), vs ->
+      failwith "Unexpected Assert in find_induction_vars";
+      
+   | Havoc lvs, vs ->
+      failwith "Unexpected Havoc in find_induction_vars";
 
-             let vv = Sglobal.load (sglobal c.frame.inst x) in
-             let vv_orig = Sglobal.load (sglobal c_orig.frame.inst x) in
-             
-             let lv' = get_iv_triple vv_orig vv v lv e.at in
-             let newg, vs', es' =
-               (try Sglobal.store (sglobal frame.inst x) v, vs', []
-                with Sglobal.NotMutable -> Crash.error e.at "write to immutable global"
-                   | Sglobal.Type -> Crash.error e.at "type mismatch at global write")
-             in
-             let frame' = {frame with inst = update_sglobal c.frame.inst newg x} in
-             find_induction_vars lv' {c with code = vs', es' @ List.tl es; frame = frame'} c_orig
+   | SecondPass _, vs ->
+      failwith "Unexpected SecondPass in find_induction_vars";
 
-          | Load {offset; ty; sz; _}, si :: vs' ->
-             (* print_endline "load"; *)
-             let addr =
-               (match si with
-                | SI32 v -> v
-                | _ -> failwith "Error: Address should be 32-bit integer"
-               ) in (* I64_convert.extend_i32_u i in *)
-             let offset = Int32.to_int offset in        
-             let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
-             let nv =
-               (match sz with
-                | None -> Eval_symbolic.eval_load ty final_addr
-                            (smemlen frame.inst) (Types.size ty) None
-                | Some (sz, ext) ->
-                   assert (packed_size sz <= Types.size ty);
-                   let n = packed_size sz in 
-                   Eval_symbolic.eval_load ty final_addr
-                     (smemlen frame.inst) n (Some ext)
-               )
-             in
+   | NonCheckPass _, vs ->
+      failwith "Unexpected NonCheckPass in find_induction_vars";
 
-             let vs', es' =  nv :: vs', [] in 
+   | FirstPass _, vs ->
+      failwith "Unexpected FirstPass in find_induction_vars";
 
-             find_induction_vars lv {c with code = vs', est}  c_orig
-             
-          | Store {offset; ty; sz; _}, sv :: si :: vs' ->
-             (* print_endline "store"; *)
-             if (!Flags.debug) then (
-               print_endline "store fiv";
-               print_endline (string_of_region e.at));
+   (* assert false *)
 
-             let mem = smemory frame.inst (0l @@ e.at) in
-             let frame = {frame with
-                           inst = update_smemory frame.inst mem (0l @@ e.at)} in
-             let addr =
-               (match si with
-                | SI32 v -> v
-                | _ -> failwith "Error: Address should be 32-bit integer"
-               ) in (* I64_convert.extend_i32_u i in *)
-             let offset = Int32.to_int offset in
-             (* check if we satisfy CT  for the index *)
+   | Returning vs', vs ->
+      Crash.error e.at "undefined frame"
 
-             (* if (Z3_solver.is_v_ct_unsat (pclet, pc) si mems) then *)
-             let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
+   | Breaking (k, vs'), vs ->
+      (* print_endline "breaking"; *)
+      lv, [], c_orig
+   (* Crash.error e.at "undefined label" *)
 
-             (* let lv = (StoreVar final_addr)::lv in *)
-             let nv, lvn, lvn_orig =
-               (match sz with
-                | None ->
-                   let nv = Eval_symbolic.eval_store ty final_addr sv
-                              (smemlen frame.inst) (Types.size ty) in
-                   let lvn = (Eval_symbolic.eval_load ty final_addr
-                                (smemlen frame.inst) (Types.size ty) None) in
-                   let lvn_orig = (Eval_symbolic.eval_load ty final_addr
-                                     (smemlen c_orig.frame.inst) (Types.size ty) None) in
+   | Label (n, es0, (vs', []), pc', iv', cct'), vs ->
+      (* print_endline "lab"; *)
+      let vs', es' = vs' @ vs, [] in
+      lv, [{c with code = vs', es' @ List.tl es}], c_orig
+      
+   | Label (n, es0, (vs', {it = Trapping msg; at} :: es'), pc', iv', cct'), vs ->
+      (* print_endline "lab2"; *)
+      let vs', es' = vs, [Trapping msg @@ at] in
+      lv, [{c with code = vs', es' @ List.tl es}], c_orig
 
-                   nv,lvn,lvn_orig
-                | Some (sz) ->
-                   assert (packed_size sz <= Types.size ty);
-                   let n = packed_size sz in
-                   let nv = Eval_symbolic.eval_store ty final_addr sv
-                              (smemlen frame.inst) n in
-                   let lvn = Eval_symbolic.eval_load ty final_addr
-                               (smemlen frame.inst) n None in
-                   let lvn_orig = Eval_symbolic.eval_load ty final_addr
-                               (smemlen c_orig.frame.inst) n None in
-                   nv, lvn, lvn_orig)
-             in
-             let lv' = get_iv_triple lvn_orig lvn sv lv e.at in
-             
-             (* let memtuple = (c.frame.inst.smemories, smemlen c.frame.inst) in
-              * let is_low = Z3_solver.is_v_ct_unsat c.pc lvn memtuple in
-              * let mo = compare_svalues lvn sv in
-              * 
-              * let lv = (StoreVar (final_addr, ty, sz, is_low, mo))::lv in *)
+   | Label (n, es0, (vs', {it = Returning vs0; at} :: es'), pc', iv', cct'), vs ->
+      (* print_endline "lab3"; *)
+      let vs', es' = vs, [Returning vs0 @@ at] in
+      lv, [{c with code = vs', es' @ List.tl es}], c_orig
 
-             let mem' = Smemory.store_sind_value mem nv in
-             let vs', es' = vs', [] in
-             (* Update memory with a store *)
-             let nframe = {frame with inst = insert_smemory frame.inst mem'} in
+   | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es'), pc', iv', cct'), vs ->
+      (* print_endline "lab4"; *)
+      if (!Flags.debug) then (
+        print_endline "l1 fiv";
+        print_endline (string_of_region e.at));
 
-             find_induction_vars lv' {c with code = vs', es' @ est;
-                                               frame = nframe}  c_orig
+      let vs', es' = take n vs0 e.at @ vs, es0 in
+      lv, [{c with code = vs', es' @ List.tl es}], c_orig
 
-          (*TODO(Romy): Implement Const*)
-          | Const v, vs ->
-             (* print_endline "const"; *)
-             let va = 
-               match v.it with
-               | Values.I32 i ->
-                  let ii = Int32.to_int i in
-                  let ii' = Int64.of_int ii in
-                  SI32 (Si32.bv_of_int ii' 32)
-               | Values.I64 i ->
-                  SI64 (Si64.bv_of_int i 64)
-               | Values.F32 i -> SF32 i
-               | Values.F64 i -> SF64 i
-             in
-             let vs', es' = va :: vs, [] in
-             find_induction_vars lv {c with code = vs', es' @ List.tl es}  c_orig
-             
-          (* | Const v, vs ->
-           *    v.it :: vs, [] *)
+   | Label (n, es0, (vs', {it = Breaking (k, vs0); at} :: es'), pc', iv', cct'), vs ->
+      (* print_endline "lab5"; *)
+      if (!Flags.debug) then (
+        print_endline "l2 fiv";
+        print_endline (string_of_region e.at);
+        print_endline (string_of_int (Int32.to_int (Int32.sub k 1l)))
+      );
 
-          | Test testop, v :: vs' ->
-             (* print_endline "testop"; *)
-             let vs', es' =
-               (try (Eval_symbolic.eval_testop testop v) :: vs', []
-                with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
-             find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
-             
-          | Compare relop, v2 :: v1 :: vs' ->
-             (* print_endline "relop"; *)
-             let vs', es' =
-               (try (Eval_symbolic.eval_relop relop v1 v2) :: vs', []
-                with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
-             find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+      let vs', es' = vs, [Breaking (Int32.sub k 1l, vs0) @@ at] in
+      lv, [{c with code = vs', es' @ List.tl es}], c_orig
 
-          | Unary unop, v :: vs' ->
-             (* print_endline "unop"; *)
-             let vs', es' = 
-               (try Eval_symbolic.eval_unop unop v :: vs', []
-                with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
-             find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+   | Label (n, es0, code', pc', iv', cct'), vs ->
+      (* print_endline "lab6"; *)
+      (* TODO(Romy): not sure if correct to change the pc *)
+      let lv', cs', _  = fiv_step lv {c with code = code';
+                                             pc = pc';
+                                             induction_vars = iv'}  c_orig in
+      (* print_endline "lab6_back"; *)
+      let res =
+        List.map (fun  ci ->
+              {c with code = vs,
+                             [Label (n, es0, ci.code,
+                                     ci.pc,
+                                     ci.induction_vars,
+                                     ci.ct_check) @@ e.at]
+                             @ List.tl es;
+                      pc = ci.pc; 
+                      frame = ci.frame;
+                      induction_vars = ci.induction_vars}) cs'
+      in
+      (* print_endline "lab6_end"; *)
+      lv', res, c_orig
 
-          | Binary binop, v2 :: v1 :: vs' ->
-             (* print_endline "binop"; *)
-             let vs', es' = 
-               (try
-                  let nv = Eval_symbolic.eval_binop binop v1 v2 in
-                  (* "Printing binop" |> print_endline; *)
-                  (* Pc_type.svalue_to_string nv |> print_endline; *)
-                  nv :: vs', []
-                with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
-             find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
-          | Convert cvtop, v :: vs' ->
-             let vs', es' = 
-               (try Eval_symbolic.eval_cvtop cvtop v :: vs', []
-                with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at])
-             in
-             find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
+   | Frame (n, frame', (vs', []), pc', iv'), vs ->
+      (* print_endline ("frame1:" ^ (string_of_int c.counter)); *)
+      let vs', es' = vs' @ vs, [] in
+      let c = {c with code = vs', es' @ List.tl es;
+                      frame = {frame
+                              with inst = {frame.inst
+                                          with smemories = frame'.inst.smemories;
+                                               smemlen = frame'.inst.smemlen;
+                                               sglobals = frame'.inst.sglobals
+                                          }
+                              };
+                      pc = pc';
+                      induction_vars = iv'
+              } in
+      lv, [c], c_orig
+   | Frame (n, frame', (vs', {it = Trapping msg; at} :: es'), _, _), vs ->
+      (* print_endline "frame2"; *)
+      let vs', es' = vs, [Trapping msg @@ at] in
+      lv, [{c with code = vs', es' @ List.tl es}], c_orig
 
-          | _ ->
-             let s1 = Svalues.string_of_values (List.rev vs) in
-             let s2 = Types.string_of_svalue_types (List.map Svalues.type_of (List.rev vs)) in
-             let no = Arrange.instr (e' @@ e.at) in
-             (match no with | Sexpr.Node(h,inner) -> print_endline h
-                            | _ -> print_endline "no node");
+   | Frame (n, frame', (vs', {it = Returning vs0; at} :: es'), pc', iv'), vs ->
+      (* print_endline "frame returning"; *)
+      (* print_endline ("frame3:" ^ (string_of_int c.counter)); *)
+      let vs', es' = take n vs0 e.at @ vs, [] in
+      let c = {c with code = vs', es' @ List.tl es;
+                      frame = {frame
+                              with inst = {frame.inst
+                                          with smemories = frame'.inst.smemories;
+                                               smemlen = frame'.inst.smemlen;
+                                               sglobals = frame'.inst.sglobals
+                                          }
+                              };
+                      pc = pc';
+                      induction_vars = iv'} in
+      lv, [c], c_orig
 
-             Crash.error e.at
-               ("missing or ill-typed operand on stack (" ^ s1 ^ " : " ^ s2 ^ ")")
-         )
+   | Frame (n, frame', code', pc', iv'), vs ->
+      (* print_endline "frame4"; *)
+      let lv', cs', _ = fiv_step lv {c with frame = frame';
+                                        code = code';
+                                        pc = pc';
+                                        induction_vars = iv'} c_orig in
+      (* print_endline "frame4_end"; *)
+      (* TODO(Romy): the pc etc  should probably not be here *)
+      let res = 
+      List.map
+        (fun ci ->
+         {c with code = vs, [Frame (n, ci.frame, ci.code,
+                                    ci.pc, ci.induction_vars)
+                             @@ e.at] @ List.tl es;}
+          ) cs'
+      in
+      lv', res, c_orig
 
-      | Trapping msg, vs ->
-         assert false
+   | Invoke func, vs when c.budget = 0 ->
+      Exhaustion.error e.at "call stack exhausted"
 
-      | Assert (_,_), vs ->
-         failwith "Unexpected Assert in find_induction_vars";
-         
-      | Havoc lvs, vs ->
-         failwith "Unexpected Havoc in find_induction_vars";
+   | Invoke func, vs ->
+      (* print_endline "inv2"; *)
+      let FuncType (ins, out) = func_type_of func in
+      let n1, n2 = Lib.List32.length ins, Lib.List32.length out in
+      let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+      (match func with
+       | Func.AstFunc (t, inst', f) ->
+          let rest = List.map value_to_svalue_type f.it.locals in
+          (* let locals' = List.rev args @ List.map Svalues.default_value rest in *) 
+          let locals' = List.rev args @ List.map Svalues.default_value rest in
 
-      | SecondPass _, vs ->
-         failwith "Unexpected SecondPass in find_induction_vars";
+          let nsmem = if (List.length frame.inst.smemories == 0) then !inst'.smemories
+                      else frame.inst.smemories
+          in
+          let sglobals =  if (List.length frame.inst.sglobals == 0) then !inst'.sglobals
+                          else frame.inst.sglobals in
+          let nmemlen = List.length nsmem in
+          let inst' = {!inst' with smemories = nsmem;
+                                   smemlen =  nmemlen;
+                                   sglobals = sglobals;
+                      } in
 
-      | NonCheckPass _, vs ->
-         failwith "Unexpected NonCheckPass in find_induction_vars";
+          let frame' = {inst = inst'; locals = locals'} in
+          let instr' = [Label (n2, [], ([], List.map plain f.it.body),
+                               c.pc, c.induction_vars, c.ct_check) @@ f.at] in 
+          let vs', es' = vs', [Frame (n2, frame', ([], instr'), c.pc, c.induction_vars) @@ e.at] in
+          lv, [{c with code = vs', es' @ List.tl es}], c_orig
 
-      | FirstPass _, vs ->
-         failwith "Unexpected FirstPass in find_induction_vars";
-
-      (* assert false *)
-
-      | Returning vs', vs ->
-         Crash.error e.at "undefined frame"
-
-      | Breaking (k, vs'), vs ->
-         (* print_endline "breaking"; *)
-         lv, []
-      (* Crash.error e.at "undefined label" *)
-
-      | Label (n, es0, (vs', []), pc', iv', cct'), vs ->
-         (* print_endline "lab"; *)
-         let vs', es' = vs' @ vs, [] in
-         find_induction_vars lv {c with code = vs', es' @ List.tl es}  c_orig
-         
-      | Label (n, es0, (vs', {it = Trapping msg; at} :: es'), pc', iv', cct'), vs ->
-         (* print_endline "lab2"; *)
-         let vs', es' = vs, [Trapping msg @@ at] in
-         find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
-
-      | Label (n, es0, (vs', {it = Returning vs0; at} :: es'), pc', iv', cct'), vs ->
-         (* print_endline "lab3"; *)
-         let vs', es' = vs, [Returning vs0 @@ at] in
-         find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
-
-      | Label (n, es0, (vs', {it = Breaking (0l, vs0); at} :: es'), pc', iv', cct'), vs ->
-         (* print_endline "lab4"; *)
-         if (!Flags.debug) then (
-           print_endline "l1 fiv";
-           print_endline (string_of_region e.at));
-
-         let vs', es' = take n vs0 e.at @ vs, es0 in
-         find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
-
-      | Label (n, es0, (vs', {it = Breaking (k, vs0); at} :: es'), pc', iv', cct'), vs ->
-         (* print_endline "lab5"; *)
-         if (!Flags.debug) then (
-           print_endline "l2 fiv";
-           print_endline (string_of_region e.at);
-           print_endline (string_of_int (Int32.to_int (Int32.sub k 1l)))
-         );
-
-         let vs', es' = vs, [Breaking (Int32.sub k 1l, vs0) @@ at] in
-         find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
-
-      | Label (n, es0, code', pc', iv', cct'), vs ->
-         (* print_endline "lab6"; *)
-         (* TODO(Romy): not sure if correct to change the pc *)
-         let lv', c' = find_induction_vars lv {c with code = code'; pc = pc'; induction_vars = iv'}  c_orig in
-         (* print_endline "lab6_back"; *)
-         let res =
-           List.fold_left (fun (lvi, cprev) ci ->
-               let lvi', ci' =
-                 find_induction_vars lvi
-                   {c with code = vs,
-                                  [Label (n, es0, ci.code,
-                                          ci.pc,
-                                          ci.induction_vars,
-                                          ci.ct_check) @@ e.at]
-                                  @ List.tl es;
-                           pc = ci.pc; 
-                           frame = ci.frame;
-                           induction_vars = ci.induction_vars} c_orig
-               in
-               lvi', ci' @ cprev
-             ) (lv', []) c'
-         in
-         (* print_endline "lab6_end"; *)
-         res
-
-      | Frame (n, frame', (vs', []), pc', iv'), vs ->
-         (* print_endline ("frame1:" ^ (string_of_int c.counter)); *)
-         let vs', es' = vs' @ vs, [] in
-         let c = {c with code = vs', es' @ List.tl es;
-                         frame = {frame
-                                 with inst = {frame.inst
-                                             with smemories = frame'.inst.smemories;
-                                                  smemlen = frame'.inst.smemlen;
-                                                  sglobals = frame'.inst.sglobals
-                                             }
-                                 };
-                         pc = pc';
-                         induction_vars = iv'
-                 } in
-         find_induction_vars lv c c_orig
-      | Frame (n, frame', (vs', {it = Trapping msg; at} :: es'), _, _), vs ->
-         (* print_endline "frame2"; *)
-         let vs', es' = vs, [Trapping msg @@ at] in
-         find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
-
-      | Frame (n, frame', (vs', {it = Returning vs0; at} :: es'), pc', iv'), vs ->
-         (* print_endline "frame returning"; *)
-         (* print_endline ("frame3:" ^ (string_of_int c.counter)); *)
-         let vs', es' = take n vs0 e.at @ vs, [] in
-         let c = {c with code = vs', es' @ List.tl es;
-                         frame = {frame
-                                 with inst = {frame.inst
-                                             with smemories = frame'.inst.smemories;
-                                                  smemlen = frame'.inst.smemlen;
-                                                  sglobals = frame'.inst.sglobals
-                                             }
-                                 };
-                         pc = pc';
-                         induction_vars = iv'} in
-         find_induction_vars lv c c_orig
-
-      | Frame (n, frame', code', pc', iv'), vs ->
-         (* print_endline "frame4"; *)
-         let lv', c' = find_induction_vars lv {c with frame = frame';
-                                                      code = code';
-                                                      budget = c.budget - 1;
-                                                      pc = pc';
-                                                      induction_vars = iv'} c_orig in
-         (* print_endline "frame4_end"; *)
-         (* TODO(Romy): the pc etc  should probably not be here *)
-         
-         List.fold_left
-           (fun (lvi,cprev) ci ->
-             let lvi', ci' =
-               find_induction_vars lvi {c with code = vs, [Frame (n, ci.frame, ci.code,
-                                                                  ci.pc, ci.induction_vars)
-                                                           @@ e.at] @ List.tl es;} c_orig
-             in
-             lvi', ci' @ cprev) (lv',[]) c'
-         
-
-      | Invoke func, vs when c.budget = 0 ->
-         Exhaustion.error e.at "call stack exhausted"
-
-      | Invoke func, vs ->
-         (* print_endline "inv2"; *)
-         let FuncType (ins, out) = func_type_of func in
-         let n1, n2 = Lib.List32.length ins, Lib.List32.length out in
-         let args, vs' = take n1 vs e.at, drop n1 vs e.at in
-         (match func with
-          | Func.AstFunc (t, inst', f) ->
-             let rest = List.map value_to_svalue_type f.it.locals in
-             (* let locals' = List.rev args @ List.map Svalues.default_value rest in *) 
-             let locals' = List.rev args @ List.map Svalues.default_value rest in
-             let frame' = {inst = !inst'; locals = locals'} in
-             let instr' = [Label (n2, [], ([], List.map plain f.it.body),
-                                  c.pc, c.induction_vars, c.ct_check) @@ f.at] in 
-             let vs', es' = vs', [Frame (n2, frame', ([], instr'), c.pc, c.induction_vars) @@ e.at] in
-             find_induction_vars lv {c with code = vs', es' @ List.tl es} c_orig
-
-          (* | Func.HostFunc (t, f) ->
-           *   (try List.rev (f (List.rev args)) @ vs', []
-           *   with Crash (_, msg) -> Crash.error e.at msg) *)
-          | _ -> Crash.error e.at "Func.Hostfunc not implemented yet."
-         )
-     )
-  | [] -> lv, []
-
+       (* | Func.HostFunc (t, f) ->
+        *   (try List.rev (f (List.rev args)) @ vs', []
+        *   with Crash (_, msg) -> Crash.error e.at msg) *)
+       | _ -> Crash.error e.at "Func.Hostfunc not implemented yet."
+      )
+  )
+        
 (*vold, mul, add*)
-let rec replace_induction_vars (iv : triple) (loc : Source.region) (ivs : triple IndVarMap.t):
-          triple IndVarMap.t =
+let rec replace_induction_vars (iv : triple) (loc : Source.region)
+          (ivs : triple IndVarMap.t): triple IndVarMap.t =
   let _,ivvar, _, _ = iv in
   let ivk =
     match ivvar with
@@ -715,21 +1229,30 @@ let rec replace_induction_vars (iv : triple) (loc : Source.region) (ivs : triple
 
   (* ivs *)
 
-(* TODO(Romy)*)
-(* let eliminate_vars (c : config) (lv : loopvar_t list)
- *       (ivs : triple IndVarMap.t): config =
- *   match lv with
- *   | LocalVar (x, is_low, mo) :: lvs ->
- *      let v = local c.frame x in
- *      (try (
- *         let (v', b1, b2) = IndVarMap.find v ivs in
- *         if (v' = v) then c
- *         else c
- *       ) with Not_found ->
- *         c
- *      )
- *   | _ -> c *) 
+let fiv_eval_dfs (lv: triple IndVarMap.t) (c_orig : config) (cs : config list) 
+                : triple IndVarMap.t =
+  let rec fiv_eval_dfs_i (lv: triple IndVarMap.t) (cs : config list) : triple IndVarMap.t = 
+    (* print_endline "eval_dfs_i"; *)
+    match cs with
+    | c::cs' ->
+       (match c.code with
+        | vs, [] -> fiv_eval_dfs_i lv cs' 
+        | vs, {it = Trapping msg; at} :: _ -> Trap.error at msg
+        | vs, es -> (
+           let lv', cs, _ = fiv_step lv  c c_orig in
+           fiv_eval_dfs_i lv' (cs @ cs') 
+        )
+       )
+      
+    | [] -> lv
+  in
+  fiv_eval_dfs_i lv cs
 
+let fiv_eval (lv: triple IndVarMap.t) (c_orig: config) (c : config) = 
+    fiv_eval_dfs lv c_orig [c]
+
+
+  
 let triple_to_string v =
   let orig, old, b1, b2 = v in
   "(" ^ Pc_type.svalue_to_string orig ^ ", " ^
@@ -763,7 +1286,7 @@ let get_maximum_loop_size iv c =
 let induction_vars (c : config) (c_orig : config) (lv : loopvar_t list) :
       triple *  config =
   (* Find values that change *) 
-  let ivs,_ = find_induction_vars IndVarMap.empty c c_orig in  
+  let ivs = fiv_eval IndVarMap.empty c_orig c in  
 
   (* Create new induction variable *)
   let iv, c', loc = create_induction_variable c in

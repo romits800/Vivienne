@@ -264,11 +264,11 @@ let rec step (c : config) : config list =
                    let havc = havoc_vars lvs c in
                  
                    if !Flags.elim_induction_variables then (
-                     let vs'', es'' = vs', [Label (n1, [Plain e' @@ e.at],
+                     let vs'', es'' = vs', [Label (n1, [], (*Plain e' @@ e.at],*)
                                                    (args, List.map plain es'), 
                                                     (pclet,pc),
                                                    c.induction_vars, c.ct_check) @@ e.at] in
-                     let nhavc = {havc with code = vs'', es'' @ List.tl es;} in
+                     let nhavc = {havc with code = vs'', es'' (*@ List.tl es;*)} in
                      let nc = {c with code = vs'', es'' @ List.tl es;} in
                      let iv, havc' = induction_vars nhavc nc lvs in
 
@@ -1030,10 +1030,10 @@ let rec step (c : config) : config list =
 
 
        if !Flags.elim_induction_variables then (
-         let vs'', es'' = vs', [Label (n, [Plain l @@ loc],
+         let vs'', es'' = vs', [Label (n, [], (*Plain l @@ loc],*)
                                        (args, code'''), (pclet,pc),
                                        c.induction_vars, c.ct_check) @@ e.at] in
-         let nhavc = {havc with code = vs'', es'' @ List.tl es;} in
+         let nhavc = {havc with code = vs'', es'' (*@ List.tl es;*)} in
          let nc = {c with code = vs'', es'' @ List.tl es;} in
          let iv, havc' = induction_vars nhavc nc lvs in
 
