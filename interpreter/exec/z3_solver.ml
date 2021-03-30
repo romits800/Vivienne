@@ -10,6 +10,8 @@ open Config
    
 let path = ref (getenv "VIV_PATH")
 
+
+exception Timeout (*of string*)
    
 module ExprMem = Map.Make(struct
                      type t = int
@@ -813,7 +815,7 @@ let read_sat solver_name fname =
   ret
 
 
-let run_solvers input_file yices z3 cvc4 boolector bitwuzla =
+let run_solvers input_file yices z3 cvc4 boolector bitwuzla timeout =
   (* print_endline "run_solvers"; *)
   try
     let out_file = input_file ^ ".run_solvers.out" in
@@ -821,8 +823,13 @@ let run_solvers input_file yices z3 cvc4 boolector bitwuzla =
 
     let start = if !Flags.stats then Unix.gettimeofday () else 0.0 in
     
-    let _ = Sys.command @@ "bash " ^ !path ^ "run_solvers.sh " ^
+    let timeout_str = if timeout then " timeout -s SIGKILL 10m " else "" in
+    let rc = Sys.command @@ timeout_str ^ " bash " ^  !path ^ "run_solvers.sh " ^
                              input_file ^ " 1> " ^ out_file ^ " 2> " ^ err_file in
+    if (rc == 124) then
+            raise Timeout;
+            (*print_endline "Rc no equals 0";*)
+
     let chan = open_in out_file in
     try
       let solver = input_line chan in
@@ -872,7 +879,7 @@ let run_solvers input_file yices z3 cvc4 boolector bitwuzla =
       print_endline ("Solver error " ^ input_file);
       raise e
   with e ->
-    print_endline "failed";
+    print_endline "failed - might timeout";
     raise e
   (* match fork() with
    * | 0 -> run_cvc4()
@@ -966,8 +973,9 @@ let find_solutions (sv: svalue) (pc : pc_ext)
     (* print_endline "creating filename"; *)
     let filename = write_formula_to_file solver in
     (* print_endline @@ "after writing formula to filename" ^ filename; *)
+    let timeout = false in
     let ret = match run_solvers filename read_yices read_z3
-                      read_cvc4 read_boolector read_bitwuzla with
+                      read_cvc4 read_boolector read_bitwuzla timeout with
       | None -> acc
       | Some v -> find_solutions_i sv pc mem (v::acc)
     in
@@ -1138,9 +1146,10 @@ let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) =
      
      if !Flags.portfolio_only then (
        let filename = write_formula_to_file solver in
+       let timeout = false in
        let res = not (run_solvers filename (read_sat "yices")
                         (read_sat "z3") (read_sat "cvc4")
-                        (read_sat "boolector") (read_sat "bitwuzla")) in
+                        (read_sat "boolector") (read_sat "bitwuzla") timeout) in
        remove filename;
        res
      ) else if !Flags.z3_only then (
@@ -1166,9 +1175,11 @@ let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) =
      ) else (
        if num_exprs > magic_number then (
          let filename = write_formula_to_file solver in
+         let timeout = false in
          let res = not (run_solvers filename (read_sat "yices")
                           (read_sat "z3") (read_sat "cvc4")
-                          (read_sat "boolector") (read_sat "bitwuzla")) in
+                          (read_sat "boolector") (read_sat "bitwuzla") 
+                          timeout) in
          remove filename;
          res
        ) else (
@@ -1235,10 +1246,17 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
       if !Flags.portfolio_only then (
         let filename = write_formula_to_file solver in
         (* print_endline ("is_v_ct_unsat after write formula " ^ filename); *)
-        let res = not (run_solvers filename (read_sat "yices")
+        let timeout = true in
+        let res = 
+            try (
+                not (run_solvers filename (read_sat "yices")
                          (read_sat "z3")
                          (read_sat "cvc4") (read_sat "boolector")
-                         (read_sat "bitwuzla")) in
+                         (read_sat "bitwuzla") timeout)
+            ) with Timeout -> (
+                false
+            )
+        in
         remove filename;
         res
       ) else if !Flags.z3_only then (
@@ -1269,9 +1287,15 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
         if num_exprs > magic_number then (
           let filename = write_formula_to_file solver in
           (* print_endline ("is_v_ct_unsat after write formula " ^ filename); *)
-          let res = not (run_solvers filename (read_sat "yices") (read_sat "z3")
+          let timeout = true in
+          let res = 
+            try (
+                not (run_solvers filename (read_sat "yices") (read_sat "z3")
                            (read_sat "cvc4") (read_sat "boolector")
-                           (read_sat "bitwuzla")) in
+                           (read_sat "bitwuzla") timeout)
+            )
+            with Timeout -> false
+          in
           remove filename;
           res
         ) else (
@@ -1342,8 +1366,10 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
 
       if !Flags.portfolio_only then (
         let filename = write_formula_to_file solver in
+        let timeout = false in
         let res = run_solvers filename (read_sat "yices") (read_sat "z3")
-                    (read_sat "cvc4") (read_sat "boolector") (read_sat "bitwuzla") in
+                    (read_sat "cvc4") (read_sat "boolector") 
+                    (read_sat "bitwuzla") timeout in
         remove filename;
         res
       ) else if !Flags.z3_only then ( 
@@ -1370,8 +1396,9 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
       ) else (
         if  num_exprs > magic_number_2  then (
           let filename = write_formula_to_file solver in
+          let timeout = false in
           let res = run_solvers filename (read_sat "yices") (read_sat "z3")
-                      (read_sat "cvc4") (read_sat "boolector") (read_sat "bitwuzla") in
+                      (read_sat "cvc4") (read_sat "boolector") (read_sat "bitwuzla") timeout in
           remove filename;
           res
         ) else (
