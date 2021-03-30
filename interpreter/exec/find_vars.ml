@@ -891,7 +891,7 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list) (c : config) : loop
            (* Check store variable only if they have constant index *)
            (* We might for example be storing the loop index in memory *)
            let memtuple = (c.frame.inst.smemories, smemlen c.frame.inst) in
-           let is_low = Z3_solver.is_v_ct_unsat c.pc lvn memtuple in
+           let is_low = Z3_solver.is_v_ct_unsat c.pc lvn memtuple in 
            (* let mo = compare_svalues lvn sv in *)
            
            let lv = (StoreVar (final_addr, ty, sz, is_low, Nothing))::lv in
