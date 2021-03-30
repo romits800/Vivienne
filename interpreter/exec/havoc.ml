@@ -20,6 +20,11 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) : config =
         | _ -> failwith "not implemented floated numbers"
        )
      in
+     if !Flags.debug then (
+        print_endline "New val";
+        print_endline (svalue_to_string newv);
+     );
+ 
      let c' = { c with frame = update_local c.frame x newv } in
      (* let c'' =
       *   match newv, mo with

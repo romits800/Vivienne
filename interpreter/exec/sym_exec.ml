@@ -174,17 +174,22 @@ let rec step (c : config) : config list =
                    (* check if we have different initial policy *)
                    find_policy lvs c
                  ) with Not_found -> (
-                   let vs'', es'' = vs', [Label (n1, [Plain e' @@ e.at],
+                   let vs'', es'' = vs', [Label (n1, [], (*Plain e' @@ e.at],*)
                                                  (args, List.map plain es'), (pclet,pc),
                                                  c.induction_vars, c.ct_check) @@ e.at] in
-                   let lvs, _ = find_modified_vars (Obj.magic e')
-                                  {c with code = vs'', es'' @ List.tl es;} in
+                   (*let lvs, _ = find_modified_vars (Obj.magic e')*)
+                   let lvs = fv_eval (Obj.magic e')
+                                  {c with code = vs'', es''} in (* @ List.tl es;} in*)
                    let lvs = merge_vars lvs in
                    modified_vars := ModifiedVarsMap.add (Obj.magic e') lvs !modified_vars;
                    lvs
                  )
                in
                
+               if !Flags.debug then (
+                print_endline "printing loopvars.";
+                List.iter print_loopvar lvs
+               );
                let havc = havoc_vars lvs c in
 
                (* FIND INDUCTION VARIABLES *)
@@ -227,7 +232,7 @@ let rec step (c : config) : config list =
 
                  ) else (
                  
-                   let vs'', es'' = vs', [Label (n1, [Plain e' @@ e.at],
+                   let vs'', es'' = vs', [Label (n1, [], (*Plain e' @@ e.at],*)
                                                  (args, List.map plain es'), (pclet,pc),
                                                  c.induction_vars, c.ct_check) @@ e.at] in
 
@@ -238,24 +243,30 @@ let rec step (c : config) : config list =
 
                    let lvs = 
                      try (
-                       let lvs = ModifiedVarsMap.find (Obj.magic e) !modified_vars in
+                       let lvs = ModifiedVarsMap.find (Obj.magic e') !modified_vars in
                        (* check if we have different initial policy *)
                        find_policy lvs c
                      ) with Not_found -> (
-                       let lvs, _ = find_modified_vars (Obj.magic e)
-                                      {c with code = vs'', es'' @ List.tl es;} in
+                       (*let lvs, _ = find_modified_vars (Obj.magic e')*)
+                       let lvs = fv_eval (Obj.magic e')
+                                      {c with code = vs'', es''} in (* @ List.tl es;} in*)
                        let lvs = merge_vars lvs in
                        modified_vars := ModifiedVarsMap.add (Obj.magic e) lvs !modified_vars;
                        lvs
                      )
                    in
-                   
+                   if !Flags.debug then (
+                       print_endline ("Printing loopvars." ^ (string_of_int (Obj.magic e')));
+                       List.iter print_loopvar lvs
+                   );
+ 
                    (* HAVOC *)
                    let havc = havoc_vars lvs c in
                  
                    if !Flags.elim_induction_variables then (
                      let vs'', es'' = vs', [Label (n1, [Plain e' @@ e.at],
-                                                   (args, List.map plain es'), (pclet,pc),
+                                                   (args, List.map plain es'), 
+                                                    (pclet,pc),
                                                    c.induction_vars, c.ct_check) @@ e.at] in
                      let nhavc = {havc with code = vs'', es'' @ List.tl es;} in
                      let nc = {c with code = vs'', es'' @ List.tl es;} in
@@ -320,7 +331,9 @@ let rec step (c : config) : config list =
         | If (bt, es1, es2), v :: vs' ->
            if (!Flags.debug) then (
              print_endline "if";
-             print_endline (string_of_region e.at));
+             print_endline (string_of_region e.at);
+             print_endline (svalue_to_string v)
+           );
            let pc', pc'' = split_condition v pc in (* false, true *)
            let vs'', es'' = vs', [Plain (Block (bt, es1)) @@ e.at] in (* True *)
            let vs', es' = vs', [Plain (Block (bt, es2)) @@ e.at] in (* False *)
@@ -338,6 +351,11 @@ let rec step (c : config) : config list =
                        {c with code = vs'', es'' @ List.tl es; pc = (pclet,pc'');
                                progc = (Obj.magic e')+ 1}::res
                      else res in
+           if (!Flags.debug) then (
+             print_endline "if";
+             print_endline (string_of_int (List.length res))
+           );
+ 
            (match res with
             | [] -> failwith "If: No active path";
                (* let vs', es' = vs, [] in
@@ -367,7 +385,9 @@ let rec step (c : config) : config list =
         | BrIf x, v :: vs' ->
            if (!Flags.debug) then (
              print_endline "br_if";
-             print_endline (string_of_region e.at));
+             print_endline (string_of_region e.at);
+             (*print_endline (svalue_to_string v) *)
+            );
 
            (* print_endline "br_if"; *)
            (* svalue_to_string v |> print_endline; *)
@@ -388,8 +408,10 @@ let rec step (c : config) : config list =
                        {c with code = vs'', es'' @ List.tl es; pc = pclet,pc'';
                                progc = Obj.magic e' + 1}::res)
                      else res in
-
-           (* print_endline (string_of_int (List.length res)); *)
+           if (!Flags.debug) then (
+             print_endline "br_if";
+             print_endline (string_of_int (List.length res))
+           );
            (match res with
             | [] -> 
                 (*print_endline "BrIf No active path";
@@ -427,6 +449,9 @@ let rec step (c : config) : config list =
            [{c with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
 
         | Call x, vs ->
+           if !Flags.debug then (
+             print_endline ("Calling function:" ^ string_of_int (Int32.to_int x.it))
+            ); 
            (* print_endline "call";
             * print_endline (string_of_int (Int32.to_int x.it)); *)
            let vs', es' = vs, [Invoke (func frame.inst x) @@ e.at] in
@@ -948,7 +973,8 @@ let rec step (c : config) : config list =
        (* print_endline "assert"; *)
        if assert_invar lvs c then (
          (* analyzed_loops := AnalyzedLoopsMap.add (Obj.magic e) lvs (!analyzed_loops); *)
-         [{c with code = vs, List.tl es}]
+        [] 
+        (*[{c with code = vs, List.tl es}]*)
        )
        else (
          (* print_endline "Assertion failed"; *)
@@ -982,18 +1008,23 @@ let rec step (c : config) : config list =
            let lvs = ModifiedVarsMap.find (Obj.magic l) !modified_vars in
            find_policy lvs c
          ) with Not_found -> (
-           let vs'', es'' = vs', [Label (n, [Plain l @@ loc],
+           let vs'', es'' = vs', [Label (n, [], (*[Plain l @@ loc],*)
                                         (args, code'''), (pclet,pc),
                                         c.induction_vars, c.ct_check) @@ e.at] in
            
-           let lvs, _ = find_modified_vars (Obj.magic e)
-                          {c with code = vs'', es'' @ List.tl es;} in
+           (*let lvs, _ = find_modified_vars (Obj.magic l)*)
+           let lvs = fv_eval (Obj.magic l)
+                          {c with code = vs'', es''} in (* @ List.tl es;} in*)
            let lvs = merge_vars lvs in
            modified_vars := ModifiedVarsMap.add (Obj.magic l) lvs !modified_vars;
            lvs
          )
        in
-       
+       if !Flags.debug then (
+           print_endline ("Printing loopvars." ^ (string_of_int (Obj.magic l)));
+           List.iter print_loopvar lvs
+       );
+ 
        (* HAVOC *)
        let havc = havoc_vars lvs c in
 

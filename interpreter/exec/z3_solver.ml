@@ -1312,7 +1312,7 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
   let ctx = init_solver() in
 
   let v = pc_to_expr pc ctx mem in
-
+ 
   (* (match pc with
    * | (pclet, PCAnd (v',pc)) ->
    *    let sv = sv_to_expr (pclet,pc) v' ctx mem in
