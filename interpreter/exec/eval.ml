@@ -385,6 +385,15 @@ let rec assert_invar (lv: loopvar_t list) (c : config) : bool =
 
 
        
+let add_high types =
+  let rec add_high_i types acc =
+    match types with
+    | [] -> acc
+    | I32Type::ts -> add_high_i ts (SI32 (Si32.of_high ())::acc)
+    | I64Type::ts -> add_high_i ts (SI64 (Si64.of_high ())::acc)
+    | _ -> failwith "Not support floats"
+  in
+  add_high_i types []
 
 
         

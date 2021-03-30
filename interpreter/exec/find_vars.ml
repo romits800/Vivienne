@@ -582,6 +582,8 @@ let find_modified_vars (analyzed_loop : int ) (c : config) :
   find_vars [] c 
 *)
 
+
+                  
 let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list) (c : config) : loopvar_t list * config list =
     let {frame; code = vs, es; pc = pclet, pc; _} = c in
 
@@ -1111,36 +1113,42 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list) (c : config) : loop
        (* print_endline "inv2"; *)
        let FuncType (ins, out) = func_type_of func in
        let n1, n2 = Lib.List32.length ins, Lib.List32.length out in
-       let args, vs' = take n1 vs e.at, drop n1 vs e.at in
-       (match func with
-        | Func.AstFunc (t, inst', f) ->
-           let rest = List.map value_to_svalue_type f.it.locals in
-           (* let locals' = List.rev args @ List.map Svalues.default_value rest in *) 
-           let locals' = List.rev args @ List.map Svalues.default_value rest in
 
-           let nsmem = if (List.length frame.inst.smemories == 0) then !inst'.smemories
-                       else frame.inst.smemories
-           in
-           let sglobals =  if (List.length frame.inst.sglobals == 0) then !inst'.sglobals
-                           else frame.inst.sglobals in
-           let nmemlen = List.length nsmem in
-           let inst' = {!inst' with smemories = nsmem;
-                                    smemlen =  nmemlen;
-                                    sglobals = sglobals;
-                       } in
+       let vs' = drop n1 vs e.at in
+       let vs'' = add_high out in
 
-
-           let frame' = {inst = inst'; locals = locals'} in
-           let instr' = [Label (n2, [], ([], List.map plain f.it.body),
-                                c.pc, c.induction_vars, false) @@ f.at] in 
-           let vs', es' = vs', [Frame (n2, frame', ([], instr'), c.pc, c.induction_vars) @@ e.at] in
-           lv, [{c with code = vs', es' @ List.tl es}]
+       lv, [{c with code = vs'' @ vs', List.tl es}]
+       
+       (* let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+        * (match func with
+        *  | Func.AstFunc (t, inst', f) ->
+        *     let rest = List.map value_to_svalue_type f.it.locals in
+        *     (\* let locals' = List.rev args @ List.map Svalues.default_value rest in *\) 
+        *     let locals' = List.rev args @ List.map Svalues.default_value rest in
+        * 
+        *     let nsmem = if (List.length frame.inst.smemories == 0) then !inst'.smemories
+        *                 else frame.inst.smemories
+        *     in
+        *     let sglobals =  if (List.length frame.inst.sglobals == 0) then !inst'.sglobals
+        *                     else frame.inst.sglobals in
+        *     let nmemlen = List.length nsmem in
+        *     let inst' = {!inst' with smemories = nsmem;
+        *                              smemlen =  nmemlen;
+        *                              sglobals = sglobals;
+        *                 } in
+        * 
+        * 
+        *     let frame' = {inst = inst'; locals = locals'} in
+        *     let instr' = [Label (n2, [], ([], List.map plain f.it.body),
+        *                          c.pc, c.induction_vars, false) @@ f.at] in 
+        *     let vs', es' = vs', [Frame (n2, frame', ([], instr'), c.pc, c.induction_vars) @@ e.at] in
+        *     lv, [{c with code = vs', es' @ List.tl es}] *)
 
         (* | Func.HostFunc (t, f) ->
          *   (try List.rev (f (List.rev args)) @ vs', []
          *   with Crash (_, msg) -> Crash.error e.at msg) *)
-        | _ -> Crash.error e.at "Func.Hostfunc not implemented yet."
-       )
+        (* | _ -> Crash.error e.at "Func.Hostfunc not implemented yet." *)
+       (* ) *)
     )
 
 
