@@ -1176,6 +1176,9 @@ let fv_eval (analyzed_loop: int) (c : config) =
     fv_eval_dfs analyzed_loop [c]
 
 let find_policy lvs c  =
+  if !Flags.debug then (
+    print_endline "Find policy of already analyzed loop"
+  );
   let rec find_policy_i lvs acc =
     match lvs with
     | (LocalVar (x,_,mo)) :: lvs' ->
@@ -1207,6 +1210,35 @@ let find_policy lvs c  =
        let is_low = Z3_solver.is_v_ct_unsat c.pc vv mem in                   
        let mo = Nothing in
        find_policy_i lvs' (StoreVar (final_addr, ty, sz, is_low, mo)::acc)
-    | [] -> acc
+    | [] -> List.rev acc
   in
   find_policy_i lvs []
+
+
+
+
+let compare_policies lvs1 lvs2 =
+  if !Flags.debug then (
+    print_endline "Comparing policies"
+  );
+  let rec compare_policies_i lvs1 lvs2 = 
+    match lvs1,lvs2 with
+    | (LocalVar (_,il1,_)) :: lvs1', (LocalVar (_,il2,_)) :: lvs2'
+         when il1 = il2 ->
+       compare_policies_i lvs1' lvs2'
+    | (GlobalVar (_,il1,_)) :: lvs1', (GlobalVar (_,il2,_)) :: lvs2'
+         when il1 = il2 ->
+       compare_policies_i lvs1' lvs2'
+    | (StoreVar (_,_,_,il1,_)) :: lvs1', (StoreVar (_,_,_,il2,_)) :: lvs2'
+         when il1 = il2 ->
+       compare_policies_i lvs1' lvs2'
+    | (LocalVar (_,il1,_)) :: lvs1', (LocalVar (_,il2,_)) :: lvs2' ->
+       false
+    | (GlobalVar (_,il1,_)) :: lvs1', (GlobalVar (_,il2,_)) :: lvs2' ->
+       false
+    | (StoreVar (_,_,_,il1,_)) :: lvs1', (StoreVar (_,_,_,il2,_)) :: lvs2' ->
+       false
+    | [], [] -> true
+    | _, _ -> failwith "Not matching variables."  
+  in
+  compare_policies_i lvs1 lvs2
