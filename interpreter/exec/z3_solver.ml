@@ -823,9 +823,11 @@ let run_solvers input_file yices z3 cvc4 boolector bitwuzla timeout =
 
     let start = if !Flags.stats then Unix.gettimeofday () else 0.0 in
     
-    let timeout_str = if timeout then " timeout -s SIGKILL 10m " else "" in
+    (*let timeout_str = if timeout then " timeout -s SIGKILL 10m " else "" in*)
+    let timeout_str = if timeout then " timeout 10m " else "" in
     let rc = Sys.command @@ timeout_str ^ " bash " ^  !path ^ "run_solvers.sh " ^
                              input_file ^ " 1> " ^ out_file ^ " 2> " ^ err_file in
+    (*if (rc == 137) then (*for SIGKILL*) *)
     if (rc == 124) then
             raise Timeout;
             (*print_endline "Rc no equals 0";*)
