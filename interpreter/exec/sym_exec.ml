@@ -12,6 +12,7 @@ open Find_induction_vars
 open Elim_induction_vars
 open Config
    
+
 let simplify_v frame pc v =
   if svalue_depth v 5 then (
     let mem = (frame.inst.smemories, smemlen frame.inst) in
@@ -110,9 +111,9 @@ let rec step (c : config) : config list =
   (* let pclet,pc = simplify_pc frame (pclet,pc) in *)
   let c = {c with pc = (pclet,pc)} in
   let vs = 
-    if (c.counter mod 500 == 0) then (
+    if (Random.int 50 == 0) then (
       if !Flags.debug then (
-        print_endline "Counter reached 500.";
+        print_endline "Testing expression simplification.";
       );
       match vs with
       | v::vs' -> 
@@ -1652,4 +1653,7 @@ let init (m : module_) (exts : extern list) : module_inst =
   List.iter (fun f -> f ()) init_elems;
   List.iter (fun f -> f ()) init_datas;
   Lib.Option.app (fun x -> ignore (invoke (func inst x) [])) start;
+
+  Random.init 1234;
+
   inst
