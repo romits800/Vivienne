@@ -996,7 +996,7 @@ let rec fiv_step (lv : triple IndVarMap.t) (c : config) (c_orig : config) :
    | Trapping msg, vs ->
       assert false
 
-   | Assert (_,_), vs ->
+   | Assert (_,_,_), vs ->
       failwith "Unexpected Assert in find_induction_vars";
       
    | Havoc lvs, vs ->

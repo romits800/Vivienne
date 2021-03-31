@@ -978,7 +978,7 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list) (c : config) : loop
     | Trapping msg, vs ->
        assert false
 
-    | Assert (_,_), vs ->
+    | Assert (_,_,_), vs ->
        failwith "Unexpected Assert in find_vars";
        
     | Havoc lvs, vs ->

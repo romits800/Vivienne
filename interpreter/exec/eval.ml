@@ -113,7 +113,7 @@ and admin_instr' =
   | Breaking of int32 * svalue stack
   | Label of int32 * admin_instr list * code * pc_ext * iv_type option * ct_check_t 
   | Frame of int32 * frame * code * pc_ext * iv_type option 
-  | Assert of loopvar_t list * instr'
+  | Assert of loopvar_t list * instr' * bool
   | Havoc of loopvar_t list
   | FirstPass of int32 * admin_instr list * code
   | NonCheckPass of int32 * admin_instr list * code * triple * loopvar_t list * config 
