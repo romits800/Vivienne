@@ -1327,6 +1327,9 @@ let is_v_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool
       )
 
 
+      
+
+
 let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
    if !Flags.debug then 
       print_endline "Checking satisfiability..";
@@ -1520,3 +1523,34 @@ let optimize (f : Z3.Optimize.optimize -> Z3.Expr.expr -> Z3.Optimize.handle)
         Some (i)
       else None
    | _ ->  None
+
+
+
+
+let get_num_exprs (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : int =
+   if !Flags.debug then 
+      print_endline "Getting number of expressions..";
+ 
+  let ctx = init_solver() in
+  
+  let g = Goal.mk_goal ctx true false false in
+  (* print_endline "is_v_ct_unsat before sv"; *)
+  let v = sv_to_expr pc sv ctx mem in
+  (* print_endline "is_v_ct_unsat after  sv"; *)
+  (* print_exp v; *)
+  match v with
+  | L v -> 0
+  | H (v1, v2) ->
+      let v' = Boolean.mk_eq ctx v1 v2 in
+      let v' = Boolean.mk_not ctx v' in
+      let pcexp = pc_to_expr pc ctx mem in
+      let pcexp' = 
+        match pcexp with
+        | L pcv -> pcv 
+        | H (pcv1, pcv2) -> Boolean.mk_and ctx [pcv1; pcv2]
+      in
+      Goal.add g [v'];
+      Goal.add g [pcexp'];
+
+      let num_exprs = Goal.get_num_exprs g in
+      num_exprs

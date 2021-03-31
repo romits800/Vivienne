@@ -109,7 +109,38 @@ let rec step (c : config) : config list =
   in
   (* let pclet,pc = simplify_pc frame (pclet,pc) in *)
   let c = {c with pc = (pclet,pc)} in
-  (* print_endline "Step:"; *)
+  let vs = 
+    if (c.counter mod 500 == 0) then (
+      if !Flags.debug then (
+        print_endline "Counter reached 100.";
+      );
+      match vs with
+      | v::vs' -> 
+         let mem = (frame.inst.smemories, smemlen frame.inst) in
+         if Z3_solver.get_num_exprs (pclet,pc) v mem > magic_number_num_exprs then (
+           if !Flags.debug then (
+             print_endline ("Num exprs." ^ (string_of_int magic_number_num_exprs));
+           );
+
+           if Z3_solver.is_v_ct_unsat (pclet, pc) v mem
+           then (
+             match v with
+             | SI32 v -> (SI32 (Si32.of_low()))::vs'
+             | SI64 v -> (SI64 (Si64.of_low()))::vs'
+             | _ -> failwith "Not supporting floats."
+           )
+           else (
+             match v with
+             | SI32 v -> (SI32 (Si32.of_high()))::vs'
+             | SI64 v -> (SI64 (Si64.of_high()))::vs'
+             | _ -> failwith "Not supporting floats."             
+           )
+         )
+         else vs
+      | [] -> [] )
+    else vs
+  in
+  (* print_endline ("Step:" ^ (string_of_int c.counter)); *)
   let res =
     match e.it, vs with
     | Plain e', vs ->
