@@ -677,9 +677,9 @@ let rec step (c : config) : config list =
              
              let c = {c with observations = CT_V_UNSAT((pclet, pc), final_addr,
                                                        mem, c.observations)} in
-             let msec = Smemory.get_secrets imem in
-             let mpub = Smemory.get_public imem in
-             let pc', pc'' = split_msec final_addr msec mpub pc in
+             (* let msec = Smemory.get_secrets imem in
+              * let mpub = Smemory.get_public imem in *)
+             (* let pc', pc'' = split_msec final_addr msec mpub pc in *)
              (* The loaded value consists of the (symbolic) index and the memory
                    index *)
              let nv =
@@ -716,23 +716,23 @@ let rec step (c : config) : config list =
               * ) *)
              let vs', es' =  nv :: vs', [] in 
              let res =
-               match Z3_solver.is_sat (pclet, pc') mem,  Z3_solver.is_sat (pclet, pc'') mem with
-               | true,true ->
+               (* match Z3_solver.is_sat (pclet, pc') mem,  Z3_solver.is_sat (pclet, pc'') mem with
+                * | true,true -> *)
                   [{c with code = vs', es' @ List.tl es;
                            frame = frame;
                            pc = pclet, pc;
                            progc = Obj.magic e'}]
-               | true, false ->
-                  [{c with code = vs', es' @ List.tl es;
-                           frame = frame;
-                           pc = pclet, pc';
-                           progc = Obj.magic e'}]
-               | false, true ->
-                  [{c with code = vs', es' @ List.tl es;
-                           frame = frame;
-                           pc = pclet, pc'';
-                           progc = Obj.magic e'}]
-               | false, false -> failwith "Load No path left";
+               (* | true, false ->
+                *    [{c with code = vs', es' @ List.tl es;
+                *             frame = frame;
+                *             pc = pclet, pc';
+                *             progc = Obj.magic e'}]
+                * | false, true ->
+                *    [{c with code = vs', es' @ List.tl es;
+                *             frame = frame;
+                *             pc = pclet, pc'';
+                *             progc = Obj.magic e'}]
+                * | false, false -> failwith "Load No path left"; *)
              in
              res
            (* ) *)
@@ -838,8 +838,8 @@ let rec step (c : config) : config list =
              (* Path1: we store the value in secret memory *)
              let res =
                (* match Z3_solver.is_sat (pclet, pc') mems, *)
-               match Z3_solver.is_sat (pclet, pc'') mems with
-               | true ->
+               (* match Z3_solver.is_sat (pclet, pc'') mems with
+                * | true -> *)
                   let c =
                     {c with observations =
                               CT_V_UNSAT((pclet,pc''), sv, mems, c.observations)} in
@@ -876,14 +876,14 @@ let rec step (c : config) : config list =
                               progc = Obj.magic e'}]
                    )
                   )
-               | false ->
-                  (match Z3_solver.is_sat (pclet, pc') mems with
-                   | true -> [{c with code = vs', es' @ List.tl es;
-                                      frame = nframe;
-                                      pc = pclet, pc';
-                                      progc = Obj.magic e'}]
-                   | false -> failwith "No possible path available"
-                  )
+               (* | false ->
+                *    (match Z3_solver.is_sat (pclet, pc') mems with *)
+                   (* | true -> [{c with code = vs', es' @ List.tl es;
+                    *                    frame = nframe;
+                    *                    pc = pclet, pc';
+                    *                    progc = Obj.magic e'}]
+                    * | false -> failwith "No possible path available" *)
+                  (* ) *)
              in res
            (* ) *)
            (* else (
