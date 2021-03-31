@@ -112,14 +112,15 @@ let rec step (c : config) : config list =
   let vs = 
     if (c.counter mod 500 == 0) then (
       if !Flags.debug then (
-        print_endline "Counter reached 100.";
+        print_endline "Counter reached 500.";
       );
       match vs with
       | v::vs' -> 
          let mem = (frame.inst.smemories, smemlen frame.inst) in
-         if Z3_solver.get_num_exprs (pclet,pc) v mem > magic_number_num_exprs then (
+         let num_exprs = Z3_solver.get_num_exprs (pclet,pc) v mem in
+         if num_exprs > magic_number_num_exprs then (
            if !Flags.debug then (
-             print_endline ("Num exprs." ^ (string_of_int magic_number_num_exprs));
+             print_endline ("Num exprs." ^ (string_of_int num_exprs));
            );
 
            if Z3_solver.is_v_ct_unsat (pclet, pc) v mem
