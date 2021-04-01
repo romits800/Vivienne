@@ -111,7 +111,7 @@ let rec step (c : config) : config list =
   (* let pclet,pc = simplify_pc frame (pclet,pc) in *)
   let c = {c with pc = (pclet,pc)} in
   let vs = 
-    if (Random.int 1 == 0) then (
+    if (!Flags.replace_expressions && (Random.int 1 == 0)) then (
       if !Flags.debug then (
         print_endline "Testing expression simplification.";
       );
