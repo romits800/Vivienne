@@ -111,7 +111,7 @@ let rec step (c : config) : config list =
   (* let pclet,pc = simplify_pc frame (pclet,pc) in *)
   let c = {c with pc = (pclet,pc)} in
   let vs = 
-    if (Random.int 50 == 0) then (
+    if (Random.int 1 == 0) then (
       if !Flags.debug then (
         print_endline "Testing expression simplification.";
       );
@@ -121,25 +121,24 @@ let rec step (c : config) : config list =
          let num_exprs = Z3_solver.get_num_exprs (pclet,pc) v mem in
          if num_exprs > magic_number_num_exprs then (
            if !Flags.debug then (
-             print_endline ("Num exprs." ^ (string_of_int num_exprs));
+             print_endline ("Num exprs: " ^ (string_of_int num_exprs) ^ " " ^ (string_of_region e.at));
            );
 
-           if Z3_solver.is_v_ct_unsat (pclet, pc) v mem
+           if (num_exprs > magic_number_num_exprs_max) || not (Z3_solver.is_v_ct_unsat ~timeout:30 (pclet, pc) v mem) 
            then (
+             match v with
+             | SI32 v -> (SI32 (Si32.of_high()))::vs'
+             | SI64 v -> (SI64 (Si64.of_high()))::vs'
+             | _ -> failwith "Not supporting floats."             
+            ) else ( 
              match v with
              | SI32 v -> (SI32 (Si32.of_low()))::vs'
              | SI64 v -> (SI64 (Si64.of_low()))::vs'
              | _ -> failwith "Not supporting floats."
            )
-           else (
-             match v with
-             | SI32 v -> (SI32 (Si32.of_high()))::vs'
-             | SI64 v -> (SI64 (Si64.of_high()))::vs'
-             | _ -> failwith "Not supporting floats."             
-           )
          )
          else vs
-      | [] -> [] )
+      | [] -> [] ) 
     else vs
   in
   (* print_endline ("Step:" ^ (string_of_int c.counter)); *)
@@ -1001,7 +1000,7 @@ let rec step (c : config) : config list =
 
     | Assert (lvs, e, analyzed), vs ->
        if !Flags.debug then 
-         print_endline "Asserting invariant..";
+         print_endline ("Asserting invariant.. The loop is already analyzed:" ^ (string_of_bool analyzed));
        (* print_endline "assert"; *)
        if analyzed || assert_invar lvs c then (
          [] 
