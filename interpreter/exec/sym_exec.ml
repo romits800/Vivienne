@@ -124,18 +124,24 @@ let rec step (c : config) : config list =
              print_endline ("Num exprs: " ^ (string_of_int num_exprs) ^ " " ^ (string_of_region e.at));
            );
 
+           let v = 
            if (num_exprs > magic_number_num_exprs_max) || not (Z3_solver.is_v_ct_unsat ~timeout:30 (pclet, pc) v mem) 
            then (
              match v with
-             | SI32 v -> (SI32 (Si32.of_high()))::vs'
-             | SI64 v -> (SI64 (Si64.of_high()))::vs'
+             | SI32 v -> (SI32 (Si32.of_high()))
+             | SI64 v -> (SI64 (Si64.of_high()))
              | _ -> failwith "Not supporting floats."             
             ) else ( 
              match v with
-             | SI32 v -> (SI32 (Si32.of_low()))::vs'
-             | SI64 v -> (SI64 (Si64.of_low()))::vs'
+             | SI32 v -> (SI32 (Si32.of_low()))
+             | SI64 v -> (SI64 (Si64.of_low()))
              | _ -> failwith "Not supporting floats."
            )
+           in
+           if !Flags.debug then (
+               print_endline (svalue_to_string v);
+           );
+           v::vs'
          )
          else vs
       | [] -> [] ) 
@@ -153,14 +159,14 @@ let rec step (c : config) : config list =
            [{c with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
         | Nop, vs ->
            (* print_endline "nop"; *)
-           (* let mem = (frame.inst.smemories, smemlen frame.inst) in
-            * let v  =  Eval_symbolic.eval_load I32Type (SI32 (Si32.of_int32 2060l))
-            *             (smemlen frame.inst) 4 None in
-            * 
-            * let solv = Z3_solver.is_ct_unsat (pclet, pc) v mem in
-            * 
-            * print_endline (string_of_bool solv); *)
+           (*let mem = (frame.inst.smemories, smemlen frame.inst) in
+           let v  =  Eval_symbolic.eval_load I32Type (SI32 (Si32.of_int32 67876l))
+                       (smemlen frame.inst) 4 None in
            
+           let solv = Z3_solver.is_ct_unsat (pclet, pc) v mem in
+           
+           print_endline (string_of_bool solv);
+           *)
            let vs', es' = vs, [] in
            [{c with code = vs', es' @ List.tl es; progc = Obj.magic e'};]
         | Block (bt, es'), vs ->
@@ -206,7 +212,7 @@ let rec step (c : config) : config list =
                    (* check if we have different initial policy *)
                    find_policy lvs c
                  ) with Not_found -> (
-                   let vs'', es'' = vs', [Label (n1, [], (*Plain e' @@ e.at],*)
+                   let vs'', es'' = vs', [Label (n1, [Plain e' @@ e.at],
                                                  (args, List.map plain es'), (pclet,pc),
                                                  c.induction_vars, c.ct_check) @@ e.at] in
                    (*let lvs, _ = find_modified_vars (Obj.magic e')*)
@@ -417,7 +423,7 @@ let rec step (c : config) : config list =
            if (!Flags.debug) then (
              print_endline "br_if";
              print_endline (string_of_region e.at);
-             (*print_endline (svalue_to_string v) *)
+             print_endline (svalue_to_string v) 
             );
 
            (* print_endline "br_if"; *)
@@ -757,10 +763,10 @@ let rec step (c : config) : config list =
         | Store {offset; ty; sz; _}, sv :: si :: vs' ->
            if (!Flags.debug) then (
              print_endline "store";
-             print_endline (string_of_region e.at));
-
-           (* print_endline "store";
-            * print_endline (string_of_region e.at); *)
+             print_endline (string_of_region e.at);
+             (*print_endline (svalue_to_string sv);
+             print_endline (svalue_to_string si)*)
+            );
 
            let mem = smemory frame.inst (0l @@ e.at) in
            let frame = {frame with
@@ -1039,7 +1045,7 @@ let rec step (c : config) : config list =
            let lvs' = find_policy lvs c in
            lvs, compare_policies lvs lvs'
          ) with Not_found -> (
-           let vs'', es'' = vs', [Label (n, [], (*[Plain l @@ loc],*)
+           let vs'', es'' = vs', [Label (n, [Plain l @@ loc],
                                         (args, code'''), (pclet,pc),
                                         c.induction_vars, c.ct_check) @@ e.at] in
            
