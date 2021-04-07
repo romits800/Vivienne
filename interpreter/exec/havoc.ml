@@ -84,6 +84,12 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) : config =
         | _ -> failwith "not implemented float types"
        )
      in          
+     if !Flags.debug then (
+        print_endline "New val store:";
+        print_loopvar (StoreVar (addr, ty, sz, is_low, mo));
+        print_endline (svalue_to_string sv);
+     );
+ 
      let nv =
        (match sz with
         | None ->
@@ -99,8 +105,13 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) : config =
      let mem = smemory c.frame.inst (0l @@ Source.no_region) in
      let mem' = Smemory.store_sind_value mem nv in
 
-     let c' = {  c with frame = {c.frame with inst = insert_smemory c.frame.inst mem'}} in
-     let c'' =
+           (*let mem = (havc.frame.inst.smemories, smemlen havc.frame.inst) in*)
+
+     let nframe  = {c.frame with inst = insert_smemory c.frame.inst mem'} in
+
+     let c' = { c with frame = nframe} in
+
+(*     let c'' =
        match nv, mo with
        | SI32 nv, Increase (SI32 v) ->
           { c' with pc = (fst c'.pc, PCAnd(SI32 (Si32.ge_u nv v), snd c'.pc)) }
@@ -113,7 +124,7 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) : config =
        (* | _, Nothing -> c' *)
        | _ -> c'
      in
-
-     havoc_vars lvs c''
+*)
+     havoc_vars lvs c'
   | [] -> c
                 

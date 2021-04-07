@@ -387,26 +387,32 @@ let rec assert_invar (lv: loopvar_t list) (c : config) : bool =
   match lv with
   | LocalVar (x, (true as is_low), mo) :: lvs ->
      (* print_endline "localvar"; *)
-     print_loopvar (List.hd lv);
+     (*print_loopvar (List.hd lv); *)
      let v = local c.frame x in
      let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
      let is_low_new = Z3_solver.is_v_ct_unsat c.pc v mem in
+     (*print_endline (string_of_bool is_low_new);*)
      if match_policy is_low is_low_new then assert_invar lvs c
      else (
        (* print_endline (Int32.to_string x.it); *)
-       false && assert_invar lvs c  )
+       let _ = assert_invar lvs c in
+       false )
 
   | GlobalVar (x, (true as is_low), mo) :: lvs ->
-     print_loopvar (List.hd lv);
+     (*print_loopvar (List.hd lv);*)
      (* print_endline "globalvar"; *)
      let v = Sglobal.load (sglobal c.frame.inst x) in
      let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
      let is_low_new = Z3_solver.is_v_ct_unsat c.pc v mem in
+     (*print_endline (string_of_bool is_low_new);*)
      if match_policy is_low is_low_new then assert_invar lvs c
-     else false && assert_invar lvs c
+     else (
+        let _ = assert_invar lvs c in
+         false
+     )
 
   | StoreVar (addr, ty, sz, (true as is_low), mo) :: lvs ->
-     print_loopvar (List.hd lv);
+     (*print_loopvar (List.hd lv);*)
      (* print_endline "storevar"; *)
      let nv =
        (match sz with
@@ -423,9 +429,12 @@ let rec assert_invar (lv: loopvar_t list) (c : config) : bool =
 
      let memtuple = (c.frame.inst.smemories, smemlen c.frame.inst) in
      let is_low_new = Z3_solver.is_v_ct_unsat c.pc nv memtuple in
+     (*print_endline (string_of_bool is_low_new);*)
 
      if match_policy is_low is_low_new then assert_invar lvs c
-     else false && assert_invar lvs c
+     else (
+        let _ = assert_invar lvs c in
+        false)
   (* if it is high, we don't mind if it got low *)
   | _ :: lvs -> assert_invar lvs c
   | [] -> true

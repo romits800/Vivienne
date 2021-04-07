@@ -43,6 +43,7 @@ let argspec = Arg.align
   "--no-clean", Arg.Set Flags.no_clean, " don't clean the solver tmp files from the /tmp fs";
   "--explicit-leaks", Arg.Set Flags.explicit_leaks, " include explicit leaks to the memory";
   "--estimate-loop-size", Arg.Set Flags.estimate_loop_size, " estimate the loop size and deside on whether to apply the invariant or not ";
+  "--replace-expressions", Arg.Set Flags.replace_expressions, " replace long expressions with single high or low variables";
   "--stats", Arg.Set Flags.stats, " generate solver statistics";
   "--debug", Arg.Set Flags.debug, " enable debug msgs";
   "-v", Arg.Unit banner, " show version"

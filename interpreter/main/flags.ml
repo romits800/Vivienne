@@ -19,3 +19,4 @@ let no_clean = ref false
 let explicit_leaks = ref false
 let debug = ref false
 let estimate_loop_size = ref false
+let replace_expressions = ref false

@@ -63,6 +63,14 @@ let print_exp exp =
          print_endline (Expr.to_string e2);
   )
 
+
+let print_simpl sv = 
+  match sv with
+  | Z3Expr32 rt -> print_exp rt
+  | Z3Expr64 rt -> print_exp rt
+  | Sv sv -> print_endline (svalue_to_string sv)
+
+
 let propagate_policy f e1 e2 =
   (match e1,e2 with
    | L e1, L e2 -> L (f e1 e2)
@@ -154,6 +162,8 @@ let extend ctx size v' = function
      propagate_policy_one (BitVector.mk_sign_ext ctx  size') v'
 
 
+let simap_index v mem = 
+    string_of_int (Obj.magic v) ^ string_of_int (Obj.magic mem)
 
 let get_size e =
   match e with
@@ -232,14 +242,14 @@ and si_to_expr pc size ctx mem si: rel_type  =
        | Load (i, memi, sz, _) ->
           (* print_endline "load z3_solver"; *)
           (try
-             let f = SiMap.find (Obj.magic si) !simap in
-             (* print_endline "found sv"; *)
+             let f = SiMap.find (simap_index si mem) !simap in
+             (* if !Flags.debug then print_endline "found load"; *)
              f
            with Not_found ->
              let smem, memlen = mem in
              let arr =
                (try
-                  ExprMem.find (memlen - memi) !memmap
+                  ExprMem.find memi !memmap
                 with Not_found ->
                   let bva = BitVector.mk_sort ctx 32 in
                   let bvd = BitVector.mk_sort ctx 8 in
@@ -250,7 +260,7 @@ and si_to_expr pc size ctx mem si: rel_type  =
                   let stores = Smemory.get_stores tmem in
                   let fmem = List.fold_left (update_mem pc ctx mem)
                                newmem (List.rev stores) in
-                  memmap := ExprMem.add (memlen - memi) fmem !memmap;
+                  memmap := ExprMem.add memi fmem !memmap;
                   fmem
                )
              in
@@ -260,7 +270,7 @@ and si_to_expr pc size ctx mem si: rel_type  =
              (* print_endline "simplify"; *)
              let simp = propagate_policy_one (fun x -> Expr.simplify x None) v' in
              (* print_endline "simplify_after"; *)
-             simap := SiMap.add (Obj.magic si) simp !simap;
+             simap := SiMap.add (simap_index si mem) simp !simap;
              simp )
          
        (* let v'' = extend ctx size v' ext in *)
@@ -561,15 +571,15 @@ and sv_to_expr pc sv ctx mem =
   | _ -> failwith "Float not implemented."
   in
   (try
-     let f =  SiMap.find (Obj.magic v) !simap in
-     (* print_endline "found sv"; *)
+     let f =  SiMap.find (simap_index v mem) !simap in
+     if !Flags.debug then print_endline "found sv_to_expr";
      f
    with Not_found ->
      let v' = si_to_expr pc n ctx mem v in
      (* print_endline "sv_to_expr before simp"; *)
      let simp = propagate_policy_one (fun x -> Expr.simplify x None) v' in
      (* print_endline "sv_to_expr after simp"; *)
-     simap := SiMap.add (Obj.magic v) simp !simap;
+     simap := SiMap.add (simap_index v mem) simp !simap;
      (* print_endline "sv_to_expr simp end"; *)
      simp)
 
@@ -578,7 +588,9 @@ and sv_to_expr pc sv ctx mem =
 let rec pc_to_expr pc ctx mem: rel_type =
   let pclet, pc = pc in
   try
-    SiMap.find (Obj.magic pc) !simap
+    let f = SiMap.find (simap_index pc mem) !simap in
+    if !Flags.debug then print_endline "found pc_to_expr";
+    f
   with Not_found -> (
     match pc with
     | PCTrue -> L (Boolean.mk_true ctx)
@@ -589,7 +601,7 @@ let rec pc_to_expr pc ctx mem: rel_type =
        let ex2 = pc_to_expr (pclet, pc') ctx mem in
        let pcexp = propagate_list (Boolean.mk_and ctx) [ex1; ex2] in
        let simp = propagate_policy_one (fun x -> Expr.simplify x None) pcexp in
-       simap := SiMap.add (Obj.magic pc) simp !simap ; 
+       simap := SiMap.add (simap_index pc mem) simp !simap ; 
        simp
   )
 
@@ -881,7 +893,8 @@ let run_solvers input_file yices z3 cvc4 boolector bitwuzla timeout =
       print_endline ("Solver error " ^ input_file);
       raise e
   with e ->
-    print_endline "failed - might timeout";
+    if !Flags.debug then 
+        print_endline "failed - might timeout";
     raise e
   (* match fork() with
    * | 0 -> run_cvc4()
@@ -990,6 +1003,8 @@ let find_solutions (sv: svalue) (pc : pc_ext)
                             
 let simplify (sv: svalue) (pc : pc_ext)
       (mem: Smemory.t list * int) : bool * simpl =
+  if !Flags.debug then
+        print_endline "Simplifying";
   (* print_endline "simplify"; *)
   (* svalue_to_string sv |> print_endline; *)
   let ctx = init_solver() in
@@ -1360,7 +1375,7 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
       (* Printf.printf "Goal: %s\n" (Goal.to_string g); *)
       let solver = Solver.mk_solver ctx None in
       List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
-      (* Printf.printf "Solver is_sat: %s\n" (Solver.to_string solver); *)
+      (*Printf.printf "Solver is_sat: %s\n" (Solver.to_string solver);*)
 
       let num_exprs = Goal.get_num_exprs g in
       
