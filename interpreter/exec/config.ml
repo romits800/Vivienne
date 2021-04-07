@@ -4,3 +4,5 @@ let magic_number_2 = 2000 (* Select portfolio for is_sat *)
 let magic_number_loop_inv = 20
 let magic_number_num_exprs = 2000
 let magic_number_num_exprs_max = 30000
+
+let magic_number_of_states = 10

@@ -36,6 +36,6 @@ val store_sind_value : memory -> svalue -> memory
 val add_secret : memory -> (int * int) -> memory
 val add_public : memory -> (int * int) -> memory
 
-
+val replace_stores : memory -> svalue list -> memory
 (* val init_secrets : memory -> (int32 * int32 ) list -> memory *)
 

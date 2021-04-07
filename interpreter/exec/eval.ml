@@ -78,6 +78,8 @@ module MaxLoopSize = Map.Make(struct
 
 let maxloop :  int MaxLoopSize.t ref = ref MaxLoopSize.empty
 
+                                     
+                                     
 let empty_maxloop () =
   maxloop := MaxLoopSize.empty
 
@@ -145,7 +147,53 @@ and
 secret_type = int * int
 
 
+module LocMap = Map.Make(struct
+                    type t = string
+                    let compare = compare
+                  end)
+                   
+let locmap :  config list LocMap.t ref = ref LocMap.empty
 
+let rec find_loc (e : admin_instr) (es : admin_instr list) : string =
+  match e.it with
+  | Frame (n, frame', (vs', []), pc', iv') ->
+     (match es with
+     | e'::es' -> find_loc e' es'
+     | [] -> string_of_region e.at
+     )
+  | Frame (n, frame', (vs', e'::es'), pc', iv') -> find_loc e' es'
+  | Label (n, es0, (vs', []), pc', iv', cct) ->
+     (match es with
+     | e'::es' -> find_loc e' es'
+     | [] -> string_of_region e.at
+     )
+  | Label (n, es0, (vs',e'::es'), pc', iv', cct') -> find_loc e' es'
+  | _ -> string_of_region e.at
+     
+let add_locmap c =
+  match c.code with
+  | vs, [] -> ()
+  | vs, {it = Trapping msg; at} :: _ -> Trap.error at msg
+  | vs, e::es ->
+     let loc = find_loc e es in
+     if !Flags.debug then
+       print_endline "Add locmap.";
+     let oldval = 
+       try
+         LocMap.find loc !locmap
+       with Not_found ->
+         []
+     in
+     locmap := LocMap.add loc (c::oldval) !locmap
+
+let next_locmap () =
+  try
+    Some (LocMap.find_first (fun k -> true) !locmap)
+  with Not_found -> None
+
+let remove_locmap loc =
+  locmap := LocMap.remove loc !locmap
+                  
 let modifier_to_string = function
   | Decrease vold -> "Decrease " ^ (svalue_to_string vold)
   | Increase vold -> "Increase " ^ (svalue_to_string vold)

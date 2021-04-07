@@ -34,6 +34,7 @@ let argspec = Arg.align
   "-b", Arg.Set Flags.bfs, " run breadth first Search instead of default DFS";
   "-l", Arg.Set Flags.loop_invar, " use loop invariant";
   "-m", Arg.Set Flags.simplify, " enable simplify from Z3";
+  "-p", Arg.Set Flags.pfs, " run pfs instead of default DFS";
   "-S", Arg.Set Flags.select_unsafe, " set \"select\" instruction as unsafe";
   "--z3-only", Arg.Set Flags.z3_only, " run using the z3 bindings";
   "--portfolio-only", Arg.Set Flags.portfolio_only, " run using the portfolio solver";

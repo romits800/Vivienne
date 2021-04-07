@@ -281,6 +281,8 @@ let add_secret mem sec =
 let add_public mem sec = 
   {mem with nonsecrets = sec::mem.nonsecrets }
 
+let replace_stores mem stores =
+  {mem with stores = stores}
 
 (* let init_secrets mem sec =
  *   {mem with secrets = sec } *)

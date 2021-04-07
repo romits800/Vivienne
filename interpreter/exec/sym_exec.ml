@@ -1262,7 +1262,8 @@ let rec step (c : config) : config list =
                    observations = ci.observations;
                    induction_vars = iv'
                    (* frame = ci.frame *)
-         }) c'
+           }
+         ) c'
 
     | Invoke func, vs when c.budget = 0 ->
        Exhaustion.error e.at "call stack exhausted"
@@ -1348,8 +1349,7 @@ let rec eval_bfs (cs : config list) : pc_ext list =
   let css = filter_map filter_step cs in
   spaths @ (List.fold_left (@) [] css |> eval_bfs)
 
-
-             
+        
      
 (* Eval DFS *)
 let eval_dfs (cs : config list) : pc_ext list =
@@ -1365,12 +1365,205 @@ let eval_dfs (cs : config list) : pc_ext list =
            eval_dfs_i (ncs @ cs') acc
         )
        )
-      
     | [] -> List.rev acc
   in
   eval_dfs_i cs []
 
 
+let merge_globals c1 c2 =
+  let newglobals =
+    List.map2
+      (fun g1 g2 ->
+        let g1' = Sglobal.load g1 in
+        let g2' = Sglobal.load g2 in
+        match g1', g2' with
+        | g1', g2' when g1' = g2' -> g1
+        | g1', g2' ->
+           let mem1 = (c1.frame.inst.smemories, smemlen c1.frame.inst) in
+           let mem2 = (c2.frame.inst.smemories, smemlen c2.frame.inst) in
+           let is_low1 = Z3_solver.is_v_ct_unsat ~timeout:30 c1.pc g1' mem1 in
+           let is_low2 = Z3_solver.is_v_ct_unsat ~timeout:30 c2.pc g2' mem2 in
+           let newg' =
+             (match is_low1,is_low2 with
+                true,true ->
+                (match g1', g2' with
+                   SI32 _, SI32 _ -> SI32 (Si32.of_low ())
+                 | SI64 _, SI64 _ -> SI64 (Si64.of_low ())
+                 | _, _ -> failwith "Float number not supported.";
+                )
+              | _, _ ->
+                (match g1', g2' with
+                   SI32 _, SI32 _ -> SI32 (Si32.of_high ())
+                 | SI64 _, SI64 _ -> SI64 (Si64.of_high ())
+                 | _, _ -> failwith "Float number not supported.";
+                )
+             )
+           in
+           let g = Sglobal.store g1 newg' in 
+           g
+      )
+      c1.frame.inst.sglobals c2.frame.inst.sglobals in
+  { c1 with frame = {c1.frame with inst = {c1.frame.inst with sglobals = newglobals}}}
+
+
+let merge_memories c1 c2 =
+  let rec merge_stores st1 st2 acc =
+    match st1, st2 with
+    | s1::st1, s2::st2 when s1 = s2 -> merge_stores st1 st2 (s1::acc)
+    | s1::st1, s2::st2 ->
+       let mem1 = (c1.frame.inst.smemories, smemlen c1.frame.inst) in
+       let mem2 = (c2.frame.inst.smemories, smemlen c2.frame.inst) in
+       let is_low1 = Z3_solver.is_v_ct_unsat ~timeout:30 c1.pc s1 mem1 in
+       let is_low2 = Z3_solver.is_v_ct_unsat ~timeout:30 c2.pc s2 mem2 in
+       let news =
+         (match is_low1,is_low2 with
+            true,true ->
+             (match s1, s2 with
+                SI32 _, SI32 _ -> SI32 (Si32.of_low ())
+              | SI64 _, SI64 _ -> SI64 (Si64.of_low ())
+              | _, _ -> failwith "Float number not supported.";
+             )
+          | _, _ ->
+             (match s1, s2 with
+                SI32 _, SI32 _ -> SI32 (Si32.of_high ())
+              | SI64 _, SI64 _ -> SI64 (Si64.of_high ())
+              | _, _ -> failwith "Float number not supported.";
+             )
+         )
+       in
+       merge_stores st1 st2 (news::acc)
+    | [], [] -> acc
+    | s1::st1, [] ->
+       let mem1 = (c1.frame.inst.smemories, smemlen c1.frame.inst) in
+       let is_low1 = Z3_solver.is_v_ct_unsat ~timeout:30 c1.pc s1 mem1 in
+       let news =
+         (match s1 with
+            SI32 _ -> if is_low1 then SI32 (Si32.of_low ())
+                      else SI32 (Si32.of_high ())
+          | SI64 _ -> if is_low1 then SI64 (Si64.of_low ())
+                      else SI64 (Si64.of_high ())
+          | _ -> failwith "Float numbers not supported.";
+         )
+       in
+       merge_stores st1 st2 (news::acc)
+    | [], s2::st2 ->
+       let mem2 = (c2.frame.inst.smemories, smemlen c2.frame.inst) in
+       let is_low2 = Z3_solver.is_v_ct_unsat ~timeout:30 c2.pc s2 mem2 in
+       let news =
+         (match s2 with
+            SI32 _ -> if is_low2 then SI32 (Si32.of_low ())
+                      else SI32 (Si32.of_high ())
+          | SI64 _ -> if is_low2 then SI64 (Si64.of_low ())
+                      else SI64 (Si64.of_high ())
+          | _ -> failwith "Float numbers not supported."
+         )
+       in
+       merge_stores st1 st2 (news::acc)       
+  in
+  let n1, n2 = smemlen c1.frame.inst, smemlen c2.frame.inst in
+  if n1 = n2 then (
+    let newsmemories =
+      List.map2
+        (fun mem1 mem2 ->
+          let st1 = List.rev (Smemory.get_stores mem1) in
+          let st2 = List.rev (Smemory.get_stores mem2) in
+          let newstores = merge_stores st1 st2 [] in
+          Smemory.replace_stores mem1 newstores
+        )
+        c1.frame.inst.smemories c2.frame.inst.smemories in
+    { c1 with frame =
+                {c1.frame with inst =
+                                 {c1.frame.inst with smemories = newsmemories}}}
+  )
+  else
+    c1
+  
+let merge_locals c1 c2 =
+  let newlocals =
+    List.map2
+      (fun l1 l2 ->
+        let l1' = l1 in
+        let l2' = l2 in
+        match l1', l2' with
+        | l1', l2' when l1' = l2' -> l1
+        | l1', l2' ->
+           let mem1 = (c1.frame.inst.smemories, smemlen c1.frame.inst) in
+           let mem2 = (c2.frame.inst.smemories, smemlen c2.frame.inst) in
+           let is_low1 = Z3_solver.is_v_ct_unsat ~timeout:30 c1.pc l1' mem1 in
+           let is_low2 = Z3_solver.is_v_ct_unsat ~timeout:30 c2.pc l2' mem2 in
+           let newl' =
+             (match is_low1,is_low2 with
+                true,true ->
+                (match l1', l2' with
+                   SI32 _, SI32 _ -> SI32 (Si32.of_low ())
+                 | SI64 _, SI64 _ -> SI64 (Si64.of_low ())
+                 | _, _ -> failwith "Float number not supported.";
+                )
+              | _, _ ->
+                (match l1', l2' with
+                   SI32 _, SI32 _ -> SI32 (Si32.of_high ())
+                 | SI64 _, SI64 _ -> SI64 (Si64.of_high ())
+                 | _, _ -> failwith "Float number not supported.";
+                )
+             )
+           in
+           newl'
+      )
+      c1.frame.locals c2.frame.locals in
+  { c1 with frame = {c1.frame with locals = newlocals}}
+
+
+  
+let merge_two_states c1 c2 =
+  let c = merge_globals c1 c2 in
+  let c = merge_locals c c2 in (* a bit hacky: c is a copy of c1 *)
+  let c = merge_memories c c2 in 
+  c
+  
+let rec merge_states cs =
+  match cs with
+  | [] -> failwith "Unexpected: no states to merge"
+  | c::[] -> c
+  | c1::c2::cs' -> merge_states (merge_two_states c1 c2::cs')
+
+
+(* TODO(Romy) *)
+let rec eval_pfs (cs : config list) : pc_ext list =
+  (* print_endline "BFS"; *)
+  if !Flags.debug then
+    print_endline "eval_PFS.";
+
+  List.iter add_locmap cs;
+
+  let cr = next_locmap () in
+  match cr with
+    None -> []
+  | Some (loc, cs) ->
+     if !Flags.debug then
+       print_endline ("loc:" ^ loc);
+     ( match cs with
+       | [] -> []
+       | cs' ->
+          if List.length cs' > magic_number_of_states then (
+            if !Flags.debug then
+              print_endline ("Merging states."  ^ (string_of_int (List.length cs')));
+            
+            let c = merge_states cs' in
+            let c' = step {c with counter = c.counter + 1} in
+            eval_pfs c'
+          )
+          else (
+            let ncs = List.fold_left
+                        (fun ac c ->
+                          let res = step {c with counter = c.counter + 1} in
+                          res @ ac ) [] cs'  in
+            remove_locmap loc;
+            (* let ncs = step {c with counter = c.counter + 1} in *)
+            eval_pfs ncs
+          )
+     )
+
+                 
 (********************** MERGE STATES - Not done ******************************)
 (* module MPMap = Map.Make(struct
  *                    type t = int
@@ -1433,6 +1626,8 @@ let eval_dfs (cs : config list) : pc_ext list =
 let eval (c : config) : pc_ext list =
   if !Flags.bfs then
     eval_bfs [c]
+  else if !Flags.pfs then
+    eval_pfs [c]
   else 
     eval_dfs [c] (* {cs = [c]; loops = []} *)
 
