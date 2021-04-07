@@ -31,8 +31,10 @@ module DefMap = Map.Make(struct
                   end)
 let defmap = ref DefMap.empty
 
+type simap_t = PC of Pc_type.pc * (Smemory.memory list * int) |
+               SI of Smt_type.term * (Smemory.memory list * int)
 module SiMap = Map.Make(struct
-                    type t = string
+                    type t = simap_t
                     let compare = compare
                   end)
 let simap = ref SiMap.empty
@@ -162,8 +164,13 @@ let extend ctx size v' = function
      propagate_policy_one (BitVector.mk_sign_ext ctx  size') v'
 
 
-let simap_index v mem = 
-    string_of_int (Obj.magic v) ^ string_of_int (Obj.magic mem)
+let simap_index v mem =
+  SI (v,mem)
+
+let pcmap_index pc mem =
+  PC (pc,mem)
+(* let str = Printf.sprintf "%020d%020d" (Obj.magic v) (Obj.magic mem) in
+   * str *)
 
 let get_size e =
   match e with
@@ -242,7 +249,9 @@ and si_to_expr pc size ctx mem si: rel_type  =
        | Load (i, memi, sz, _) ->
           (* print_endline "load z3_solver"; *)
           (try
-             let f = SiMap.find (simap_index si mem) !simap in
+             let index = simap_index si mem in
+             (* if !Flags.debug then print_endline ("lloc:" ^ index); *)
+             let f = SiMap.find index !simap in
              (* if !Flags.debug then print_endline "found load"; *)
              f
            with Not_found ->
@@ -571,8 +580,12 @@ and sv_to_expr pc sv ctx mem =
   | _ -> failwith "Float not implemented."
   in
   (try
-     let f =  SiMap.find (simap_index v mem) !simap in
-     if !Flags.debug then print_endline "found sv_to_expr";
+     let index = simap_index v mem in
+     (* if !Flags.debug then print_endline ("svloc:" ^ index); *)
+     let f =  SiMap.find index !simap in
+     (* if !Flags.debug then print_endline "found sv_to_expr"; *)
+     (* print_exp f; *)
+     (* raise Not_found; *)
      f
    with Not_found ->
      let v' = si_to_expr pc n ctx mem v in
@@ -588,9 +601,14 @@ and sv_to_expr pc sv ctx mem =
 let rec pc_to_expr pc ctx mem: rel_type =
   let pclet, pc = pc in
   try
-    let f = SiMap.find (simap_index pc mem) !simap in
-    if !Flags.debug then print_endline "found pc_to_expr";
+    let index = pcmap_index pc mem in
+    (* if !Flags.debug then print_endline ("pcloc:" ^ index); *)
+    let f = SiMap.find index !simap in
+    (* if !Flags.debug then print_endline "found pc_to_expr"; *)
+    (* f *)
+    (* print_exp f; *)
     f
+    (* raise Not_found *)
   with Not_found -> (
     match pc with
     | PCTrue -> L (Boolean.mk_true ctx)
@@ -601,7 +619,7 @@ let rec pc_to_expr pc ctx mem: rel_type =
        let ex2 = pc_to_expr (pclet, pc') ctx mem in
        let pcexp = propagate_list (Boolean.mk_and ctx) [ex1; ex2] in
        let simp = propagate_policy_one (fun x -> Expr.simplify x None) pcexp in
-       simap := SiMap.add (simap_index pc mem) simp !simap ; 
+       simap := SiMap.add (pcmap_index pc mem) simp !simap ; 
        simp
   )
 
@@ -678,8 +696,8 @@ let find_sv cmds solver =
        );
     | [] -> failwith "Not found"
   in
-  if !Flags.debug then
-    print_endline solver;
+  (* if !Flags.debug then
+   *   print_endline solver; *)
   find_command cmds
         
 let read_cvc4 fname =
@@ -1375,7 +1393,8 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
       (* Printf.printf "Goal: %s\n" (Goal.to_string g); *)
       let solver = Solver.mk_solver ctx None in
       List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
-      (*Printf.printf "Solver is_sat: %s\n" (Solver.to_string solver);*)
+      (* if !Flags.debug then
+       *   Printf.printf "Solver is_sat: %s\n" (Solver.to_string solver); *)
 
       let num_exprs = Goal.get_num_exprs g in
       

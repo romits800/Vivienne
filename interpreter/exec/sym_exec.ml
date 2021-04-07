@@ -1466,23 +1466,25 @@ let merge_memories c1 c2 =
        in
        merge_stores st1 st2 (news::acc)       
   in
-  let n1, n2 = smemlen c1.frame.inst, smemlen c2.frame.inst in
-  if n1 = n2 then (
-    let newsmemories =
-      List.map2
-        (fun mem1 mem2 ->
-          let st1 = List.rev (Smemory.get_stores mem1) in
-          let st2 = List.rev (Smemory.get_stores mem2) in
-          let newstores = merge_stores st1 st2 [] in
-          Smemory.replace_stores mem1 newstores
-        )
-        c1.frame.inst.smemories c2.frame.inst.smemories in
-    { c1 with frame =
-                {c1.frame with inst =
-                                 {c1.frame.inst with smemories = newsmemories}}}
-  )
-  else
-    c1
+  let rec merge_mems m1s m2s acc =
+    match m1s, m2s with
+    | [], [] -> acc
+    | m1::m1s', m2::m2s' -> 
+       let st1 = List.rev (Smemory.get_stores m1) in
+       let st2 = List.rev (Smemory.get_stores m2) in
+       let newstores = merge_stores st1 st2 [] in
+       let newm = Smemory.replace_stores m1 newstores in
+       merge_mems m1s' m2s' (newm::acc)
+    | ms', []
+      | [], ms' -> 
+       (List.rev ms') @ acc
+  in
+  let m1 = c1.frame.inst.smemories in
+  let m2 = c2.frame.inst.smemories in
+  let newsmemories = merge_mems m1 m2 [] in
+  { c1 with frame =
+              {c1.frame with inst =
+                               {c1.frame.inst with smemories = newsmemories}}}  
   
 let merge_locals c1 c2 =
   let newlocals =
@@ -1550,12 +1552,16 @@ let rec eval_pfs (cs : config list) : pc_ext list =
      ( match cs with
        | [] -> []
        | cs' ->
+          if !Flags.debug then
+            print_endline ("Config size:"  ^ (string_of_int (List.length cs')));
+
           if List.length cs' > magic_number_of_states then (
             if !Flags.debug then
               print_endline ("Merging states."  ^ (string_of_int (List.length cs')));
             
             let c = merge_states cs' in
             let c' = step {c with counter = c.counter + 1} in
+            remove_locmap loc;
             eval_pfs c'
           )
           else (
@@ -1564,6 +1570,9 @@ let rec eval_pfs (cs : config list) : pc_ext list =
                           let res = step {c with counter = c.counter + 1} in
                           res @ ac ) [] cs'  in
             remove_locmap loc;
+          if !Flags.debug then
+            print_endline ("Step config size:"  ^ (string_of_int (List.length ncs)));
+
             (* let ncs = step {c with counter = c.counter + 1} in *)
             eval_pfs ncs
           )
