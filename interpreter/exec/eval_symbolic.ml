@@ -19,6 +19,7 @@ struct
 
   let to_value = Value.to_value
   let of_value = of_arg Value.of_value
+  let to_value_32 = Svalues.SI32Value.to_value
 
   let unop op =
     let f = match op with
@@ -51,17 +52,17 @@ struct
     in fun v1 v2 -> to_value (f (of_value 1 v1) (of_value 2 v2))
 
   let cond op t1 t2 =
-    let one = IXX.one in
-    let zero = IXX.zero in
+    let one = Si32.one in
+    let zero = Si32.zero in
     let v = op t1 t2 in
-    IXX.ite v one zero
+    Si32.ite v one zero
 
   let testop op =
     let f = match op with
       | Eqz ->
          let zero = IXX.zero in
          cond IXX.eq zero
-    in fun v -> to_value (f (of_value 1 v))
+    in fun v -> to_value_32 (f (of_value 1 v))
 
     
   let relop op =
@@ -76,7 +77,7 @@ struct
       | GtU -> cond (IXX.gt_u)
       | GeS -> cond (IXX.ge_s)
       | GeU -> cond (IXX.ge_u)
-    in fun v1 v2 -> to_value (f (of_value 1 v1) (of_value 2 v2))
+    in fun v1 v2 -> to_value_32 (f (of_value 1 v1) (of_value 2 v2))
 
 end
 
@@ -90,7 +91,7 @@ module FloatOp (FXX : Float.S) (Value : ValueType with type t = FXX.t) =
 struct
   open Ast.FloatOp
 
-  let to_value = Value.to_value
+  let to_value = Value.TO_VALUE
   let of_value = of_arg Value.of_value
 
   let unop op =
