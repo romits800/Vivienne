@@ -1234,7 +1234,7 @@ let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) =
        )
      )
      
-let is_v_ct_unsat ?timeout:(timeout=10) (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool =
+let is_v_ct_unsat ?timeout:(timeout=30) (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool =
    if !Flags.debug then 
       print_endline "Checking if value is CT..";
  
@@ -1319,6 +1319,8 @@ let is_v_ct_unsat ?timeout:(timeout=10) (pc : pc_ext) (sv : svalue) (mem: Smemor
            false
       ) else (
         if num_exprs > magic_number then (
+          if !Flags.debug then print_endline "Using portfolio solver..";
+ 
           let filename = write_formula_to_file solver in
           (* print_endline ("is_v_ct_unsat after write formula " ^ filename); *)
           let res = 
@@ -1332,6 +1334,8 @@ let is_v_ct_unsat ?timeout:(timeout=10) (pc : pc_ext) (sv : svalue) (mem: Smemor
           remove filename;
           res
         ) else (
+
+          if !Flags.debug then print_endline "Using Z3 solver..";
 
           (if (!Flags.stats) then
              Stats.update_query_str "Z3_bindings") ;

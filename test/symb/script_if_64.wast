@@ -37,7 +37,7 @@
   (data (;0;) (i32.const 0) "\01\00\00\00\02\00\00\00\03\00\00\00\04\00\00\00\05\00\00\00\06\00\00\00\07\00\00\00\08\00\00\00"))
 
 
-(assert_failure (symb_exec "test3" (i32.sconst h1) (i64.sconst h2)) "BrIf: Constant-time failure")
+(symb_exec "test3" (i32.sconst h1) (i64.sconst h2))
 
 ;; Maybe add some result
 (symb_exec "test3" (i32.sconst l1) (i64.sconst h2))

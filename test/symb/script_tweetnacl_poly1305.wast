@@ -9763,4 +9763,4 @@
 (symb_exec "poly1305_update" (i32.sconst 2000) (i32.sconst 2128) (i32.sconst 16)) ;; fails with invariant i = 0 is not explicit before loop
 ;;(symb_exec "poly1305_finish" (i32.sconst 2000) (i32.sconst 2112)) ;; loop invariant - for (int i=leftover..; i<16; i++)
 ;;;; mac, m, bytes, key, polyobject
-;;(symb_exec "crypto_onetimeauth" (i32.sconst 2112) (i32.sconst 2128) (i32.sconst 16) (i32.sconst 2080) (i32.sconst 2000)) ;; loop invariant - for (int i=leftover..; i<16; i++)
+(symb_exec "crypto_onetimeauth" (i32.sconst 2112) (i32.sconst 2128) (i32.sconst 16) (i32.sconst 2080) (i32.sconst 2000)) ;; loop invariant - for (int i=leftover..; i<16; i++)

@@ -339,7 +339,7 @@ let find_modified_vars (analyzed_loop : int ) (c : config) :
                (* Check store variable only if they have constant index *)
                (* We might for example be storing the loop index in memory *)
                let memtuple = (c.frame.inst.smemories, smemlen c.frame.inst) in
-               let is_low = Z3_solver.is_v_ct_unsat c.pc lvn memtuple in
+               let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc lvn memtuple in
                (* let mo = compare_svalues lvn sv in *)
                
                let lv = (StoreVar (final_addr, ty, sz, is_low, Nothing))::lv in
@@ -761,7 +761,7 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list) (c : config) : loop
 
            let lv = if c.ct_check then (
                       let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
-                      let is_low = Z3_solver.is_v_ct_unsat c.pc vv mem in
+                      let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in
                       
                       let mo = compare_svalues vv v in
                       (* print_loopvar (LocalVar (x, is_low)); *)
@@ -792,7 +792,7 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list) (c : config) : loop
            let vv = local frame x in
            let lv = if c.ct_check then (
                       let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
-                      let is_low = Z3_solver.is_v_ct_unsat c.pc vv mem in
+                      let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in
                       let mo = compare_svalues vv v in
                       
                       (LocalVar (x, is_low, mo))::lv)
@@ -811,7 +811,7 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list) (c : config) : loop
 
            let vv = Sglobal.load (sglobal c.frame.inst x) in
            let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
-           let is_low = Z3_solver.is_v_ct_unsat c.pc vv mem in
+           let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in
            let mo = compare_svalues vv v in
            
            let lv = (GlobalVar (x, is_low, mo))::lv in
@@ -893,7 +893,7 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list) (c : config) : loop
            (* Check store variable only if they have constant index *)
            (* We might for example be storing the loop index in memory *)
            let memtuple = (c.frame.inst.smemories, smemlen c.frame.inst) in
-           let is_low = Z3_solver.is_v_ct_unsat ~timeout:60 c.pc lvn memtuple in 
+           let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc lvn memtuple in 
            (* let mo = compare_svalues lvn sv in *)
            
            let lv = (StoreVar (final_addr, ty, sz, is_low, Nothing))::lv in
@@ -948,7 +948,9 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list) (c : config) : loop
            lv, [{c with code = vs', es' @ List.tl es}]
 
         | Binary binop, v2 :: v1 :: vs' ->
-           (* print_endline "binop"; *)
+         (* print_endline "binop";
+            print_endline (Pc_type.svalue_to_string v1);
+            print_endline (Pc_type.svalue_to_string v2); *)
            let vs', es' = 
              (try
                 let nv = Eval_symbolic.eval_binop binop v1 v2 in
@@ -1184,13 +1186,13 @@ let find_policy lvs c  =
     | (LocalVar (x,_,mo)) :: lvs' ->
        let vv = local c.frame x in
        let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
-       let is_low = Z3_solver.is_v_ct_unsat c.pc vv mem in                   
+       let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in                   
        let mo = Nothing in
        find_policy_i lvs' (LocalVar (x,is_low,mo)::acc)
     | (GlobalVar (x,_,mo)) :: lvs' ->
        let vv = Sglobal.load (sglobal c.frame.inst x) in
        let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
-       let is_low = Z3_solver.is_v_ct_unsat c.pc vv mem in                   
+       let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in                   
        let mo = Nothing in
        find_policy_i lvs' (GlobalVar (x,is_low,mo)::acc)
     | (StoreVar (final_addr, ty, sz, is_low, mo)) :: lvs' ->
@@ -1207,7 +1209,7 @@ let find_policy lvs c  =
              lvn)
        in
        let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
-       let is_low = Z3_solver.is_v_ct_unsat c.pc vv mem in                   
+       let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in                   
        let mo = Nothing in
        find_policy_i lvs' (StoreVar (final_addr, ty, sz, is_low, mo)::acc)
     | [] -> List.rev acc

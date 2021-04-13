@@ -507,6 +507,11 @@ let rec step (c : config) : config list =
            (match i_sol with
             | [] -> failwith "No solution for the symbolic value of the index."
             | _ -> List.map (fun sol ->
+
+                       if !Flags.debug then (
+                         print_endline ("Calling indirect:" ^ (string_of_int sol))
+                       ); 
+ 
                        (* print_endline "call indirect_inside";
                         * print_endline (string_of_int sol); *)
                        let func = func_elem frame.inst (0l @@ e.at) (Int32.of_int sol) e.at in
