@@ -954,7 +954,7 @@ let rec fiv_step (lv : triple IndVarMap.t) (c : config) (c_orig : config) :
        | Compare relop, v2 :: v1 :: vs' ->
           (* print_endline "relop"; *)
           let vs', es' =
-            (try (Eval_symbolic.eval_relop relop v1 v2) :: vs', []
+            (try (svalue32_of_bool (Eval_symbolic.eval_relop relop v1 v2)) :: vs', []
              with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
           lv, [{c with code = vs', es' @ List.tl es}], c_orig
 

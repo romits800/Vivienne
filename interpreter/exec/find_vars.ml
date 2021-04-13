@@ -929,14 +929,14 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list) (c : config) : loop
         | Test testop, v :: vs' ->
            (* print_endline "testop"; *)
            let vs', es' =
-             (try (Eval_symbolic.eval_testop testop v) :: vs', []
+             (try (svalue32_of_bool (Eval_symbolic.eval_testop testop v)) :: vs', []
               with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
            lv, [{c with code = vs', es' @ List.tl es}]
            
         | Compare relop, v2 :: v1 :: vs' ->
            (* print_endline "relop"; *)
            let vs', es' =
-             (try (Eval_symbolic.eval_relop relop v1 v2) :: vs', []
+             (try (svalue32_of_bool (Eval_symbolic.eval_relop relop v1 v2)) :: vs', []
               with exn -> vs', [Trapping (numeric_error e.at exn) @@ e.at]) in
            lv, [{c with code = vs', es' @ List.tl es}]
 
