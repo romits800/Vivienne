@@ -182,7 +182,9 @@ let rec step (c : config) : config list =
         | Loop (bt, es'), vs ->
            if !Flags.debug then (
              print_endline "Entering loop..";
-             print_endline (string_of_region e.at));
+             print_endline (string_of_region e.at);
+             print_endline ("Number of local variables:" ^ (string_of_int (List.length frame.locals)));
+            );
            (* print_endline ("loop: " ^ (Source.string_of_region e.at)); *)
            if !Flags.estimate_loop_size then (         
              try (
@@ -1364,21 +1366,26 @@ let rec eval_bfs (cs : config list) : pc_ext list =
      
 (* Eval DFS *)
 let eval_dfs (cs : config list) : pc_ext list =
-  let rec eval_dfs_i (cs : config list) (acc : pc_ext list) =
+  let rec eval_dfs_i (cs : config list) (acc : pc_ext list) (num_paths : int) :
+        pc_ext list * int =
     (* print_endline "eval_dfs_i"; *)
     match cs with
     | c::cs' ->
        (match c.code with
-        | vs, [] -> eval_dfs_i cs' (c.pc::acc)
+        | vs, [] -> eval_dfs_i cs' (c.pc::acc) num_paths
         | vs, {it = Trapping msg; at} :: _ -> Trap.error at msg
         | vs, es -> (
            let ncs = step {c with counter = c.counter + 1} in
-           eval_dfs_i (ncs @ cs') acc
+           let num_paths' = num_paths * (List.length ncs) in
+           eval_dfs_i (ncs @ cs') acc num_paths'
         )
        )
-    | [] -> List.rev acc
+    | [] -> List.rev acc, num_paths
   in
-  eval_dfs_i cs []
+  let pcs, num_paths = eval_dfs_i cs [] 1 in
+  if !Flags.debug || !Flags.stats then
+    print_endline ("Number of paths" ^ (string_of_int num_paths));
+  pcs
 
 
 let merge_globals c1 c2 =
