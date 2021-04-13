@@ -5,4 +5,4 @@ let magic_number_loop_inv = 20
 let magic_number_num_exprs = 2000
 let magic_number_num_exprs_max = 30000
 
-let magic_number_of_states = 3
+let magic_number_of_states = !Flags.merge_states

@@ -46,6 +46,9 @@ let argspec = Arg.align
   "--replace-expressions", Arg.Set Flags.replace_expressions, " replace long expressions with single high or low variables";
   "--stats", Arg.Set Flags.stats, " generate solver statistics";
   "--debug", Arg.Set Flags.debug, " enable debug msgs";
+  "--num-merge-states", Arg.Int (fun n -> Flags.merge_states := n),
+    " Maximum number of paths to merge; used in conjunction with -p (default 10)";
+ 
   "-v", Arg.Unit banner, " show version"
 ]
 
