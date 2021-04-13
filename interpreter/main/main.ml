@@ -47,7 +47,7 @@ let argspec = Arg.align
   "--stats", Arg.Set Flags.stats, " generate solver statistics";
   "--debug", Arg.Set Flags.debug, " enable debug msgs";
   "--num-merge-states", Arg.Int (fun n -> Flags.merge_states := n),
-    " Maximum number of paths to merge; used in conjunction with -p (default 10)";
+    " Maximum number of paths to merge; used in conjunction with -p (default 4)";
  
   "-v", Arg.Unit banner, " show version"
 ]
