@@ -14,7 +14,7 @@ let path = ref (getenv "VIV_PATH")
 exception Timeout (*of string*)
    
 module ExprMem = Map.Make(struct
-                     type t = int
+                     type t = (Smemory.memory list * int)
                      let compare = compare
                    end)
 let memmap = ref ExprMem.empty
@@ -186,7 +186,7 @@ let get_size e =
      size1
      
 let rec update_mem pc ctx mem a s =
-  (* print_endline "update_mem"; *)
+  (*print_endline "update_mem";*)
   match s with
   | SI32 Store (ad, v, i, sz) ->
      let size = 32 in
@@ -201,8 +201,6 @@ let rec update_mem pc ctx mem a s =
    | _ -> failwith "Unexpected store - not implemented f64/32"
 
 and si_to_expr pc size ctx mem si: rel_type  = 
-  (* print_endline "si_expr";
-   * print_endline (term_to_string si); *)
   let si' = 
       (match si with
        | BitVec (i,n) ->
@@ -233,11 +231,17 @@ and si_to_expr pc size ctx mem si: rel_type  =
              res
           (* ) *)
        | Let (i) ->
+          (*print_endline "let z3_solver"; 
+                print_endline (string_of_int i);
+ *)
           (try
-             LetMap.find i !letmap
+             let f = LetMap.find i !letmap in
+             (*print_endline "found let";*)
+             f
            with Not_found -> 
              match Pc_type.find_let pc i with
              | Sv sv' ->
+                (*print_endline "not found let";*)
                 let sv' = sv_to_expr pc sv' ctx mem in
                 letmap := LetMap.add i sv' !letmap;
                 sv'
@@ -247,18 +251,21 @@ and si_to_expr pc size ctx mem si: rel_type  =
                 e
           )
        | Load (i, memi, sz, _) ->
-          (* print_endline "load z3_solver"; *)
+          (*print_endline "load z3_solver"; 
+          print_endline (string_of_int memi);
+          print_endline (term_to_string i);*)
           (try
              let index = simap_index si mem in
              (* if !Flags.debug then print_endline ("lloc:" ^ index); *)
              let f = SiMap.find index !simap in
-             (* if !Flags.debug then print_endline "found load"; *)
+             (*if !Flags.debug then (print_endline "found load";);*)
              f
            with Not_found ->
+             (*if !Flags.debug then (print_endline "not found load";);*)
              let smem, memlen = mem in
              let arr =
                (try
-                  ExprMem.find memi !memmap
+                  ExprMem.find mem !memmap
                 with Not_found ->
                   let bva = BitVector.mk_sort ctx 32 in
                   let bvd = BitVector.mk_sort ctx 8 in
@@ -269,12 +276,13 @@ and si_to_expr pc size ctx mem si: rel_type  =
                   let stores = Smemory.get_stores tmem in
                   let fmem = List.fold_left (update_mem pc ctx mem)
                                newmem (List.rev stores) in
-                  memmap := ExprMem.add memi fmem !memmap;
+                  memmap := ExprMem.add mem fmem !memmap;
                   fmem
                )
              in
+             (*if !Flags.debug then (print_endline "getting index";);*)
              let index = si_to_expr pc size ctx mem i in
-             (* print_exp index; *)
+             if !Flags.debug then (print_endline "after"; print_exp index;);
              let v' = merge_bytes ctx arr index sz in
              (* print_endline "simplify"; *)
              let simp = propagate_policy_one (fun x -> Expr.simplify x None) v' in
@@ -571,7 +579,8 @@ and app_to_expr pc ts size ctx mem f =
   | _ -> failwith "App_to_expr: Not implemented yet."
 
 and sv_to_expr pc sv ctx mem =
-  (* print_endline "sv_to_expr"; *)
+  (*print_endline "sv_to_expr";
+  print_endline (svalue_to_string sv);*)
   let v,n =
     match sv with
     | SI32 si32 -> si32,32
@@ -599,6 +608,8 @@ and sv_to_expr pc sv ctx mem =
 
 
 let rec pc_to_expr pc ctx mem: rel_type =
+  (*print_endline "pc_to_expr";
+  print_endline (print_pc (snd pc));  *)
   let pclet, pc = pc in
   try
     let index = pcmap_index pc mem in
@@ -1376,7 +1387,7 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
   let ctx = init_solver() in
 
   let v = pc_to_expr pc ctx mem in
- 
+
   (* (match pc with
    * | (pclet, PCAnd (v',pc)) ->
    *    let sv = sv_to_expr (pclet,pc) v' ctx mem in
