@@ -282,7 +282,7 @@ and si_to_expr pc size ctx mem si: rel_type  =
              in
              (*if !Flags.debug then (print_endline "getting index";);*)
              let index = si_to_expr pc size ctx mem i in
-             if !Flags.debug then (print_endline "after"; print_exp index;);
+             (*if !Flags.debug then (print_endline "after"; print_exp index;);*)
              let v' = merge_bytes ctx arr index sz in
              (* print_endline "simplify"; *)
              let simp = propagate_policy_one (fun x -> Expr.simplify x None) v' in
@@ -718,9 +718,12 @@ let read_cvc4 fname =
   let chan = open_in tmp_file in
   (* let ch = input_char chan in *)
   match input_line chan with
-  | "unsat" -> None
-  (* match input_line chan with *)
-  (* | "unsat" -> None *)
+  | "unsat" -> 
+        close_in chan;
+        None
+  | "unknown" -> 
+        close_in chan;
+        None
   | "sat" ->
      let lexbuf = Lexing.from_channel chan in
      let c =
@@ -742,7 +745,12 @@ let read_boolector fname =
   let tmp_file = fname ^ ".boolector.out" in
   let chan = open_in tmp_file in
   match input_line chan with
-  | "unsat" -> None
+  | "unsat" -> 
+        close_in chan;
+        None
+  | "unknown" -> 
+        close_in chan;
+        None
   | "sat" ->
      let lexbuf = Lexing.from_channel chan in
      let c =
@@ -764,7 +772,12 @@ let read_bitwuzla fname =
   let tmp_file = fname ^ ".bitwuzla.out" in
   let chan = open_in tmp_file in
   match input_line chan with
-  | "unsat" -> None
+  | "unsat" -> 
+        close_in chan;
+        None
+  | "unknown" -> 
+        close_in chan;
+        None
   | "sat" ->
      let lexbuf = Lexing.from_channel chan in
      let c =
@@ -789,7 +802,12 @@ let read_z3 fname =
   (* let _ = Sys.command @@ "z3 -smt2 MODEL=true /tmp/out.smt2 > " ^ tmp_file in *)
   let chan = open_in tmp_file in
   match input_line chan with
-  | "unsat" -> None
+  | "unsat" -> 
+    close_in chan;
+    None
+  | "unknown" -> 
+    close_in chan;
+    None
   | "sat" ->
      let lexbuf = Lexing.from_channel chan in
      let c =
@@ -816,7 +834,8 @@ let read_yices fname =
   (* let _ = Sys.command @@ "yices-smt2 /tmp/out.smt2 > " ^ tmp_file in *)
   let chan = open_in tmp_file in
   match input_line chan with
-  | "unsat" ->
+  | "unsat" 
+    | "unknown" -> 
      close_in chan;
      None
   | "sat" ->
@@ -847,6 +866,7 @@ let read_sat solver_name fname =
   let ret =
     match  result with
     | "unsat" -> false
+    | "unknown" -> true
     | "sat" -> true
     | _ ->
        close_in chan;
