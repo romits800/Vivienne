@@ -183,7 +183,8 @@ let rec step (c : config) : config list =
            if !Flags.debug then (
              print_endline "Entering loop..";
              print_endline (string_of_region e.at);
-             print_endline ("Number of local variables:" ^ (string_of_int (List.length frame.locals)));
+             print_endline ("Number of local variables: " ^ (string_of_int (List.length frame.locals)));
+             print_endline ("Loop number of instructions: " ^ (string_of_int (List.length es')));
             );
            (* print_endline ("loop: " ^ (Source.string_of_region e.at)); *)
            if !Flags.estimate_loop_size then (         
