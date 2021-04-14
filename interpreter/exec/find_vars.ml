@@ -584,8 +584,9 @@ let find_modified_vars (analyzed_loop : int ) (c : config) :
 
 
                   
-let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list) (c : config) : loopvar_t list * config list =
-    let {frame; code = vs, es; pc = pclet, pc; _} = c in
+let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
+          (c : config) : loopvar_t list * config list =
+    let {frame; code = vs, es; pc = pcnum, pclet, pc; _} = c in
 
     let e = List.hd es in
     let est = List.tl es in
@@ -620,7 +621,7 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list) (c : config) : loop
            let n2 = Lib.List32.length ts2 in
            let args, vs' = take n1 vs e.at, drop n1 vs e.at in
            let vs', es' = vs', [Label (n2, [], (args, List.map plain es'),
-                                       (pclet,pc), c.induction_vars, c.ct_check) @@ e.at] in
+                                       (pcnum, pclet,pc), c.induction_vars, c.ct_check) @@ e.at] in
            lv, [{c with code = vs', es' @ List.tl es}]
         | Loop (bt, es'), vs ->
            (* print_endline "Loop find_vars"; *)
@@ -638,7 +639,7 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list) (c : config) : loop
              (* TODO(Romy): fix for return not 0 args to the value stack *)
              let vs', es' = vs', [Label (n1, [],
                                          (args, List.map plain es'),
-                                         (pclet,pc), c.induction_vars,
+                                         (pcnum, pclet,pc), c.induction_vars,
                                          c.ct_check) @@ e.at] in
              (* find_vars lv {c with code = vs, List.tl es} *)
              lv, [{c with code = vs', es' @ List.tl es}]
@@ -647,7 +648,7 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list) (c : config) : loop
 
              let vs', es' = vs', [Label (n1, [],
                                          (args, List.map plain es'),
-                                         (pclet,pc), c.induction_vars,
+                                         (pcnum, pclet,pc), c.induction_vars,
                                          c.ct_check) @@ e.at] in
              lv, [{c with code = vs', es' @ List.tl es}]
            )
@@ -657,21 +658,23 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list) (c : config) : loop
              print_endline "if fv";
              print_endline (string_of_region e.at));
 
-           let pc', pc'' = split_condition v pc in
+           let pc', pc'' = split_condition v (pcnum, pclet, pc) in
            let vs'', es'' = vs', [Plain (Block (bt, es1)) @@ e.at] in (* True *)
            let vs', es' = vs', [Plain (Block (bt, es2)) @@ e.at] in (* False *)
            (* Don't check sat *)
 
-           let mem = (frame.inst.smemories, smemlen frame.inst) in
+           let mem = get_mem_tripple frame in 
            
            let c1 =
-             if Z3_solver.is_sat (pclet, pc') mem then (
-               [{c with code = vs', es' @ est; pc = (pclet,pc')}])
+             let pcnum' = Pc_type.next_pc_num() in
+             if Z3_solver.is_sat (pcnum', pclet, pc') mem then (
+               [{c with code = vs', es' @ est; pc = (pcnum', pclet,pc')}])
              else []
            in
            let c2 =
-             if Z3_solver.is_sat (pclet, pc'') mem then (
-               [{c with code = vs'', es'' @ est; pc = (pclet,pc'')}])
+             let pcnum'' = Pc_type.next_pc_num() in
+             if Z3_solver.is_sat (pcnum'', pclet, pc'') mem then (
+               [{c with code = vs'', es'' @ est; pc = (pcnum'', pclet,pc'')}])
              else []
            in
            lv, c1 @ c2
@@ -692,19 +695,22 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list) (c : config) : loop
              print_endline "brif fv";
              print_endline (string_of_region e.at));
 
-           let pc', pc'' = split_condition v pc in (* false, true *)
+           let pc', pc'' = split_condition v (pcnum, pclet, pc) in (* false, true *)
            let vs'', es'' = vs', [Plain (Br x) @@ e.at] in
            let vs', es' = vs', [Plain Nop @@ e.at] in
 
-           let mem = (frame.inst.smemories, smemlen frame.inst) in
+           let mem = get_mem_tripple frame in 
            
            let c1 =
-             if Z3_solver.is_sat (pclet, pc'') mem then (
-               [{c with code = vs'', es'' @ est; pc = (pclet,pc'')}]
+             let pcnum' = Pc_type.next_pc_num() in
+             if Z3_solver.is_sat (pcnum', pclet, pc'') mem then (
+               [{c with code = vs'', es'' @ est; pc = (pcnum', pclet,pc'')}]
              ) else [] 
            in
-           let c2 = if Z3_solver.is_sat (pclet, pc') mem then (
-               [{c with code = vs', es' @ est; pc = (pclet,pc')}]
+           let c2 =
+             let pcnum'' = Pc_type.next_pc_num() in
+             if Z3_solver.is_sat (pcnum'', pclet, pc') mem then (
+               [{c with code = vs', es' @ est; pc = (pcnum'', pclet,pc')}]
               ) else []
            in
            lv, c1 @ c2
@@ -751,16 +757,15 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list) (c : config) : loop
 
         | LocalSet x, v :: vs' ->
            (* print_endline "local set"; *)
-               if (!Flags.debug) then (
-                 print_endline "localset fv";
-                 print_endline (string_of_region e.at));
+           if (!Flags.debug) then (
+             print_endline "localset fv";
+             print_endline (string_of_region e.at));
 
 
            let vv = local frame x in
 
-
            let lv = if c.ct_check then (
-                      let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
+                      let mem = get_mem_tripple frame in 
                       let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in
                       
                       let mo = compare_svalues vv v in
@@ -770,7 +775,7 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list) (c : config) : loop
            in
            (* let v, c =
             *   if svalue_depth v 10 then (
-            *     let nl, pc' = add_let (pclet, pc) (Sv v) in
+            *     let nl, pc' = add_let (pcnum, pclet, pc) (Sv v) in
             *     let nv = svalue_newlet (Sv v) nl in
             *     (\* let eq = svalue_eq nv v in *\)
             *     let c = {c with pc = pc'} in 
@@ -791,7 +796,7 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list) (c : config) : loop
            (* print_endline "local tee"; *)
            let vv = local frame x in
            let lv = if c.ct_check then (
-                      let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
+                      let mem = get_mem_tripple frame in 
                       let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in
                       let mo = compare_svalues vv v in
                       
@@ -810,7 +815,7 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list) (c : config) : loop
         | GlobalSet x, v :: vs' ->
 
            let vv = Sglobal.load (sglobal c.frame.inst x) in
-           let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
+           let mem = get_mem_tripple frame in 
            let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in
            let mo = compare_svalues vv v in
            
@@ -869,7 +874,7 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list) (c : config) : loop
            let offset = Int32.to_int offset in
            (* check if we satisfy CT  for the index *)
 
-           (* if (Z3_solver.is_v_ct_unsat (pclet, pc) si mems) then *)
+           (* if (Z3_solver.is_v_ct_unsat (pcnum, pclet, pc) si mems) then *)
            let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
 
            let nv, lvn =
@@ -892,7 +897,7 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list) (c : config) : loop
 
            (* Check store variable only if they have constant index *)
            (* We might for example be storing the loop index in memory *)
-           let memtuple = (c.frame.inst.smemories, smemlen c.frame.inst) in
+           let memtuple = get_mem_tripple frame in 
            let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc lvn memtuple in 
            (* let mo = compare_svalues lvn sv in *)
            
@@ -1185,13 +1190,13 @@ let find_policy lvs c  =
     match lvs with
     | (LocalVar (x,_,mo)) :: lvs' ->
        let vv = local c.frame x in
-       let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
+       let mem = get_mem_tripple c.frame in 
        let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in                   
        let mo = Nothing in
        find_policy_i lvs' (LocalVar (x,is_low,mo)::acc)
     | (GlobalVar (x,_,mo)) :: lvs' ->
        let vv = Sglobal.load (sglobal c.frame.inst x) in
-       let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
+       let mem = get_mem_tripple c.frame in 
        let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in                   
        let mo = Nothing in
        find_policy_i lvs' (GlobalVar (x,is_low,mo)::acc)
@@ -1208,7 +1213,7 @@ let find_policy lvs c  =
                          (smemlen c.frame.inst) n None in
              lvn)
        in
-       let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
+       let mem = get_mem_tripple c.frame in
        let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in                   
        let mo = Nothing in
        find_policy_i lvs' (StoreVar (final_addr, ty, sz, is_low, mo)::acc)

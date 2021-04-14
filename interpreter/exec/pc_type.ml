@@ -3,7 +3,7 @@ open Z3
    
 module Lets = Map.Make(struct
                   type t = int
-                  let compare = compare
+                  let compare = (-)
                 end)
 type rel_type = L of Expr.expr | H of Expr.expr * Expr.expr
                                     
@@ -13,12 +13,24 @@ type pc_let = simpl Lets.t
 
 let letnum = ref 0
            
+type pc_num = int
+            
 type pc = PCTrue | PCFalse
-          | PCAnd of svalue * pc
+          | PCAnd of svalue * pc_ext
+          | PCOr of pc_ext * pc_ext
           (* | PCLet of svalue * svalue *)
           | PCExpr of rel_type
-                    
-type pc_ext = pc_let * pc
+and pc_ext = pc_num * pc_let * pc 
+
+let pc_num = ref 0
+let init_pc_num () =
+  pc_num := 0
+
+let next_pc_num () =
+  pc_num := !pc_num + 1;
+  !pc_num
+  
+
 
 let svalue_to_string sv =
    match sv with
@@ -53,11 +65,13 @@ let svalue_newlet sv i =
  *      | _ -> failwith "Not possible" *)
 
                
-let rec print_pc pc =
+let rec print_pc pcext =
+  let pcnum, pclet, pc = pcext in
   match pc with
   | PCTrue -> "True"
   | PCFalse -> "False"
   | PCAnd (sv, pc) -> "(" ^ svalue_to_string sv ^ ") " ^ "&" ^ " (" ^ print_pc pc ^ ")"
+  | PCOr (pc1, pc2) -> "(" ^ print_pc pc1 ^ ") " ^ "|" ^ " (" ^ print_pc pc2 ^ ")"
   | PCExpr (H (e1,e2)) -> "H (" ^ Expr.to_string e1 ^ ", " ^ Expr.to_string e2 ^ ")"
   | PCExpr (L e) -> "L (" ^ Expr.to_string e ^ ")"
                           
@@ -73,13 +87,13 @@ let next_let () =
   !letnum
   
 let add_let (pce: pc_ext) (sv: simpl) =
-  let pclet, pc = pce in
+  let pcnum, pclet, pc = pce in
   let nl = next_let () in
   (* print_endline ("Add let:" ^ (string_of_int nl)); *)
-  nl, (Lets.add nl sv pclet, pc)
+  nl, (pcnum, Lets.add nl sv pclet, pc)
 
 let find_let (pce: pc_ext) (i: int) : simpl =
-  let pclet, pc = pce in
+  let pcnum, pclet, pc = pce in
   try
     Lets.find i pclet
   with Not_found ->
@@ -88,16 +102,36 @@ let find_let (pce: pc_ext) (i: int) : simpl =
   (* nl, (Lets.add nl sv pclet, pc) *)
 
 let empty_pc () =
-  (Lets.empty, PCTrue)
+  (next_pc_num(), Lets.empty, PCTrue)
 
-let pc_depth pc n =
-  let rec pc_depth_i pc n acc = 
+let pc_depth pcext n =
+  let rec pc_depth_i pcext n acc =
+    let pcnum, pclet, pc = pcext in
     match pc with
     | PCTrue | PCFalse | PCExpr _ -> (acc + 1 > n)
     | PCAnd (sv,pc) ->
        let d = svalue_depth sv (n - acc) in
        if d then true else 
          pc_depth_i pc (n - acc) (acc + 1)
-    
+    | PCOr (pc1,pc2) ->
+       let d = pc_depth_i pc1 (n - acc) (acc + 1) in
+       if d then true else 
+         pc_depth_i pc2 (n - acc) (acc + 1)
+
   in
-  pc_depth_i pc n 0
+  pc_depth_i pcext n 0
+
+let add_condition (c : svalue) (pc : pc_ext): pc =
+  PCAnd( c, pc)
+
+
+let disjunction_pcs (pc1 : pc_ext) (pc2 : pc_ext): pc =
+  PCOr( pc1, pc2)
+
+let merge_pcs (pc1 : pc_ext) (pc2 : pc_ext) : pc_ext =
+  let _, pclet1, _ = pc1 in
+  let _, pclet2, _ = pc2 in  
+  let pc_num = next_pc_num() in
+  let pclet = Lets.union (fun k v1 v2 -> Some v1) pclet1 pclet2 in
+  let pc' = disjunction_pcs pc1 pc2 in
+  (pc_num, pclet, pc')

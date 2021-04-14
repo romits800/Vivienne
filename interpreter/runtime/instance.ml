@@ -2,7 +2,17 @@ open Types
 
 
 type length = int
-            
+
+let num = ref 0
+
+let next_num () =
+  num := !num + 1;
+  !num
+
+let init_num () =
+  num := 0
+  
+
 type module_inst =
 {
   types : func_type list;
@@ -12,6 +22,7 @@ type module_inst =
   (* TODO(Romy): for now support one memory - the rest are instances. *)
   smemories : smemory_inst list;
   smemlen : length;
+  smemnum : int;
   globals : global_inst list;
   sglobals : sglobal_inst list;
   exports : export_inst list;
@@ -43,7 +54,8 @@ type Table.elem += FuncElem of func_inst
 
 let empty_module_inst =
   { types = []; funcs = []; tables = []; memories = []; smemories = []; smemlen = 0;
-    globals = []; exports = []; secrets = []; public = []; sglobals = []}
+    globals = []; exports = []; secrets = []; public = []; sglobals = [];
+    smemnum = next_num()}
 
 let extern_type_of = function
   | ExternFunc func -> ExternFuncType (Func.type_of func)
