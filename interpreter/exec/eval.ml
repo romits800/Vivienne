@@ -73,7 +73,7 @@ type loopvar_t = LocalVar of int32 Source.phrase * bool * modifier (* local x * 
 
 module MaxLoopSize = Map.Make(struct
                        type t = int
-                       let compare = compare
+                       let compare = (-)
                      end)
 
 let maxloop :  int MaxLoopSize.t ref = ref MaxLoopSize.empty
@@ -89,7 +89,8 @@ let update_maxloop addr maxl =
 
 let find_maxloop addr =
   MaxLoopSize.find addr !maxloop
-                           
+
+(* TODO(Romy): MapFix *)
 module IndVarMap = Map.Make(struct
                        type t = svalue * Source.region
                        let compare = compare
@@ -122,8 +123,8 @@ and admin_instr' =
   | SecondPass of int32 * admin_instr list * code
            
 and obs_type =
-  | CT_UNSAT of pc_ext * svalue * (Smemory.t list * int) * obs_type
-  | CT_V_UNSAT of pc_ext * svalue * (Smemory.t list * int) * obs_type
+  | CT_UNSAT of pc_ext * svalue * (Smemory.t list * int * int) * obs_type
+  | CT_V_UNSAT of pc_ext * svalue * (Smemory.t list * int * int) * obs_type
   (* | CT_SAT of pc * obs_type *)
   | OBSTRUE
 
@@ -228,6 +229,7 @@ let table (inst : module_inst) x = lookup "table" inst.tables x
 let memory (inst : module_inst) x = lookup "memory" inst.memories x
 let smemory (inst : module_inst) x = lookup "smemory" inst.smemories x
 let smemlen (inst : module_inst) =  inst.smemlen
+let smemnum (inst : module_inst) =  inst.smemnum
 (* let global (inst : module_inst) x = lookup "global" inst.globals x *)
 let sglobal (inst : module_inst) x = lookup "sglobal" inst.sglobals x
 let local (frame : frame) x = lookup "local" frame.locals x
@@ -242,7 +244,8 @@ let update_smemory (inst : module_inst) (mem : Instance.smemory_inst)
 let insert_smemory (inst : module_inst) (mem : Instance.smemory_inst)  = 
   try
     {inst with smemories = Lib.List32.insert mem inst.smemories;
-               smemlen = inst.smemlen + 1 }
+               smemlen = inst.smemlen + 1;
+               smemnum = Instance.next_num()}
   with Failure _ ->
     failwith "insert memory"
 
@@ -296,7 +299,7 @@ let drop n (vs : 'a stack) at =
  *   | SF64 sv -> F64.to_string sv *)
 
   
-let split_condition (sv : svalue) (pc : pc): pc * pc =
+let split_condition (sv : svalue) (pc : pc_ext): pc * pc =
   let pc' = 
     match sv with
     | SI32 vi32 ->
@@ -322,7 +325,7 @@ let split_condition (sv : svalue) (pc : pc): pc * pc =
   (pc'', pc') (* false, true *)
 
 
-let add_equality (sv1 : svalue) (sv2 : svalue) (pc : pc): pc =
+let add_equality (sv1 : svalue) (sv2 : svalue) (pc : pc_ext): pc =
     match sv1, sv2 with
     | SI32 vi1, SI32 vi2 ->
        PCAnd( SI32 (Si32.eq vi1 vi2), pc)
@@ -330,13 +333,10 @@ let add_equality (sv1 : svalue) (sv2 : svalue) (pc : pc): pc =
        PCAnd( SI64 (Si64.eq vi1 vi2), pc)
     | _, _-> failwith "Equality different types or floats is not supported."
 
-let add_condition (c : svalue) (pc : pc): pc =
-  PCAnd( c, pc)
-
   
 let split_msec (sv : svalue)
       (msec : (int * int) list )
-      (mpub : (int * int) list ) (pc : pc) : pc * pc =  
+      (mpub : (int * int) list ) (pc : pc_ext) : pc * pc =  
   (* let pc' = PCAnd (sv, pc) in
    * let pc'' = *)
   (* print_endline "split_msec"; *)
@@ -382,6 +382,9 @@ let match_policy b1 b2 =
   | true, true | false, false -> true
   | _ -> false
 
+let get_mem_tripple frame =
+  (frame.inst.smemories, smemlen frame.inst, smemnum frame.inst)
+
 (* Assert invariant *)
 let rec assert_invar (lv: loopvar_t list) (c : config) : bool =
   match lv with
@@ -390,7 +393,7 @@ let rec assert_invar (lv: loopvar_t list) (c : config) : bool =
      
      if !Flags.debug then print_loopvar (List.hd lv);
      let v = local c.frame x in
-     let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
+     let mem = get_mem_tripple c.frame in
      let is_low_new = Z3_solver.is_v_ct_unsat ~timeout:60 c.pc v mem in
      if !Flags.debug then print_endline (string_of_bool is_low_new);
      if match_policy is_low is_low_new then assert_invar lvs c
@@ -403,7 +406,7 @@ let rec assert_invar (lv: loopvar_t list) (c : config) : bool =
      if !Flags.debug then print_loopvar (List.hd lv);
      (* print_endline "globalvar"; *)
      let v = Sglobal.load (sglobal c.frame.inst x) in
-     let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
+     let mem = get_mem_tripple c.frame in 
      let is_low_new = Z3_solver.is_v_ct_unsat ~timeout:60 c.pc v mem in
      if !Flags.debug then print_endline (string_of_bool is_low_new);
      if match_policy is_low is_low_new then assert_invar lvs c
@@ -428,7 +431,7 @@ let rec assert_invar (lv: loopvar_t list) (c : config) : bool =
      in
      (* let mem = smemory c.frame.inst (0l @@ Source.no_region) in *)
 
-     let memtuple = (c.frame.inst.smemories, smemlen c.frame.inst) in
+     let memtuple = get_mem_tripple c.frame in 
      let is_low_new = Z3_solver.is_v_ct_unsat ~timeout:60 c.pc nv memtuple in
      if !Flags.debug then  print_endline (string_of_bool is_low_new);
 

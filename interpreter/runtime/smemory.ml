@@ -16,7 +16,7 @@ exception OutOfMemory
 
 module Smem = Map.Make(struct
                   type t = int
-                  let compare = compare
+                  let compare = (-)
                 end)
 
 type memory' = Si8.t Smem.t
@@ -90,7 +90,7 @@ let alloc2 min =
   
 let alloc (SmemoryType {min; max}) =
   assert (within_limits min max);
-  {content = create min; current = min; max; stores = []; secrets = []; nonsecrets = [] }
+  {content = create min; current = min; max; stores = []; secrets = []; nonsecrets = [];}
 
 let bound mem =
   failwith "bound: Not implemented"
@@ -273,7 +273,7 @@ let store_value mem a o v =
 
 (* Stores needs to be reversed *)
 let store_sind_value mem store = 
-  {mem with stores = store::mem.stores }
+  {mem with stores = store::mem.stores}
 
 let add_secret mem sec = 
   {mem with secrets = sec::mem.secrets }

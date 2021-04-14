@@ -50,6 +50,8 @@ type term =
   (* | Let of term * term *)
   | Let of int
 
+(* type term_ext = term * int *)
+             
 type mergetype = PLUS_INF | MINUS_INF | Integer of int64 | Term of term
 
 type solv_type = TGT | TGE | TLT | TLE | TNONE
@@ -73,7 +75,16 @@ let int_to_intterm i = Int i
 let int64_to_bvterm i n = BitVec (i,n)
 let float_to_term f = Float f
 
-  
+(* let sv_num = ref 0
+ * 
+ * let next_sv_num () =
+ *   sv_num := !sv_num + 1;
+ *   !sv_num
+ * 
+ * let init_sv_num () =
+ *   sv_num := 0 *)
+
+                    
 let rec is_high =
   function
   | Const (High _, _) -> true
@@ -84,7 +95,6 @@ let rec is_high =
 and is_high_all = function
   | h::hs -> is_high h || is_high_all hs
   | [] -> false
-
 
         
 let is_low l =

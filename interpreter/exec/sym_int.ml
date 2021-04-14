@@ -108,6 +108,7 @@ sig
   val merge_to_string : mergetype -> string
   val count_depth : term -> int -> bool
   val let_ : int -> term
+
 end
 
 module type S =
@@ -118,7 +119,7 @@ sig
   type stype
   (* val of_bits : bits -> t
    * val to_bits : t -> bits *)
-
+     
   val zero : t
   val one : t
    
@@ -195,8 +196,10 @@ sig
   val let_ : int -> t
 end
 
-module Make (Rep : SmtType) : S with type bits = Rep.term and type stype = Rep.solv_type and
-                                     type mtype = Rep.mergetype and type t = Rep.term  =
+module Make (Rep : SmtType) : S with type bits = Rep.term and
+                                     type stype = Rep.solv_type and
+                                     type mtype = Rep.mergetype and
+                                     type t = Rep.term  =
 struct
   (*
    * Unsigned comparison in terms of signed comparison.

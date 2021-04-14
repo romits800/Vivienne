@@ -10,45 +10,55 @@ open Config
    
 let path = ref (getenv "VIV_PATH")
 
+let gl_expr_counter = ref 0
+let si_expr_counter = ref 0
 
+  
 exception Timeout (*of string*)
    
 module ExprMem = Map.Make(struct
-                     type t = (Smemory.memory list * int)
-                     let compare = compare
+                     type t = int
+                     let compare = (-)
                    end)
 let memmap = ref ExprMem.empty
            
 module LetMap = Map.Make(struct
                     type t = int
-                    let compare = compare
+                    let compare = (-)
                   end)
 let letmap = ref LetMap.empty
 
 module DefMap = Map.Make(struct
                     type t = int
-                    let compare = compare
+                    let compare = (-)
                   end)
 let defmap = ref DefMap.empty
 
-type simap_t = PC of Pc_type.pc * (Smemory.memory list * int) |
-               SI of Smt_type.term * (Smemory.memory list * int)
+           
+type simap_t = PC of (int * int) |
+               SI of (int * int)
+
+let compare_simap v1 v2 =
+  match v1, v2 with 
+    PC (i1,m1), PC (i2,m2) when i1 = i2 -> m1 - m2
+  | PC (i1,m1), PC (i2,m2) -> i1 - i2
+  | SI (i1,m1), SI (i2,m2) when i1 = i2 -> m1 - m2
+  | SI (i1,m1), SI (i2,m2) -> i1 - i2
+  | PC (i1,m1), SI (i2,m2) -> -1
+  | SI (i1,m1), PC (i2,m2) -> 1
+
 module SiMap = Map.Make(struct
                     type t = simap_t
-                    let compare = compare
+                    let compare = compare_simap
                   end)
+                                                
 let simap = ref SiMap.empty
 
-let cfg = [("model", "true"); ("proof", "false")];;
+let cfg = [("model", "true"); ("proof", "false")]
 
 let ctx = ref (mk_context cfg);;
 
-Params.set_print_mode !ctx Z3enums.PRINT_SMTLIB2_COMPLIANT;;
-  (* memmap := ExprMem.empty;
-   * letmap := LetMap.empty;
-   * defmap := DefMap.empty;
-   * simap := SiMap.empty; *)
-
+Params.set_print_mode !ctx Z3enums.PRINT_SMTLIB2_COMPLIANT
           
 (* dissable tmp file removal *)
 let remove fil = if !Flags.no_clean then () else remove fil
@@ -163,12 +173,15 @@ let extend ctx size v' = function
      let size' = get_ext_size size v' in
      propagate_policy_one (BitVector.mk_sign_ext ctx  size') v'
 
-
+(* Todo(Romy): remove obj.magic. *)
 let simap_index v mem =
-  SI (v,mem)
+  let _, _, num = mem in 
+  SI (Obj.magic v, num) (*(Obj.magic v,num)*)
 
 let pcmap_index pc mem =
-  PC (pc,mem)
+  let _, _, num = mem in
+  let pcnum, _, _ = pc in 
+  PC (pcnum, num ) (*pcnum,num)*)
 (* let str = Printf.sprintf "%020d%020d" (Obj.magic v) (Obj.magic mem) in
    * str *)
 
@@ -262,10 +275,10 @@ and si_to_expr pc size ctx mem si: rel_type  =
              f
            with Not_found ->
              (*if !Flags.debug then (print_endline "not found load";);*)
-             let smem, memlen = mem in
+             let smem, memlen, num = mem in
              let arr =
                (try
-                  ExprMem.find mem !memmap
+                  ExprMem.find num !memmap
                 with Not_found ->
                   let bva = BitVector.mk_sort ctx 32 in
                   let bvd = BitVector.mk_sort ctx 8 in
@@ -276,7 +289,7 @@ and si_to_expr pc size ctx mem si: rel_type  =
                   let stores = Smemory.get_stores tmem in
                   let fmem = List.fold_left (update_mem pc ctx mem)
                                newmem (List.rev stores) in
-                  memmap := ExprMem.add mem fmem !memmap;
+                  memmap := ExprMem.add num fmem !memmap;
                   fmem
                )
              in
@@ -607,12 +620,16 @@ and sv_to_expr pc sv ctx mem =
 
 
 
-let rec pc_to_expr pc ctx mem: rel_type =
-  (*print_endline "pc_to_expr";
-  print_endline (print_pc (snd pc));  *)
-  let pclet, pc = pc in
+let rec pc_to_expr pcext ctx mem: rel_type =
+  (* print_endline "pc_to_expr"; *)
+  (* print_endline (print_pc (snd pcext)); *)
+  let pcnum, pclet, pc = pcext in
+  let index = pcmap_index pcext mem in
   try
-    let index = pcmap_index pc mem in
+
+    (* let _, _, num = mem in
+     * print_endline ("pcnum" ^ (string_of_int pcnum));
+     * print_endline ("memnum" ^ (string_of_int num)); *)
     (* if !Flags.debug then print_endline ("pcloc:" ^ index); *)
     let f = SiMap.find index !simap in
     (* if !Flags.debug then print_endline "found pc_to_expr"; *)
@@ -626,12 +643,20 @@ let rec pc_to_expr pc ctx mem: rel_type =
     | PCFalse -> L (Boolean.mk_false ctx)
     | PCExpr e -> e
     | PCAnd (sv, pc') ->
-       let ex1 = sv_to_expr (pclet, pc) sv ctx mem in
-       let ex2 = pc_to_expr (pclet, pc') ctx mem in
+       let ex1 = sv_to_expr (pcnum, pclet,pc) sv ctx mem in
+       let ex2 = pc_to_expr pc' ctx mem in
        let pcexp = propagate_list (Boolean.mk_and ctx) [ex1; ex2] in
        let simp = propagate_policy_one (fun x -> Expr.simplify x None) pcexp in
-       simap := SiMap.add (pcmap_index pc mem) simp !simap ; 
+       simap := SiMap.add index simp !simap ; 
        simp
+    | PCOr (pc', pc'') ->
+       let ex1 = pc_to_expr pc' ctx mem in
+       let ex2 = pc_to_expr pc'' ctx mem in
+       let pcexp = propagate_list (Boolean.mk_or ctx) [ex1; ex2] in
+       let simp = propagate_policy_one (fun x -> Expr.simplify x None) pcexp in
+       simap := SiMap.add index simp !simap ; 
+       simp
+
   )
 
 let create_mem ctx size =
@@ -646,6 +671,7 @@ let clean_solver () =
   defmap := DefMap.empty;
   simap := SiMap.empty
 
+  
   
 let init_solver () =
   memmap := ExprMem.empty;
@@ -994,7 +1020,7 @@ let write_formula_to_file solver =
   filename
 
 let find_solutions (sv: svalue) (pc : pc_ext)
-      (mem: Smemory.t list * int) : int list =
+      (mem: Smemory.t list * int * int) : int list =
   (* print_endline "find_solutions"; *)
   (* svalue_to_string sv |> print_endline; *)
   let ctx = init_solver() in
@@ -1007,7 +1033,7 @@ let find_solutions (sv: svalue) (pc : pc_ext)
   let v' = BitVector.mk_const_s ctx "sv" size in
   (* print_endline "after mk_Const"; *)
   let rec find_solutions_i (sv: svalue) (pc : pc_ext)
-            (mem: Smemory.t list * int) (acc: int64 list) : int64 list =
+            (mem: Smemory.t list * int * int) (acc: int64 list) : int64 list =
     (* print_endline "find_solutions_i"; *)
     let vrec = 
       (match v with
@@ -1051,7 +1077,7 @@ let find_solutions (sv: svalue) (pc : pc_ext)
 
                             
 let simplify (sv: svalue) (pc : pc_ext)
-      (mem: Smemory.t list * int) : bool * simpl =
+      (mem: Smemory.t list * int * int) : bool * simpl =
   if !Flags.debug then
         print_endline "Simplifying";
   (* print_endline "simplify"; *)
@@ -1119,22 +1145,22 @@ let simplify (sv: svalue) (pc : pc_ext)
 
 
 let simplify_pc (pc : pc_ext)
-      (mem: Smemory.t list * int) : bool * pc_ext =
+      (mem: Smemory.t list * int * int) : bool * pc_ext =
   let ctx = init_solver() in
   let pc_exp = pc_to_expr pc ctx mem in
   let params = Params.mk_params ctx in
-  let pclet, _ = pc in
+  let pcnum,pclet, _ = pc in
   (* Params.add_int params (Symbol.mk_string ctx "max_steps") 10000000; *)
   (* print_endline (Params.to_string params); *)
   try
     match pc_exp with
     | L pce ->
        let simp = Expr.simplify pce (Some params) in
-       (true, (pclet, PCExpr (L simp)))
+       (true, (pcnum, pclet, PCExpr (L simp)))
     | H (v1,v2) ->
        let simp1 = Expr.simplify v1 (Some params) in
        let simp2 = Expr.simplify v2 (Some params) in
-       (true, (pclet, PCExpr (H (simp1, simp2))))
+       (true, (pcnum, pclet, PCExpr (H (simp1, simp2))))
   with _ -> (false, pc)
 
           
@@ -1177,7 +1203,7 @@ let is_unsat (pc : pc_ext) (mem: Smemory.t list * int) =
     )
  *)
   
-let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) =
+let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int * int) =
   (* print_endline "is_ct_unsat"; *)
   (* Pc_type.print_pc (snd pc) |> print_endline; *)
   (* svalue_to_string sv |> print_endline; *)
@@ -1265,7 +1291,8 @@ let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) =
        )
      )
      
-let is_v_ct_unsat ?timeout:(timeout=30) (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : bool =
+let is_v_ct_unsat ?timeout:(timeout=30) (pc : pc_ext) (sv : svalue)
+      (mem: Smemory.t list * int * int) : bool =
    if !Flags.debug then 
       print_endline "Checking if value is CT..";
  
@@ -1278,8 +1305,9 @@ let is_v_ct_unsat ?timeout:(timeout=30) (pc : pc_ext) (sv : svalue) (mem: Smemor
   let g = Goal.mk_goal ctx true false false in
   (* print_endline "is_v_ct_unsat before sv"; *)
   let v = sv_to_expr pc sv ctx mem in
-  (* print_endline "is_v_ct_unsat after  sv"; *)
-  (* print_exp v; *)
+  (* print_endline "is_v_ct_unsat after  sv";
+   * print_exp v; *)
+
   match v with
   | L v -> true
   | H (v1, v2) when Expr.equal v1 v2 -> true
@@ -1398,16 +1426,15 @@ let is_v_ct_unsat ?timeout:(timeout=30) (pc : pc_ext) (sv : svalue) (mem: Smemor
       
 
 
-let is_sat (pc : pc_ext) (mem: Smemory.t list * int) : bool =
+let is_sat (pc : pc_ext) (mem: Smemory.t list * int * int) : bool =
    if !Flags.debug then 
       print_endline "Checking satisfiability..";
  
   (* check only satisfiability *)
   (* print_endline "is_sat"; *)
   let ctx = init_solver() in
-
   let v = pc_to_expr pc ctx mem in
-
+  (* print_exp v; *)
   (* (match pc with
    * | (pclet, PCAnd (v',pc)) ->
    *    let sv = sv_to_expr (pclet,pc) v' ctx mem in
@@ -1519,7 +1546,7 @@ let min = Optimize.minimize
 
 
 let optimize (f : Z3.Optimize.optimize -> Z3.Expr.expr -> Z3.Optimize.handle)
-      (pc : pc_ext) (mem: Smemory.t list * int) (sv : svalue)  =
+      (pc : pc_ext) (mem: Smemory.t list * int * int) (sv : svalue)  =
   (* print_endline "optimize"; *)
   (* svalue_to_string sv |> print_endline; *)
   (* let cfg = [("model", "true"); ("proof", "false")] in
@@ -1597,7 +1624,7 @@ let optimize (f : Z3.Optimize.optimize -> Z3.Expr.expr -> Z3.Optimize.handle)
 
 
 
-let get_num_exprs (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : int =
+let get_num_exprs (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int * int) : int =
    if !Flags.debug then 
       print_endline "Getting number of expressions..";
  
@@ -1626,7 +1653,7 @@ let get_num_exprs (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int) : int 
       num_exprs
 
 
-let get_num_exprs_pc (pc : pc_ext) (mem: Smemory.t list * int) : int =
+let get_num_exprs_pc (pc : pc_ext) (mem: Smemory.t list * int * int) : int =
    if !Flags.debug then 
       print_endline "Getting number of expressions..";
  

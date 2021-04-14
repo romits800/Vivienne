@@ -20,9 +20,9 @@ open Source
 
 let lowbound_ind_var v c =
   let open Pc_type in
-  let pclet, pc = c.pc in
-  let pc' = PCAnd (SI32 (Si32.ge_s v Si32.zero), pc) in
-  { c with pc = pclet,pc' }
+  let pcnum, pclet, pc = c.pc in
+  let pc' = PCAnd (SI32 (Si32.ge_s v Si32.zero), c.pc) in
+  { c with pc = pcnum, pclet,pc' }
                   
 
             
@@ -661,7 +661,7 @@ let get_iv_triple vold_orig vold vnew ivs loc =
 let rec fiv_step (lv : triple IndVarMap.t) (c : config) (c_orig : config) :
           (triple IndVarMap.t) * config list * config =
   (* print_endline "find_induction_vars"; *)
-  let {frame; code = vs, es; pc = pclet, pc; _} = c in
+  let {frame; code = vs, es; pc = pcnum, pclet, pc; _} = c in
   (* let s1 = Svalues.string_of_values (List.rev vs) in *)
   (* print_endline s1; *)
   let e = List.hd es in
@@ -686,7 +686,7 @@ let rec fiv_step (lv : triple IndVarMap.t) (c : config) (c_orig : config) :
           let n2 = Lib.List32.length ts2 in
           let args, vs' = take n1 vs e.at, drop n1 vs e.at in
           let vs', es' = vs', [Label (n2, [], (args, List.map plain es'),
-                                      (pclet,pc),
+                                      (pcnum,pclet,pc),
                                       c.induction_vars,
                                       c.ct_check) @@ e.at] in
           lv, [{c with code = vs', es' @ List.tl es}], c_orig
@@ -697,7 +697,7 @@ let rec fiv_step (lv : triple IndVarMap.t) (c : config) (c_orig : config) :
           let args, vs' = take n1 vs e.at, drop n1 vs e.at in
           let vs', es' = vs', [Label (n1, [],
                                       (args, List.map plain es'),
-                                      (pclet,pc),
+                                      (pcnum, pclet,pc),
                                       c.induction_vars,
                                       c.ct_check) @@ e.at] in
           lv, [{c with code = vs', es' @ List.tl es}], c_orig
@@ -707,22 +707,28 @@ let rec fiv_step (lv : triple IndVarMap.t) (c : config) (c_orig : config) :
             print_endline "if fiv";
             print_endline (string_of_region e.at));
 
-          let pc', pc'' = split_condition v pc in
+          let pc', pc'' = split_condition v (pcnum, pclet, pc) in
           let vs'', es'' = vs', [Plain (Block (bt, es1)) @@ e.at] in (* True *)
           let vs', es' = vs', [Plain (Block (bt, es2)) @@ e.at] in (* False *)
           (* Don't check sat *)
-          let mem = (frame.inst.smemories, smemlen frame.inst) in 
+          let mem = get_mem_tripple frame in 
           
-          let c1 = if Z3_solver.is_sat (pclet, pc') mem then
-                         [{c with code = vs', es' @ est; pc = (pclet,pc')}]
-                       else [] in
+          let c1 =
+            let pcnum' = Pc_type.next_pc_num() in
+            if Z3_solver.is_sat (pcnum', pclet, pc') mem then
+              [{c with code = vs', es' @ est; pc = (pcnum', pclet,pc')}]
+            else []
+          in
           if (!Flags.debug) then (
             print_endline "if fiv2";
             print_endline (string_of_region e.at));
           
-          let c2 = if Z3_solver.is_sat (pclet, pc'') mem then
-                     [{c with code = vs'', es'' @ est; pc = (pclet,pc'')}]
-                       else [] in
+          let c2 =
+            let pcnum'' = Pc_type.next_pc_num() in
+            if Z3_solver.is_sat (pcnum'', pclet, pc'') mem then
+              [{c with code = vs'', es'' @ est; pc = (pcnum'', pclet,pc'')}]
+            else [] in
+
           if (!Flags.debug) then (
             print_endline "if fiv3";
             print_endline (string_of_region e.at));
@@ -744,18 +750,22 @@ let rec fiv_step (lv : triple IndVarMap.t) (c : config) (c_orig : config) :
             print_endline "brif fiv";
             print_endline (string_of_region e.at));
 
-          let pc', pc'' = split_condition v pc in
+          let pc', pc'' = split_condition v (pcnum, pclet, pc) in
           let vs'', es'' = vs', [Plain (Br x) @@ e.at] in
           let vs', es' = vs', [] in
 
-          let mem = (frame.inst.smemories, smemlen frame.inst) in 
-          let c1 = if Z3_solver.is_sat (pclet, pc') mem then
-                     [{c with code = vs', es' @ est; pc = (pclet,pc')}]
-                   else []
+          let mem = get_mem_tripple frame in 
+          let c1 =
+            let pcnum' = Pc_type.next_pc_num() in
+            if Z3_solver.is_sat (pcnum', pclet, pc') mem then
+              [{c with code = vs', es' @ est; pc = (pcnum', pclet,pc')}]
+            else []
           in
-          let c2 = if Z3_solver.is_sat (pclet, pc'') mem then
-                     [{c with code = vs'', es'' @ est; pc = (pclet,pc'')}]
-                   else []
+          let c2 =
+            let pcnum'' = Pc_type.next_pc_num() in
+            if Z3_solver.is_sat (pcnum'', pclet, pc'') mem then
+              [{c with code = vs'', es'' @ est; pc = (pcnum'', pclet,pc'')}]
+            else []
           in
           lv, c1 @ c2, c_orig
 
@@ -1281,7 +1291,7 @@ let induction_vars_to_string ivs : string =
 
 let get_maximum_loop_size iv c =
   let _, v, _, _ = iv in
-  let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in
+  let mem = get_mem_tripple c.frame in 
   (* let maxl = Z3_solver.is_v_ct_unsat (pclet, pc) v mem in *)
   let maxl = Z3_solver.optimize Z3_solver.max c.pc mem v in
   (* (match maxl with

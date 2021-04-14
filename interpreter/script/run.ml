@@ -340,6 +340,8 @@ let run_action act : Values.value list =
     trace ("Symbolically executing function \"" ^ Ast.string_of_name name ^ "\"...");
     let inst = lookup_instance x_opt act.at in
     Z3_solver.clean_solver();
+    Instance.init_num();
+    Pc_type.init_pc_num();
     if (!Flags.stats) then
       Stats.init_stats();
     (match Instance.export inst name with
