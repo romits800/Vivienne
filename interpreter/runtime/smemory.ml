@@ -13,6 +13,15 @@ exception SizeOverflow
 exception SizeLimit
 exception OutOfMemory
 
+        
+(* module StoresMap = Map.Make(struct
+ *                        type t = int
+ *                        let compare = (-)
+ *                      end)
+ * 
+ * type stores_map_t = int StoresMap.t
+ * let stores_map = ref StoresMap.empty *)
+            
 
 module Smem = Map.Make(struct
                   type t = int
@@ -246,18 +255,6 @@ let storen mem a o n x =
 
 let load_value mem a o t =
   failwith "not implemented"
-  (* let mem,buf = loadn mem a o (Types.ssize t) in
-   * (\* let id = if is_high buf then Smt_type.get_high () else Smt_type.get_low() in
-   *  * (\\* update for parts *\\)
-   *  * let buf = Smt_type.Multi(buf, id, List.length buf) in *\)
-   * (\* let res = 
-   *  *   match t with
-   *  *   | SI32Type -> SI32 (Si32.of_list buf)
-   *  *   | SI64Type -> SI64 (Si64.of_list buf)
-   *  *   | SF32Type 
-   *  *     | SF64Type -> failwith "Float: Not implemented."
-   *  * in (mem, res) *\)
-   * mem,buf *)
   
 let store_value mem a o v =
     match v with
@@ -270,9 +267,12 @@ let store_value mem a o v =
     | _ -> failwith "Floats not implemented."
   (* | SF32 x -> Int64.of_int32 (F32.to_bits x)
      * | SF64 x -> F64.to_bits x *)
+(* let remove_old_stores stores store = *)
 
+         
 (* Stores needs to be reversed *)
 let store_sind_value mem store = 
+  (* let newstores = remove_old_stores mem.stores store in *)
   {mem with stores = store::mem.stores}
 
 let add_secret mem sec = 

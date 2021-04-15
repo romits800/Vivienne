@@ -83,7 +83,6 @@ let float_to_term f = Float f
  * 
  * let init_sv_num () =
  *   sv_num := 0 *)
-
                     
 let rec is_high =
   function

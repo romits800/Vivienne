@@ -1452,6 +1452,13 @@ let merge_globals c1 c2 =
 
 
 let merge_memories c1 c2 =
+  (* let rec reduce_stores st1 acc =
+   *   match st1 with
+   *   | [] -> acc
+   *   | (SI32 (Smt_type.Store (ad, v, i, sz)) as sth)::st -> reduce_stores st (sth::acc) 
+   *   | (SI64 (Smt_type.Store (ad, v, i, sz)) as sth)::st -> reduce_stores st (sth::acc)
+   *   | _ -> failwith "Should not happen: wrong type of store."
+   * in *)
   let rec merge_stores st1 st2 acc =
     match st1, st2 with
     | s1::st1, s2::st2 when s1 = s2 -> merge_stores st1 st2 (s1::acc)
@@ -1512,9 +1519,11 @@ let merge_memories c1 c2 =
   let rec merge_mems m1s m2s acc =
     match m1s, m2s with
     | [], [] -> acc
-    | m1::m1s', m2::m2s' -> 
+    | m1::m1s', m2::m2s' ->
        let st1 = List.rev (Smemory.get_stores m1) in
        let st2 = List.rev (Smemory.get_stores m2) in
+       (* let st1 = List.rev st1 in
+        * let st2 = List.rev st2 in *)
        let newstores = merge_stores st1 st2 [] in
        let newm = Smemory.replace_stores m1 newstores in
        merge_mems m1s' m2s' (newm::acc)
