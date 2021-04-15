@@ -11,7 +11,7 @@ open Find_vars
 open Find_induction_vars
 open Elim_induction_vars
 open Config
-   
+open Loop_stats   
 
 
 let simplify_v frame (pc: pc_ext) v =
@@ -187,7 +187,18 @@ let rec step (c : config) : config list =
              print_endline (string_of_region e.at);
              print_endline ("Number of local variables: " ^ (string_of_int (List.length frame.locals)));
              print_endline ("Loop number of instructions: " ^ (string_of_int (List.length es')));
-            );
+           );
+           
+           (match loop_stats es' e.at with
+              Some stats ->
+               print_endline (string_of_region e.at);
+               print_endline ("Number of local variables: " ^ (string_of_int (stats.number_modified)));
+               print_endline ("Possible loop iterations: " ^ (string_of_int (stats.possible_loop_iterations)));
+               print_endline ("Number instructions: " ^ (string_of_int (stats.number_instructions)));
+               print_endline ("Number instructions: " ^ (string_of_int (stats.number_calls)));
+            | None -> ());
+
+           
            (* print_endline ("loop: " ^ (Source.string_of_region e.at)); *)
            if !Flags.estimate_loop_size then (         
              try (
