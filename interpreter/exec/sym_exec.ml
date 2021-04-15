@@ -127,7 +127,7 @@ let rec step (c : config) : config list =
            );
 
            let v = 
-           if (num_exprs > magic_number_num_exprs_max) || not (Z3_solver.is_v_ct_unsat ~timeout:30 (pcnum, pclet, pc) v mem) 
+           if (num_exprs > magic_number_num_exprs_max) || not (Z3_solver.is_v_ct_unsat ~timeout:60 (pcnum, pclet, pc) v mem) 
            then (
              match v with
              | SI32 v -> (SI32 (Si32.of_high()))
@@ -185,7 +185,8 @@ let rec step (c : config) : config list =
            if !Flags.debug then (
              print_endline "Entering loop..";
              print_endline (string_of_region e.at);
-             print_endline ("Number of local variables:" ^ (string_of_int (List.length frame.locals)));
+             print_endline ("Number of local variables: " ^ (string_of_int (List.length frame.locals)));
+             print_endline ("Loop number of instructions: " ^ (string_of_int (List.length es')));
             );
            (* print_endline ("loop: " ^ (Source.string_of_region e.at)); *)
            if !Flags.estimate_loop_size then (         
@@ -519,7 +520,7 @@ let rec step (c : config) : config list =
 
            (* Check Constant-time violation *)
            let mem = get_mem_tripple frame in
-           if (Z3_solver.is_v_ct_unsat (pcnum, pclet, pc) (SI32 i) mem) then ()
+           if (Z3_solver.is_v_ct_unsat ~timeout:60  (pcnum, pclet, pc) (SI32 i) mem) then ()
            else ConstantTime.warn e.at "CallIndirect: Constant-time Violation";
 
            (* print_endline "before find_solutions"; *)
@@ -735,7 +736,7 @@ let rec step (c : config) : config list =
                  try
                    VulnerabilitiesMap.find index !memindex_vuln, true 
                  with Not_found ->
-                       let solv = Z3_solver.is_v_ct_unsat (pcnum, pclet, pc) final_addr mem in
+                       let solv = Z3_solver.is_v_ct_unsat ~timeout:60 (pcnum, pclet, pc) final_addr mem in
                        if not solv then (
                          memindex_vuln := VulnerabilitiesMap.add index solv !memindex_vuln
                        );
@@ -821,7 +822,7 @@ let rec step (c : config) : config list =
                  try
                    VulnerabilitiesMap.find index !memindex_vuln, true 
                  with Not_found ->
-                       let solv = Z3_solver.is_v_ct_unsat (pcnum, pclet, pc) final_addr mems in
+                       let solv = Z3_solver.is_v_ct_unsat ~timeout:60 (pcnum, pclet, pc) final_addr mems in
                        if not solv then ( 
                          memindex_vuln := VulnerabilitiesMap.add index solv !memindex_vuln;
                        );
@@ -884,7 +885,7 @@ let rec step (c : config) : config list =
                    let index =  (Obj.magic e') in
                    try VulnerabilitiesMap.find index !noninter_vuln, true 
                    with Not_found ->
-                         let solv = Z3_solver.is_v_ct_unsat (pcnum'', pclet, pc'') sv mems in
+                         let solv = Z3_solver.is_v_ct_unsat ~timeout:60 (pcnum'', pclet, pc'') sv mems in
                          if not solv then  
                            noninter_vuln := VulnerabilitiesMap.add index solv !noninter_vuln;
                          solv, false)
