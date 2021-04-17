@@ -72,7 +72,174 @@ let noninter_vuln = ref VulnerabilitiesMap.empty
 let memindex_vuln = ref VulnerabilitiesMap.empty 
 
                    
-  
+
+
+let estimate_loop_size e' bt frame e vs pcext es' c es = 
+  let pcnum, pclet, pc = pcext in
+  try (
+    (* print_endline (string_of_int (Obj.magic e')); *)
+    let maxl = find_maxloop (Obj.magic e') in
+    if maxl < magic_number_loop_inv then (
+      let FuncType (ts1, ts2) = block_type frame.inst bt in
+      let n1 = Lib.List32.length ts1 in
+      let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+      let vs', es' = vs', [Label (n1, [Plain e' @@ e.at],
+                                  (args, List.map plain es'), pcext,
+                                  c.induction_vars, c.ct_check) @@ e.at] in
+      [{c with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
+    ) else (
+      failwith ("Not expected to be greater than " ^ (string_of_int maxl)); 
+    )
+  )
+  with Not_found -> (
+    let FuncType (ts1, ts2) = block_type frame.inst bt in
+    let n1 = Lib.List32.length ts1 in
+    let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+
+    (* HAVOC *)
+    let lvs =
+      let index = (Obj.magic e') in
+      try (
+        let lvs = ModifiedVarsMap.find index !modified_vars in
+        (* check if we have different initial policy *)
+        find_policy lvs c
+      ) with Not_found -> (
+        let vs'', es'' = vs', [Label (n1, [Plain e' @@ e.at],
+                                      (args, List.map plain es'), (pcnum, pclet,pc),
+                                      c.induction_vars, c.ct_check) @@ e.at] in
+        (*let lvs, _ = find_modified_vars (Obj.magic e')*)
+        let lvs = fv_eval (Obj.magic e')
+                    {c with code = vs'', es''} in (* @ List.tl es;} in*)
+        let lvs = merge_vars lvs in
+        modified_vars := ModifiedVarsMap.add index lvs !modified_vars;
+        lvs
+      )
+    in
+    
+    if !Flags.debug then (
+      print_endline "printing loopvars.";
+      List.iter print_loopvar lvs
+    );
+    let havc = havoc_vars lvs c in
+
+    (* FIND INDUCTION VARIABLES *)
+    let vs'', es'' = vs', [Label (n1, [],
+                                  (args, List.map plain es'), (pcnum, pclet,pc),
+                                  c.induction_vars, c.ct_check) @@ e.at] in
+    let nhavc = {havc with code = vs'', es'' @ List.tl es;} in
+    let nc = {c with code = vs'', es'' @ List.tl es;} in
+    let iv, havc' = induction_vars nhavc nc lvs in
+
+
+    (* RUN ONE PASS TO REPLACE THE INDUCTION VARIABLES *)
+    (* print_endline "NonCheckPass Putting checkpass in the queue"; *)
+    let nc_pass = NonCheckPass (n1, [Plain e' @@ e.at],
+                                (args, List.map plain es'), iv, lvs, c) in
+    let vs', es' = vs', [Label (n1, [nc_pass @@ e.at],
+                                (args, List.map plain es'),
+                                havc'.pc,
+                                havc'.induction_vars, false) @@ e.at ] in
+    [{havc' with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
+
+  )
+
+
+                  
+(*   assertX;
+     havocv1; ... ;havocvn;
+     assume X;
+     if(c) {
+       B;
+       assertX;
+       assume false;
+     } *)
+
+
+
+let loop_invariant e' bt frame e vs es es' pcext c =
+  let FuncType (ts1, ts2) = block_type frame.inst bt in
+  let n1 = Lib.List32.length ts1 in
+  let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+
+  if !Flags.unroll_one then (
+    
+    let second_pass = SecondPass (n1, [Plain e' @@ e.at],
+                                  (args, List.map plain es')) in
+
+    let vs'', es'' = vs', [Label (n1, [second_pass @@ e.at],
+                                  (args, List.map plain es'), pcext,
+                                  c.induction_vars, c.ct_check) @@ e.at] in
+
+    [{c with code = vs'', es'' @ List.tl es; progc = Obj.magic e'}]
+
+  ) else (
+    
+    let vs'', es'' = vs', [Label (n1, [Plain e' @@ e.at],
+                                  (args, List.map plain es'), pcext,
+                                  c.induction_vars, c.ct_check) @@ e.at] in
+
+    if !Flags.debug then 
+      print_endline "Finding variables modified in loop..";
+
+    (* print_endline "Finding vars"; *)
+    let lvs, analyzed =
+      let index = (Obj.magic e') in
+      try (
+        let lvs = ModifiedVarsMap.find index !modified_vars in
+        (* check if we have different initial policy *)
+        let lvs' = find_policy lvs c in
+        lvs, compare_policies lvs lvs'
+        
+      ) with Not_found -> (
+        (*let lvs, _ = find_modified_vars (Obj.magic e')*)
+        let lvs = fv_eval (Obj.magic e')
+                    {c with code = vs'', es''} in (* @ List.tl es;} in*)
+
+        if !Flags.debug then (
+           print_endline ("Printing loopvars 1." ^ (string_of_int (Obj.magic e')));
+           List.iter print_loopvar lvs
+       );
+
+        let lvs = merge_vars lvs in
+        modified_vars := ModifiedVarsMap.add index lvs !modified_vars;
+        lvs, false
+      )
+    in
+    if !Flags.debug then (
+      print_endline ("Printing loopvars." ^ (string_of_int (Obj.magic e')));
+      List.iter print_loopvar lvs
+    );
+
+    (* HAVOC *)
+    let havc = havoc_vars lvs c in
+    
+    if !Flags.elim_induction_variables then (
+      let vs'', es'' = vs', [Label (n1, [], (*Plain e' @@ e.at],*)
+                                    (args, List.map plain es'), 
+                                    pcext,
+                                    c.induction_vars, c.ct_check) @@ e.at] in
+      let nhavc = {havc with code = vs'', es'' (*@ List.tl es;*)} in
+      let nc = {c with code = vs'', es'' @ List.tl es;} in
+      let iv, havc' = induction_vars nhavc nc lvs in
+
+      let nc_pass = NonCheckPass (n1, [Plain e' @@ e.at],
+                                  (args, List.map plain es'), iv, lvs, c) in
+      let vs', es' = vs', [Label (n1, [nc_pass @@ e.at],
+                                  (args, List.map plain es'),
+                                  havc'.pc,
+                                  havc'.induction_vars, false) @@ e.at ] in
+      [{havc' with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
+    ) else (                     
+      let assrt = Assert (lvs, e', analyzed) in
+      let vs', es' = vs', [Label (n1, [assrt @@ e.at],
+                                  (args, List.map plain es'),
+                                  pcext,
+                                  havc.induction_vars, true) @@ e.at ] in
+      [{havc with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
+
+    ) (* No elim induction vars *)
+  ) (* No unroll *)
+
 
 
 (* Symbolic Execution *)
@@ -191,196 +358,39 @@ let rec step (c : config) : config list =
            
            (match loop_stats es' e.at with
               Some stats ->
-               print_endline (string_of_region e.at);
-               print_endline ("Number of local variables: " ^ (string_of_int (stats.number_modified)));
-               print_endline ("Possible loop iterations: " ^ (string_of_int (stats.possible_loop_iterations)));
-               print_endline ("Number instructions: " ^ (string_of_int (stats.number_instructions)));
-               print_endline ("Number instructions: " ^ (string_of_int (stats.number_calls)));
-            | None -> ());
+               if !Flags.stats then (
+                 print_endline (string_of_region e.at);
+                 print_endline ("Number of local variables: " ^ (string_of_int (stats.number_modified)));
+                 print_endline ("Possible loop iterations: " ^ (string_of_int (stats.possible_loop_iterations)));
+                 print_endline ("Number instructions: " ^ (string_of_int (stats.number_instructions)));
+                 print_endline ("Number calls: " ^ (string_of_int (stats.number_calls)));
+                 print_endline ("Number ifs: " ^ (string_of_int (stats.number_ifs)));
+               );
 
-           
-           (* print_endline ("loop: " ^ (Source.string_of_region e.at)); *)
-           if !Flags.estimate_loop_size then (         
-             try (
-               (* print_endline (string_of_int (Obj.magic e')); *)
-               let maxl = find_maxloop (Obj.magic e') in
-               if maxl < magic_number_loop_inv then (
+               let pcext = pcnum, pclet, pc in
+               if !Flags.estimate_loop_size then (
+                 estimate_loop_size e' bt frame e vs pcext es' c es 
+               )
+               else if !Flags.loop_invar && select_invar stats then 
+                 loop_invariant e' bt frame e vs es es' pcext c
+               else ( (* Not using loop invariants *)
                  let FuncType (ts1, ts2) = block_type frame.inst bt in
                  let n1 = Lib.List32.length ts1 in
                  let args, vs' = take n1 vs e.at, drop n1 vs e.at in
                  let vs', es' = vs', [Label (n1, [Plain e' @@ e.at],
-                                             (args, List.map plain es'), (pcnum, pclet,pc),
+                                             (args, List.map plain es'),
+                                             (pcnum, pclet,pc),
                                              c.induction_vars, c.ct_check) @@ e.at] in
                  [{c with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
-               ) else (
-                 failwith ("Not expected to be greater than " ^ (string_of_int maxl)); 
-               )
-             )
-             with Not_found -> (
+                 )
+            | None -> (* No stats *)
                let FuncType (ts1, ts2) = block_type frame.inst bt in
                let n1 = Lib.List32.length ts1 in
                let args, vs' = take n1 vs e.at, drop n1 vs e.at in
-
-               (* HAVOC *)
-               let lvs =
-                 let index = (Obj.magic e') in
-                 try (
-                   let lvs = ModifiedVarsMap.find index !modified_vars in
-                   (* check if we have different initial policy *)
-                   find_policy lvs c
-                 ) with Not_found -> (
-                   let vs'', es'' = vs', [Label (n1, [Plain e' @@ e.at],
-                                                 (args, List.map plain es'), (pcnum, pclet,pc),
-                                                 c.induction_vars, c.ct_check) @@ e.at] in
-                   (*let lvs, _ = find_modified_vars (Obj.magic e')*)
-                   let lvs = fv_eval (Obj.magic e')
-                                  {c with code = vs'', es''} in (* @ List.tl es;} in*)
-                   let lvs = merge_vars lvs in
-                   modified_vars := ModifiedVarsMap.add index lvs !modified_vars;
-                   lvs
-                 )
-               in
-               
-               if !Flags.debug then (
-                print_endline "printing loopvars.";
-                List.iter print_loopvar lvs
-               );
-               let havc = havoc_vars lvs c in
-
-               (* FIND INDUCTION VARIABLES *)
-               let vs'', es'' = vs', [Label (n1, [],
-                                             (args, List.map plain es'), (pcnum, pclet,pc),
-                                             c.induction_vars, c.ct_check) @@ e.at] in
-               let nhavc = {havc with code = vs'', es'' @ List.tl es;} in
-               let nc = {c with code = vs'', es'' @ List.tl es;} in
-               let iv, havc' = induction_vars nhavc nc lvs in
-
-
-               (* RUN ONE PASS TO REPLACE THE INDUCTION VARIABLES *)
-               (* print_endline "NonCheckPass Putting checkpass in the queue"; *)
-               let nc_pass = NonCheckPass (n1, [Plain e' @@ e.at],
-                                           (args, List.map plain es'), iv, lvs, c) in
-               let vs', es' = vs', [Label (n1, [nc_pass @@ e.at],
-                                           (args, List.map plain es'),
-                                           havc'.pc,
-                                           havc'.induction_vars, false) @@ e.at ] in
-               [{havc' with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
-
-             )
-           ) else (
-             if !Flags.loop_invar then 
-               (
-                 let FuncType (ts1, ts2) = block_type frame.inst bt in
-                 let n1 = Lib.List32.length ts1 in
-                 let args, vs' = take n1 vs e.at, drop n1 vs e.at in
-
-                 if !Flags.unroll_one then (
-                   
-                   let second_pass = SecondPass (n1, [Plain e' @@ e.at],
-                                                 (args, List.map plain es')) in
-
-                   let vs'', es'' = vs', [Label (n1, [second_pass @@ e.at],
-                                                 (args, List.map plain es'), (pcnum, pclet,pc),
-                                                 c.induction_vars, c.ct_check) @@ e.at] in
-
-                   [{c with code = vs'', es'' @ List.tl es; progc = Obj.magic e'}]
-
-                 ) else (
-                 
-                   let vs'', es'' = vs', [Label (n1, [], (*Plain e' @@ e.at],*)
-                                                 (args, List.map plain es'), (pcnum, pclet,pc),
-                                                 c.induction_vars, c.ct_check) @@ e.at] in
-
-                   if !Flags.debug then 
-                     print_endline "Finding variables modified in loop..";
-
-                   (* print_endline "Finding vars"; *)
-                   let lvs, analyzed =
-                     let index = (Obj.magic e') in
-                     try (
-                       let lvs = ModifiedVarsMap.find index !modified_vars in
-                       (* check if we have different initial policy *)
-                       let lvs' = find_policy lvs c in
-                       lvs, compare_policies lvs lvs'
-                       
-                     ) with Not_found -> (
-                       (*let lvs, _ = find_modified_vars (Obj.magic e')*)
-                       let lvs = fv_eval (Obj.magic e')
-                                      {c with code = vs'', es''} in (* @ List.tl es;} in*)
-                       let lvs = merge_vars lvs in
-                       modified_vars := ModifiedVarsMap.add index lvs !modified_vars;
-                       lvs, false
-                     )
-                   in
-                   if !Flags.debug then (
-                       print_endline ("Printing loopvars." ^ (string_of_int (Obj.magic e')));
-                       List.iter print_loopvar lvs
-                   );
-
-                   (* HAVOC *)
-                   let havc = havoc_vars lvs c in
-                   
-                   if !Flags.elim_induction_variables then (
-                     let vs'', es'' = vs', [Label (n1, [], (*Plain e' @@ e.at],*)
-                                                   (args, List.map plain es'), 
-                                                   (pcnum, pclet,pc),
-                                                   c.induction_vars, c.ct_check) @@ e.at] in
-                     let nhavc = {havc with code = vs'', es'' (*@ List.tl es;*)} in
-                     let nc = {c with code = vs'', es'' @ List.tl es;} in
-                     let iv, havc' = induction_vars nhavc nc lvs in
-
-                     (* print_endline "Printing induction vars.";
-                      * print_endline (triple_to_string iv);
-                      * ( match havc'.induction_vars with
-                      *   | None -> ()
-                      *   | Some ivs ->
-                      *      IndVarMap.iter (fun (k,loc) iv ->
-                      *          print_endline
-                      *            (svalue_to_string k ^ " " ^ string_of_region loc ^ " " ^ triple_to_string iv)) ivs
-                      * );
-                      * print_endline "Done printing."; *)
-
-                     (* let assrt = Assert (lvs, e') in *)
-                     (* print_endline "Starting the noncheck pass..";
-                      * print_endline (string_of_region e.at); *)
-
-                     let nc_pass = NonCheckPass (n1, [Plain e' @@ e.at],
-                                                 (args, List.map plain es'), iv, lvs, c) in
-                     let vs', es' = vs', [Label (n1, [nc_pass @@ e.at],
-                                                 (args, List.map plain es'),
-                                                 havc'.pc,
-                                                 havc'.induction_vars, false) @@ e.at ] in
-                     [{havc' with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
-                   ) else (                     
-                     let assrt = Assert (lvs, e', analyzed) in
-                     let vs', es' = vs', [Label (n1, [assrt @@ e.at],
-                                                 (args, List.map plain es'),
-                                                 (pcnum, pclet, pc),
-                                                 havc.induction_vars, true) @@ e.at ] in
-                     [{havc with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
-
-                   ) (* No elim induction vars *)
-                 ) (* No unroll *)
-
-             (*   assertX;
-                  havocv1; ... ;havocvn;
-                  assume X;
-                  if(c) {
-                        B;
-                        assertX;
-                        assumefalse;
-                  } *)
-             (* failwith "Loop invar Not implemented yet"; *)
-             )
-           else ( (* Not using loop invariants *)
-             let FuncType (ts1, ts2) = block_type frame.inst bt in
-             let n1 = Lib.List32.length ts1 in
-             let args, vs' = take n1 vs e.at, drop n1 vs e.at in
-             let vs', es' = vs', [Label (n1, [Plain e' @@ e.at],
-                                         (args, List.map plain es'), (pcnum, pclet,pc),
-                                         c.induction_vars, c.ct_check) @@ e.at] in
-             [{c with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
-           )
+               let vs', es' = vs', [Label (n1, [Plain e' @@ e.at],
+                                           (args, List.map plain es'), (pcnum, pclet,pc),
+                                           c.induction_vars, c.ct_check) @@ e.at] in
+               [{c with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
            )
         | If (bt, es1, es2), v :: vs' ->
            if (!Flags.debug) then (
@@ -609,6 +619,13 @@ let rec step (c : config) : config list =
                 [{c with code = vs', es' @ List.tl es; frame = frame'; progc = Obj.magic e'}]
              )
            ) else (
+             if !Flags.debug then (
+               let mem = get_mem_tripple frame in
+               let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc v mem in
+               print_endline "localset is_low:";
+               print_endline (string_of_bool is_low);
+             );
+             
              let frame' = update_local c.frame x v in
              let vs', es' = vs', [] in
              [{c with code = vs', es' @ List.tl es; frame = frame'; progc = Obj.magic e'}]
@@ -758,6 +775,9 @@ let rec step (c : config) : config list =
                  ConstantTime.warn e.at "Load: Constant-time violation"
                else (););
              
+             (* let is_low = Z3_solver.is_v_ct_unsat ~timeout:60 (pcnum, pclet, pc) nv mem in
+              * print_endline ("Load: is low" ^ (string_of_bool is_low)); *) 
+             
              let vs', es' =  nv :: vs', [] in 
              let res =
                   [{c with code = vs', es' @ List.tl es;
@@ -804,6 +824,14 @@ let rec step (c : config) : config list =
              (*print_endline (svalue_to_string sv);
              print_endline (svalue_to_string si)*)
             );
+
+           if !Flags.debug then (
+             let mem = get_mem_tripple frame in
+             let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc sv mem in
+
+             print_endline "store value is_low:";
+             print_endline (string_of_bool is_low);
+           );
 
            let mem = smemory frame.inst (0l @@ e.at) in
            let frame = {frame with
@@ -1096,6 +1124,7 @@ let rec step (c : config) : config list =
            (*let lvs, _ = find_modified_vars (Obj.magic l)*)
            let lvs = fv_eval (Obj.magic l)
                           {c with code = vs'', es''} in (* @ List.tl es;} in*)
+
            let lvs = merge_vars lvs in
            modified_vars := ModifiedVarsMap.add index lvs !modified_vars;
            lvs, false
@@ -1220,7 +1249,7 @@ let rec step (c : config) : config list =
     | Label (n, es0, (vs', []), pc', iv', cct), vs ->
        (* print_endline ("lab:" ^ (string_of_int c.counter)); *)
        let vs', es' = vs' @ vs, [] in
-       [{c with code = vs', es' @ List.tl es}]
+       [{c with code = vs', es' @ List.tl es;}]
        
     | Label (n, es0, (vs', {it = Trapping msg; at} :: es'), pc', iv', cct'), vs ->
        (* print_endline "lab2"; *)
@@ -1245,10 +1274,12 @@ let rec step (c : config) : config list =
     | Label (n, es0, code', pc', iv', cct'), vs ->
        (* print_endline ("lab6:" ^ (string_of_int c.counter)); *)
        (*TODO(Romy): not sure if correct to change the pc *)
-       let c' = step {c with code = code'; pc = pc';
+       let c' = step {c with code = code';
+                             pc = pc';
                              induction_vars = iv';
                              counter = c.counter + 1;
-                             ct_check = cct'} in
+                             ct_check = cct'
+                  } in
        List.map (fun ci ->
            {c with code = vs,
                           [Label (n, es0, ci.code, ci.pc,
@@ -1309,7 +1340,9 @@ let rec step (c : config) : config list =
        (* TODO(Romy): the pc etc  should probably not be here *)
        List.map (fun ci ->
            {c with code = vs, [Frame (n, ci.frame,
-                                      ci.code, ci.pc, ci.induction_vars) @@ e.at] @ List.tl es;
+                                      ci.code,
+                                      ci.pc,
+                                      ci.induction_vars) @@ e.at] @ List.tl es;
                    (* pc = ci.pc; *)
                    observations = ci.observations;
                    induction_vars = iv'

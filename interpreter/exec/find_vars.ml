@@ -693,6 +693,7 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
            (* print_endline "br_if"; *)
            if (!Flags.debug) then (
              print_endline "brif fv";
+             (* print_endline (Pc_type.svalue_to_string v); *)
              print_endline (string_of_region e.at));
 
            let pc', pc'' = split_condition v (pcnum, pclet, pc) in (* false, true *)
@@ -702,17 +703,22 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
            let mem = get_mem_tripple frame in 
            
            let c1 =
-             let pcnum' = Pc_type.next_pc_num() in
-             if Z3_solver.is_sat (pcnum', pclet, pc'') mem then (
-               [{c with code = vs'', es'' @ est; pc = (pcnum', pclet,pc'')}]
+             let pcnum'' = Pc_type.next_pc_num() in
+             if Z3_solver.is_sat (pcnum'', pclet, pc'') mem then (
+               [{c with code = vs'', es'' @ est; pc = (pcnum'', pclet, pc'')}]
              ) else [] 
            in
            let c2 =
-             let pcnum'' = Pc_type.next_pc_num() in
-             if Z3_solver.is_sat (pcnum'', pclet, pc') mem then (
-               [{c with code = vs', es' @ est; pc = (pcnum'', pclet,pc')}]
+             let pcnum' = Pc_type.next_pc_num() in
+             if Z3_solver.is_sat (pcnum', pclet, pc') mem then (
+               [{c with code = vs', es' @ est; pc = (pcnum', pclet, pc')}]
               ) else []
            in
+           if (!Flags.debug) then (
+             print_endline "br_if";
+             print_endline (string_of_int (List.length (c1 @ c2)))
+           );
+
            lv, c1 @ c2
            
         (* | BrTable (xs, x), I32 i :: vs' when I32.ge_u i (Lib.List32.length xs) ->
@@ -762,13 +768,16 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
              print_endline (string_of_region e.at));
 
 
-           let vv = local frame x in
+           (* let vv = local frame x in *)
 
            let lv = if c.ct_check then (
                       let mem = get_mem_tripple frame in 
-                      let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in
+                      let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc v mem in
+                      if (!Flags.debug) then (
+                        print_endline (string_of_bool is_low););
+
                       
-                      let mo = compare_svalues vv v in
+                      let mo = Nothing in (*compare_svalues v v in*)
                       (* print_loopvar (LocalVar (x, is_low)); *)
                       (LocalVar (x, is_low, mo))::lv)
                     else lv
@@ -794,11 +803,11 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
 
 
            (* print_endline "local tee"; *)
-           let vv = local frame x in
+           (* let vv = local frame x in *)
            let lv = if c.ct_check then (
                       let mem = get_mem_tripple frame in 
-                      let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in
-                      let mo = compare_svalues vv v in
+                      let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc v mem in
+                      let mo = Nothing in (*compare_svalues vv v in*)
                       
                       (LocalVar (x, is_low, mo))::lv)
                     else lv
@@ -814,10 +823,10 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
 
         | GlobalSet x, v :: vs' ->
 
-           let vv = Sglobal.load (sglobal c.frame.inst x) in
+           (* let vv = Sglobal.load (sglobal c.frame.inst x) in *)
            let mem = get_mem_tripple frame in 
-           let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in
-           let mo = compare_svalues vv v in
+           let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc v mem in
+           let mo = Nothing in (* compare_svalues vv v in *)
            
            let lv = (GlobalVar (x, is_low, mo))::lv in
            let newg, vs', es' =
@@ -898,9 +907,11 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
            (* Check store variable only if they have constant index *)
            (* We might for example be storing the loop index in memory *)
            let memtuple = get_mem_tripple frame in 
-           let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc lvn memtuple in 
+           let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc sv memtuple in 
            (* let mo = compare_svalues lvn sv in *)
-           
+           if (!Flags.debug) then (
+             print_endline (string_of_bool is_low););
+
            let lv = (StoreVar (final_addr, ty, sz, is_low, Nothing))::lv in
 
            let mem' = Smemory.store_sind_value mem nv in
@@ -1067,6 +1078,7 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
                                with inst = {frame.inst
                                            with smemories = frame'.inst.smemories;
                                                 smemlen = frame'.inst.smemlen;
+                                                smemnum = frame'.inst.smemnum;
                                                 sglobals = frame'.inst.sglobals
                                            }
                                };
@@ -1088,6 +1100,7 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
                                with inst = {frame.inst
                                            with smemories = frame'.inst.smemories;
                                                 smemlen = frame'.inst.smemlen;
+                                                smemnum = frame'.inst.smemnum;
                                                 sglobals = frame'.inst.sglobals
                                            }
                                };

@@ -1,18 +1,20 @@
 open Ast
 open Source
-
+   
 type stats_t = {
     number_modified: int;
     possible_loop_iterations: int;
     number_instructions: int;
     number_calls: int;
+    number_ifs: int;
   }
 
 let init_stats () =
   { number_modified = 0;
     possible_loop_iterations = 0;
     number_instructions = 0;
-    number_calls = 0 }
+    number_calls = 0;
+    number_ifs = 0 }
   
 let increase_instr stats =
   {stats with number_instructions = stats.number_instructions + 1} 
@@ -20,9 +22,11 @@ let increase_instr stats =
 let increase_mv stats =
   {stats with number_modified = stats.number_modified + 1} 
 
-
 let increase_calls stats =
   {stats with number_calls = stats.number_calls + 1} 
+
+let increase_ifs stats =
+  {stats with number_ifs = stats.number_ifs + 1} 
 
 let increase_loop_iter x stats =
   let new_const = 
@@ -60,11 +64,11 @@ let loop_stats (es : Ast.instr list ) (reg: Source.region) : stats_t option =
          | Loop (bt, es') ->
             loop_stats_i (es' @ est) (increase_instr stats) 
          | If (bt, es1, es2) ->
-            loop_stats_i (es1 @ es2 @ est) (increase_instr stats) 
+            loop_stats_i est (stats |> increase_instr |> increase_ifs)
          | Br x ->
             loop_stats_i est (increase_instr stats) 
          | BrIf x->
-            loop_stats_i est (increase_instr stats) 
+            loop_stats_i est (stats |> increase_instr |> increase_ifs)
          | Return ->
             loop_stats_i est (increase_instr stats) 
          | Call x ->
@@ -115,3 +119,11 @@ let loop_stats (es : Ast.instr list ) (reg: Source.region) : stats_t option =
     statsmap := StatsMap.add line stats !statsmap;
     Some stats
 
+let select_invar stats =
+  true
+  (* let open Config in
+   * if stats.possible_loop_iterations > magic_number_si_loop_iter &&
+   *      stats.number_modified < magic_number_si_mod_vars &&
+   *        stats.number_instructions > magic_number_si_instr then
+   *   true
+   * else false *)

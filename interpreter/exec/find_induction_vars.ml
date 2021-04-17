@@ -1096,6 +1096,7 @@ let rec fiv_step (lv : triple IndVarMap.t) (c : config) (c_orig : config) :
                               with inst = {frame.inst
                                           with smemories = frame'.inst.smemories;
                                                smemlen = frame'.inst.smemlen;
+                                               smemnum = frame'.inst.smemnum;
                                                sglobals = frame'.inst.sglobals
                                           }
                               };
@@ -1117,6 +1118,7 @@ let rec fiv_step (lv : triple IndVarMap.t) (c : config) (c_orig : config) :
                               with inst = {frame.inst
                                           with smemories = frame'.inst.smemories;
                                                smemlen = frame'.inst.smemlen;
+                                               smemnum = frame'.inst.smemnum;
                                                sglobals = frame'.inst.sglobals
                                           }
                               };

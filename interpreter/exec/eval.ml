@@ -394,7 +394,7 @@ let rec assert_invar (lv: loopvar_t list) (c : config) : bool =
      if !Flags.debug then print_loopvar (List.hd lv);
      let v = local c.frame x in
      let mem = get_mem_tripple c.frame in
-     let is_low_new = Z3_solver.is_v_ct_unsat ~timeout:60 c.pc v mem in
+     let is_low_new = Z3_solver.is_v_ct_unsat ~timeout:100 c.pc v mem in
      if !Flags.debug then print_endline (string_of_bool is_low_new);
      if match_policy is_low is_low_new then assert_invar lvs c
      else (
@@ -407,7 +407,7 @@ let rec assert_invar (lv: loopvar_t list) (c : config) : bool =
      (* print_endline "globalvar"; *)
      let v = Sglobal.load (sglobal c.frame.inst x) in
      let mem = get_mem_tripple c.frame in 
-     let is_low_new = Z3_solver.is_v_ct_unsat ~timeout:60 c.pc v mem in
+     let is_low_new = Z3_solver.is_v_ct_unsat ~timeout:100 c.pc v mem in
      if !Flags.debug then print_endline (string_of_bool is_low_new);
      if match_policy is_low is_low_new then assert_invar lvs c
      else (
@@ -432,7 +432,7 @@ let rec assert_invar (lv: loopvar_t list) (c : config) : bool =
      (* let mem = smemory c.frame.inst (0l @@ Source.no_region) in *)
 
      let memtuple = get_mem_tripple c.frame in 
-     let is_low_new = Z3_solver.is_v_ct_unsat ~timeout:60 c.pc nv memtuple in
+     let is_low_new = Z3_solver.is_v_ct_unsat ~timeout:100 c.pc nv memtuple in
      if !Flags.debug then  print_endline (string_of_bool is_low_new);
 
      if match_policy is_low is_low_new then assert_invar lvs c

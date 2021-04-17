@@ -15,10 +15,17 @@ let si_expr_counter = ref 0
 
   
 exception Timeout (*of string*)
-   
+
+
+let compare_tuple v1 v2 =
+  match v1, v2 with 
+    (i1,m1), (i2,m2) when i1 = i2 -> m1 - m2
+  | (i1,m1), (i2,m2) -> i1 - i2
+
+        
 module ExprMem = Map.Make(struct
-                     type t = int
-                     let compare = (-)
+                     type t = int * int
+                     let compare = compare_tuple
                    end)
 let memmap = ref ExprMem.empty
            
@@ -249,7 +256,6 @@ and si_to_expr pc size ctx mem si: rel_type  =
  *)
           (try
              let f = LetMap.find i !letmap in
-             (*print_endline "found let";*)
              f
            with Not_found -> 
              match Pc_type.find_let pc i with
@@ -271,15 +277,22 @@ and si_to_expr pc size ctx mem si: rel_type  =
              let index = simap_index si mem in
              (* if !Flags.debug then print_endline ("lloc:" ^ index); *)
              let f = SiMap.find index !simap in
-             (*if !Flags.debug then (print_endline "found load";);*)
+             (* if !Flags.debug then (print_endline "found load";); *)
              f
            with Not_found ->
-             (*if !Flags.debug then (print_endline "not found load";);*)
+             (* if !Flags.debug then (print_endline "not found load";); *)
              let smem, memlen, num = mem in
              let arr =
                (try
-                  ExprMem.find num !memmap
+                  let nm = ExprMem.find (num,memi) !memmap in
+                  (* if !Flags.debug then (print_endline "found mem";);
+                   * print_endline (term_to_string si);
+                   * print_endline (string_of_int memi);
+                   * print_endline (string_of_int (num)); *)
+                  (* raise Not_found; *)
+                  nm
                 with Not_found ->
+                  (* if !Flags.debug then (print_endline "not found mem";); *)
                   let bva = BitVector.mk_sort ctx 32 in
                   let bvd = BitVector.mk_sort ctx 8 in
                   let arr1 = Z3Array.mk_const_s ctx "mem1" bva bvd in
@@ -287,9 +300,15 @@ and si_to_expr pc size ctx mem si: rel_type  =
                   let newmem = H (arr1, arr2) in
                   let tmem = Lib.List32.nth smem (Int32.of_int (memlen - memi)) in
                   let stores = Smemory.get_stores tmem in
+                  (* List.iter (fun st -> print_endline (svalue_to_string st)) stores;
+                   * if (List.length stores > 0) then (
+                   *   print_endline (term_to_string si);
+                   *   print_endline (string_of_int memi);
+                   *   print_endline (string_of_int (num));
+                   * ); *)
                   let fmem = List.fold_left (update_mem pc ctx mem)
                                newmem (List.rev stores) in
-                  memmap := ExprMem.add num fmem !memmap;
+                  memmap := ExprMem.add (num,memi) fmem !memmap;
                   fmem
                )
              in
@@ -300,6 +319,7 @@ and si_to_expr pc size ctx mem si: rel_type  =
              (* print_endline "simplify"; *)
              let simp = propagate_policy_one (fun x -> Expr.simplify x None) v' in
              (* print_endline "simplify_after"; *)
+             (* print_exp simp; *)
              simap := SiMap.add (simap_index si mem) simp !simap;
              simp )
          
@@ -608,15 +628,19 @@ and sv_to_expr pc sv ctx mem =
      (* if !Flags.debug then print_endline "found sv_to_expr"; *)
      (* print_exp f; *)
      (* raise Not_found; *)
-     f
+     f 
    with Not_found ->
-     let v' = si_to_expr pc n ctx mem v in
-     (* print_endline "sv_to_expr before simp"; *)
-     let simp = propagate_policy_one (fun x -> Expr.simplify x None) v' in
-     (* print_endline "sv_to_expr after simp"; *)
-     simap := SiMap.add (simap_index v mem) simp !simap;
-     (* print_endline "sv_to_expr simp end"; *)
-     simp)
+         (* if !Flags.debug then (
+          *   print_endline "notfound sv_to_expr";
+          *   (\* print_endline (svalue_to_string sv); *\)
+          * ); *)
+         let v' = si_to_expr pc n ctx mem v in
+         (* print_endline "sv_to_expr before simp"; *)
+         let simp = propagate_policy_one (fun x -> Expr.simplify x None) v' in
+         (* print_endline "sv_to_expr after simp"; *)
+         simap := SiMap.add (simap_index v mem) simp !simap;
+         (* print_endline "sv_to_expr simp end"; *)
+         simp)
 
 
 
@@ -903,7 +927,7 @@ let read_sat solver_name fname =
 
 
 let run_solvers input_file yices z3 cvc4 boolector bitwuzla timeout =
-  (* print_endline "run_solvers"; *)
+  (* print_endline ("run_solvers: " ^ input_file); *)
   try
     let out_file = input_file ^ ".run_solvers.out" in
     let err_file = input_file ^ ".run_solvers.err" in
@@ -915,9 +939,10 @@ let run_solvers input_file yices z3 cvc4 boolector bitwuzla timeout =
     let rc = Sys.command @@ timeout_str ^ " bash " ^  !path ^ "run_solvers.sh " ^
                              input_file ^ " 1> " ^ out_file ^ " 2> " ^ err_file in
     (*if (rc == 137) then (*for SIGKILL*) *)
-    if (rc == 124) then
-            raise Timeout;
-            (*print_endline "Rc no equals 0";*)
+    if (rc == 124) then (
+      print_endline "Time out";
+      raise Timeout;
+    );
 
     let chan = open_in out_file in
     try
@@ -1204,9 +1229,9 @@ let is_unsat (pc : pc_ext) (mem: Smemory.t list * int) =
  *)
   
 let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int * int) =
-  (* print_endline "is_ct_unsat"; *)
-  (* Pc_type.print_pc (snd pc) |> print_endline; *)
-  (* svalue_to_string sv |> print_endline; *)
+  if !Flags.debug then 
+       print_endline "Checking if conditional is CT..";
+
   let ctx = init_solver() in
 
   let v = sv_to_expr pc sv ctx mem in
@@ -1226,7 +1251,7 @@ let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int * int) =
       | L p ->  Goal.add g [p ]
       | H (pc1, pc2) ->  Goal.add g [pc1; pc2 ]
      );
-     (* Printf.printf "Goal: %s\n" (Goal.to_string g); *)
+
 
      let num_exprs = Goal.get_num_exprs g in
      
@@ -1235,7 +1260,8 @@ let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int * int) =
       
      let solver = Solver.mk_solver ctx None in
      List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
-     
+
+     (* Printf.printf "Solver: %s\n" (Solver.to_string solver); *)
      if !Flags.portfolio_only then (
        let filename = write_formula_to_file solver in
        let timeout = 0 in
@@ -1299,15 +1325,19 @@ let is_v_ct_unsat ?timeout:(timeout=30) (pc : pc_ext) (sv : svalue)
   (* print_endline "is_v_ct_unsat"; *) 
   (* Pc_type.print_pc (snd pc) |> print_endline;
    * svalue_to_string sv |> print_endline; *)
+   (* svalue_to_string sv |> print_endline; *)
 
   let ctx = init_solver() in
   
   let g = Goal.mk_goal ctx true false false in
   (* print_endline "is_v_ct_unsat before sv"; *)
   let v = sv_to_expr pc sv ctx mem in
-  (* print_endline "is_v_ct_unsat after  sv";
-   * print_exp v; *)
 
+  (* let _,_,mnum = mem in
+   * print_endline "is_v_ct_unsat after  sv";
+   * (\* print_exp v; *\)
+   * print_endline (string_of_int mnum); *)
+  
   match v with
   | L v -> true
   | H (v1, v2) when Expr.equal v1 v2 -> true

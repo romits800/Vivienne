@@ -377,15 +377,15 @@ let func_to_string func =
 let rec term_to_string (t : term) : string =
   match t with
   | Load (i, index, sz, None) ->
-     "Mem[" ^ term_to_string i ^ "]" ^ "(" ^ string_of_int sz ^ ")[None]" 
+     "Mem[" ^ term_to_string i ^ "]" ^ "(" ^ string_of_int sz ^ ")(" ^ string_of_int index ^ ")[None]" 
   | Load (i, index, sz, Some Types.ZX) ->
-     "Mem[" ^ term_to_string i ^ "]" ^ "(" ^ string_of_int sz ^ ")[Some ZX]" 
+     "Mem[" ^ term_to_string i ^ "]" ^ "(" ^ string_of_int sz ^ ")(" ^ string_of_int index ^")[Some ZX]" 
   | Load (i, index, sz, Some Types.SX) ->
-     "Mem[" ^ term_to_string i ^ "]" ^ "(" ^ string_of_int sz ^ ")[Some SX]" 
+     "Mem[" ^ term_to_string i ^ "]" ^ "(" ^ string_of_int sz ^ ")(" ^ string_of_int index ^")[Some SX]" 
 
   | Store (i, v, index, sz) ->
      "Mem[" ^ term_to_string i ^ "] = "
-                               ^ term_to_string v ^ "(" ^ string_of_int sz ^ ")" 
+                               ^ term_to_string v ^ "(" ^ string_of_int sz ^ ")"  ^ "(" ^ string_of_int index ^")"
   | String s -> s
   | Int i -> string_of_int i
   | Float f ->  string_of_float f
