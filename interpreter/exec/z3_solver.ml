@@ -298,10 +298,13 @@ and si_to_expr pc size ctx mem si: rel_type  =
                   let arr1 = Z3Array.mk_const_s ctx "mem1" bva bvd in
                   let arr2 = Z3Array.mk_const_s ctx "mem2" bva bvd in
                   let newmem = H (arr1, arr2) in
+                  (*  print_endline ("nth_begin" ^ (string_of_int memlen) ^ "," ^ (string_of_int memi));
+                    print_endline (term_to_string si);*)
                   let tmem = Lib.List32.nth smem (Int32.of_int (memlen - memi)) in
+                    (*print_endline "nth_end";*)
                   let stores = Smemory.get_stores tmem in
-                  (* List.iter (fun st -> print_endline (svalue_to_string st)) stores;
-                   * if (List.length stores > 0) then (
+                  (*List.iter (fun st -> print_endline (svalue_to_string st)) stores;*)
+                  (* * if (List.length stores > 0) then (
                    *   print_endline (term_to_string si);
                    *   print_endline (string_of_int memi);
                    *   print_endline (string_of_int (num));
@@ -940,7 +943,8 @@ let run_solvers input_file yices z3 cvc4 boolector bitwuzla timeout =
                              input_file ^ " 1> " ^ out_file ^ " 2> " ^ err_file in
     (*if (rc == 137) then (*for SIGKILL*) *)
     if (rc == 124) then (
-      print_endline "Time out";
+      if !Flags.debug then
+          print_endline "Time out";
       raise Timeout;
     );
 

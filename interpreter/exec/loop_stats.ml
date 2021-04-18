@@ -1,5 +1,6 @@
 open Ast
 open Source
+open Config
    
 type stats_t = {
     number_modified: int;
@@ -35,7 +36,7 @@ let increase_loop_iter x stats =
     | Values.I64 i -> Int64.to_int i
     | _ -> failwith "Not supporting floats"
   in
-  if stats.possible_loop_iterations < new_const then
+  if stats.possible_loop_iterations < new_const && new_const < magic_number_max_loop then
     {stats with possible_loop_iterations = new_const}
   else stats
 

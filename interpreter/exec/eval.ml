@@ -427,7 +427,7 @@ let rec assert_invar (lv: loopvar_t list) (c : config) : bool =
          false
      )
 
-  | StoreVar (addr, ty, sz, (true as is_low), mo) :: lvs ->
+  | StoreVar (SI32 addr' as addr, ty, sz, (true as is_low), mo) :: lvs  when Si32.is_int addr' ->
      if !Flags.debug then print_loopvar (List.hd lv);
      (* print_endline "storevar"; *)
      let nv =
