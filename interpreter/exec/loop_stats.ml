@@ -8,6 +8,7 @@ type stats_t = {
     number_instructions: int;
     number_calls: int;
     number_ifs: int;
+    number_mem_ops: int;
   }
 
 let init_stats () =
@@ -15,7 +16,8 @@ let init_stats () =
     possible_loop_iterations = 0;
     number_instructions = 0;
     number_calls = 0;
-    number_ifs = 0 }
+    number_ifs = 0;
+    number_mem_ops = 0 }
   
 let increase_instr stats =
   {stats with number_instructions = stats.number_instructions + 1} 
@@ -28,6 +30,10 @@ let increase_calls stats =
 
 let increase_ifs stats =
   {stats with number_ifs = stats.number_ifs + 1} 
+
+let increase_mem stats =
+  {stats with number_mem_ops = stats.number_mem_ops + 1} 
+
 
 let increase_loop_iter x stats =
   let new_const = 
@@ -90,9 +96,9 @@ let loop_stats (es : Ast.instr list ) (reg: Source.region) : stats_t option =
          | GlobalSet x->
             loop_stats_i est (stats |> increase_instr |> increase_mv)
          | Load {offset; ty; sz; _}->
-            loop_stats_i est (increase_instr stats) 
+            loop_stats_i est (increase_instr stats |> increase_mem) 
          | Store {offset; ty; sz; _}->
-            loop_stats_i est (stats |> increase_instr |> increase_mv)
+            loop_stats_i est (stats |> increase_instr |> increase_mv |> increase_mem)
          | Const v ->
             loop_stats_i est (stats |> increase_instr |> increase_loop_iter v.it)
          | Test testop->
@@ -122,9 +128,9 @@ let loop_stats (es : Ast.instr list ) (reg: Source.region) : stats_t option =
 
 let select_invar stats =
   true
-  (* let open Config in
-   * if stats.possible_loop_iterations > magic_number_si_loop_iter &&
-   *      stats.number_modified < magic_number_si_mod_vars &&
-   *        stats.number_instructions > magic_number_si_instr then
-   *   true
-   * else false *)
+  (*let open Config in
+  if stats.possible_loop_iterations > magic_number_si_loop_iter &&
+       stats.number_modified < magic_number_si_mod_vars &&
+         stats.number_instructions > magic_number_si_instr then
+    true
+  else false *)

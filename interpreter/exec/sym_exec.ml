@@ -280,7 +280,7 @@ let rec step (c : config) : config list =
   (* let pclet,pc = simplify_pc frame (pclet,pc) in *)
   let c = {c with pc = (pcnum, pclet,pc)} in
   let vs = 
-    if (!Flags.replace_expressions && (Random.int 1 == 0)) then (
+    if (!Flags.replace_expressions && (Random.int 100 == 0)) then (
       if !Flags.debug then (
         print_endline "Testing expression simplification.";
       );
@@ -308,7 +308,7 @@ let rec step (c : config) : config list =
            )
            in
            if !Flags.debug then (
-               print_endline (svalue_to_string v);
+               print_endline ("Simplified" ^ (svalue_to_string v));
            );
            v::vs'
          )
@@ -365,6 +365,7 @@ let rec step (c : config) : config list =
                  print_endline ("Number instructions: " ^ (string_of_int (stats.number_instructions)));
                  print_endline ("Number calls: " ^ (string_of_int (stats.number_calls)));
                  print_endline ("Number ifs: " ^ (string_of_int (stats.number_ifs)));
+                 print_endline ("Number mem ops: " ^ (string_of_int (stats.number_mem_ops)));
                );
 
                let pcext = pcnum, pclet, pc in
@@ -457,7 +458,11 @@ let rec step (c : config) : config list =
            if (!Flags.debug) then (
              print_endline "br_if";
              print_endline (string_of_region e.at);
-             print_endline (svalue_to_string v) 
+             print_endline (svalue_to_string v);
+             (*let mem = get_mem_tripple frame in
+             let _,nv = Z3_solver.simplify v c.pc mem in
+             Z3_solver.print_simpl nv; *)
+ 
             );
 
            (* print_endline "br_if"; *)
