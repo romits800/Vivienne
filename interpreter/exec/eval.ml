@@ -56,11 +56,17 @@ let numeric_error at = function
 
 type 'a stack = 'a list
 
+module LocalVarsMap = Map.Make(struct
+                          type t = int
+                          let compare = (-)
+                        end)
+
+              
 (* TODO(Romy): Fix module_inst *)
 type frame =
 {
   inst : module_inst;
-  locals : svalue list;
+  locals : svalue LocalVarsMap.t ; (*svalue list;*)
 }
 
 
@@ -212,13 +218,19 @@ let print_loopvar = function
     
 let frame inst locals = {inst; locals}
 let config inst vs es =
-  {frame = frame inst []; code = vs, es; budget = 300;
+  {frame = frame inst LocalVarsMap.empty; code = vs, es; budget = 300;
    pc = empty_pc(); msecrets = inst.secrets; loops = []; abstract_loops = [];
    observations = OBSTRUE;  counter = 0; induction_vars = None; progc = 0;
    ct_check = true}
 
 let plain e = Plain e.it @@ e.at
 
+let lookup_map category map x =
+  let intval = Int32.to_int x.it in
+  try LocalVarsMap.find intval map with Not_found ->
+    Crash.error x.at ("undefined " ^ category ^ " " ^ Int32.to_string x.it)
+  
+            
 let lookup category list x =
   try Lib.List32.nth list x.it with Failure _ ->
     Crash.error x.at ("undefined " ^ category ^ " " ^ Int32.to_string x.it)
@@ -232,7 +244,7 @@ let smemlen (inst : module_inst) =  inst.smemlen
 let smemnum (inst : module_inst) =  inst.smemnum
 (* let global (inst : module_inst) x = lookup "global" inst.globals x *)
 let sglobal (inst : module_inst) x = lookup "sglobal" inst.sglobals x
-let local (frame : frame) x = lookup "local" frame.locals x
+let local (frame : frame) x = lookup_map "local" frame.locals x
 
 let update_smemory (inst : module_inst) (mem : Instance.smemory_inst)
       (x : int32 Source.phrase)  = 
@@ -251,7 +263,7 @@ let insert_smemory (inst : module_inst) (mem : Instance.smemory_inst)  =
 
 let update_local (frame : frame) (x : int32 Source.phrase) (sv: svalue) = 
   try
-    {frame with locals = Lib.List32.replace x.it sv frame.locals}
+    {frame with locals = LocalVarsMap.add (Int32.to_int x.it) sv frame.locals}
   with Failure _ ->
     Crash.error x.at ("udefined local " ^ Int32.to_string x.it)
 
