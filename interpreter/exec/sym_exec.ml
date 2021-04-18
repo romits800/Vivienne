@@ -352,7 +352,7 @@ let rec step (c : config) : config list =
            if !Flags.debug then (
              print_endline "Entering loop..";
              print_endline (string_of_region e.at);
-             print_endline ("Number of local variables: " ^ (string_of_int (List.length frame.locals)));
+             (* print_endline ("Number of local variables: " ^ (string_of_int (List.length frame.locals))); *)
              print_endline ("Loop number of instructions: " ^ (string_of_int (List.length es')));
            );
            
@@ -1363,7 +1363,11 @@ let rec step (c : config) : config list =
         | Func.AstFunc (t, inst', f) ->
            let rest = List.map value_to_svalue_type f.it.locals in
 
+           
            let locals' = List.rev args @ List.map Svalues.default_value rest in
+           let locals_map,_ = List.fold_left
+                                (fun (m,i) l -> (LocalVarsMap.add i l m, i+1))
+                                (LocalVarsMap.empty,0) locals' in 
            (* TODO(Romy): check if this is correct - 
               using current memory instead of old *)
            let nsmem = if (List.length frame.inst.smemories == 0) then !inst'.smemories
@@ -1377,7 +1381,7 @@ let rec step (c : config) : config list =
                                     sglobals = sglobals;
                        } in
 
-           let frame' = {inst = inst'; locals = locals'} in
+           let frame' = {inst = inst'; locals = locals_map} in
            let instr' = [Label (n2, [], ([], List.map plain f.it.body),
                                 c.pc, c.induction_vars, c.ct_check) @@ f.at] in 
            let vs', es' = vs', [Frame (n2, frame', ([], instr'), c.pc, c.induction_vars) @@ e.at] in
@@ -1584,6 +1588,8 @@ let merge_memories c1 c2 =
                                {c1.frame.inst with smemories = newsmemories}}}  
   
 let merge_locals c1 c2 =
+  let loc1 = List.map snd (LocalVarsMap.bindings c1.frame.locals) in
+  let loc2 = List.map snd (LocalVarsMap.bindings c2.frame.locals) in 
   let newlocals =
     List.map2
       (fun l1 l2 ->
@@ -1614,8 +1620,12 @@ let merge_locals c1 c2 =
            in
            newl'
       )
-      c1.frame.locals c2.frame.locals in
-  { c1 with frame = {c1.frame with locals = newlocals}}
+      loc1 loc2 in
+  let newlocals_map,_ = List.fold_left
+                        (fun (m,i) l -> (LocalVarsMap.add i l m, i+1))
+                        (LocalVarsMap.empty,0) newlocals in 
+
+  { c1 with frame = {c1.frame with locals = newlocals_map}}
 
 let merge_pcs c1 c2 =
   let pc1 = c1.pc in
