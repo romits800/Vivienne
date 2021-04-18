@@ -188,7 +188,7 @@ let loop_invariant e' bt frame e vs es es' pcext c =
         let lvs = ModifiedVarsMap.find index !modified_vars in
         (* check if we have different initial policy *)
         let lvs' = find_policy lvs c in
-        lvs, compare_policies lvs lvs'
+        lvs', compare_policies lvs lvs'
         
       ) with Not_found -> (
         (*let lvs, _ = find_modified_vars (Obj.magic e')*)
@@ -1115,7 +1115,7 @@ let rec step (c : config) : config list =
          try (
            let lvs = ModifiedVarsMap.find index !modified_vars in
            let lvs' = find_policy lvs c in
-           lvs, compare_policies lvs lvs'
+           lvs', compare_policies lvs lvs'
          ) with Not_found -> (
            let vs'', es'' = vs', [Label (n, [Plain l @@ loc],
                                         (args, code'''), (pcnum, pclet,pc),
@@ -1137,6 +1137,10 @@ let rec step (c : config) : config list =
 
        (* HAVOC *)
        let havc = havoc_vars lvs c in
+        (* print_endline ("Number memories" ^ string_of_int (List.length havc.frame.inst.smemories));
+                  let stores = Smemory.get_stores (List.hd havc.frame.inst.smemories) in
+        List.iter (fun st -> print_endline (svalue_to_string st)) stores;
+        *)
 
 
        if !Flags.elim_induction_variables then (
@@ -1179,7 +1183,6 @@ let rec step (c : config) : config list =
 
          (* print_endline "Finish second pass"; *)
          let havc' = {havc with code = vs'', es'' @ List.tl es;} in
-
          [{havc' with code = vs'', es'' @ List.tl es; progc = Obj.magic l}]
        )
 

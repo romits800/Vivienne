@@ -73,7 +73,7 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) : config =
       * in *)
 
      havoc_vars lvs c'
-  | StoreVar (addr, ty, sz, is_low, mo) :: lvs ->
+  | StoreVar (SI32 addr' as addr, ty, sz, is_low, mo) :: lvs when Si32.is_int addr' ->
 
      let sv =
        (match ty with
@@ -126,5 +126,6 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) : config =
      in
 *)
      havoc_vars lvs c'
+  | StoreVar _ :: lvs -> havoc_vars lvs c
   | [] -> c
                 
