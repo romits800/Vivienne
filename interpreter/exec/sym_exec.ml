@@ -925,8 +925,10 @@ let rec step (c : config) : config list =
                  {c with observations =
                            CT_V_UNSAT((pcnum'', pclet,pc''), sv, mems, c.observations)} in
                
+               if (!Flags.explicit_leaks) then (
+               
                let nonv, found =
-                 if (!Flags.explicit_leaks && c.ct_check) then (
+                 if (c.ct_check) then (
                    let index =  (Obj.magic e') in
                    try VulnerabilitiesMap.find index !noninter_vuln, true 
                    with Not_found ->
@@ -958,6 +960,14 @@ let rec step (c : config) : config list =
                            progc = Obj.magic e'}]
                 )
                )
+            ) else (
+                  [{c with code = vs', es' @ List.tl es;
+                           frame = nframe;
+                           pc = pcnum, pclet, pc;
+                           progc = Obj.magic e'}]
+
+                ) 
+            
              (* | false ->
               *    (match Z3_solver.is_sat (pcnum, pclet, pc') mems with *)
              (* | true -> [{c with code = vs', es' @ List.tl es;

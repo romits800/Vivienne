@@ -734,7 +734,7 @@ let clean_solver () =
   
   
 let init_solver () =
-  memmap := ExprMem.empty;
+  (*memmap := ExprMem.empty;*)
   !ctx
 
 let bin_of_string str =
