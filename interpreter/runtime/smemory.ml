@@ -35,7 +35,8 @@ type memory = {content : memory';
                stores: svalue list;
                secrets: (int * int) list;
                nonsecrets: (int * int) list;
-               prev_mem : memory option}
+               prev_mem : memory option;
+               num : int }
 type t = memory
 
 let get_secrets mem =
@@ -71,7 +72,10 @@ let get_stores mem =
 
 let get_prev_mem mem =
   mem.prev_mem
-  
+
+let get_num mem =
+  mem.num
+
 let create_mem () =  Smem.empty 
   (* Smem.add 1 Si32.zero m *)
             
@@ -104,14 +108,15 @@ let alloc2 min =
    stores = [];
    secrets = [] ;
    nonsecrets = [];
-   prev_mem = None}
+   prev_mem = None;
+   num = 0}
 
   
 let alloc (SmemoryType {min; max}) =
   assert (within_limits min max);
   {content = create min; current = min; max;
    stores = []; secrets = []; nonsecrets = [];
-  prev_mem = None}
+   prev_mem = None; num = 0}
 
 let bound mem =
   failwith "bound: Not implemented"
@@ -283,10 +288,11 @@ let store_value mem a o v =
 
          
 (* Stores needs to be reversed *)
-let store_sind_value mem store = 
+let store_sind_value num mem store = 
   (* let newstores = remove_old_stores mem.stores store in *)
   {mem with stores = [store]; (*::mem.stores;*)
-            prev_mem = Some mem}
+            prev_mem = Some mem;
+            num = num}
 
 let add_secret mem sec = 
   {mem with secrets = sec::mem.secrets }

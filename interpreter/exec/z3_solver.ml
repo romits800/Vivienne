@@ -279,7 +279,7 @@ and si_to_expr pc size ctx mem si: rel_type  =
           print_endline (string_of_int memi);
           print_endline (term_to_string i);*)
           let rec get_stores tmem newmem mem = 
-            let index = Obj.magic tmem in
+            let index = Smemory.get_num tmem in
             (try
                let nm = ExprMem.find index !memmap in
                nm

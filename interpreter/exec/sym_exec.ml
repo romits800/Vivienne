@@ -909,7 +909,7 @@ let rec step (c : config) : config list =
 
              (* let nv = Eval_symbolic.eval_store ty final_addr sv
               *            (smemlen frame.inst) 4 in *)
-             let mem' = Smemory.store_sind_value mem nv in
+             let mem' = Smemory.store_sind_value num mem nv in
              let vs', es' = vs', [] in
              (* Update memory with a store *)
              let nframe = {frame with inst = insert_smemory frame.inst num mem'} in
@@ -1902,7 +1902,7 @@ let init_smemory (secret : bool) (inst : module_inst) (sec : security) =
     | false -> Smemory.add_public smem (lo,hi)
   in
 
-  let mem = List.fold_left Smemory.store_sind_value smem stores in  
+  let mem = List.fold_left (Smemory.store_sind_value 0) smem stores in  
   update_smemory inst mem  (0l @@ sec.at)
 
 let init_smemory_data (inst : module_inst) (seg : memory_segment) = 
@@ -1920,7 +1920,7 @@ let init_smemory_data (inst : module_inst) (seg : memory_segment) =
   let offset = i32 (eval_const inst const) const.at in
   (* let end_ = Int32.(add offset (of_int (String.length init))) in *)
   let stores = store_bytes (Int32.to_int offset) init in
-  let mem = List.fold_left Smemory.store_sind_value smem stores in  
+  let mem = List.fold_left (Smemory.store_sind_value 0) smem stores in  
   update_smemory inst mem  (0l @@ seg.at)
 
 

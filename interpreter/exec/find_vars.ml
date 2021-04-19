@@ -917,7 +917,7 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
 
            let lv = (StoreVar (final_addr, ty, sz, is_low, Nothing))::lv in
 
-           let mem' = Smemory.store_sind_value mem nv in
+           let mem' = Smemory.store_sind_value num mem nv in
            let vs', es' = vs', [] in
            (* Update memory with a store *)
            let nframe = {frame with inst = insert_smemory frame.inst num mem'} in
