@@ -209,8 +209,77 @@ let get_size e =
      let size2 = BitVector.get_size sort2 in
      assert(size1 == size2);
      size1
-     
-let rec update_mem pc ctx mem a s =
+
+
+(* let check_if_store_exists m s  =
+ *   let s' = Obj.magic s in
+ *   try
+ *     let _ = ExprMem.find s' m in
+ *     (m, false)
+ *   with Not_found ->
+ *         let m' = ExprMem.add s' true m in
+ *         (m', true) *)
+        
+
+let to_int rt =
+  match rt with
+  | L v ->
+     if (Expr.is_numeral v) then
+       Some (int_of_string (Expr.to_string v))
+     else None
+  | H (v1,v2) when v1 = v2 -> 
+     if (Expr.is_numeral v1) then
+       Some (int_of_string (Expr.to_string v1))
+     else None
+  | _ -> None
+
+
+
+let rec create_array pc ctx a s =
+  (*print_endline "update_mem";*)
+  let size, index, value, sz = s in
+  split_to_bytes ctx a index value sz 0 7
+
+and mem_get_stores mi pc ctx mem s =
+  (*print_endline "update_mem";*)
+    (match s with
+     | SI32 Store (ad, v, i, num, sz) ->
+        let size = 32 in
+        let index = si_to_expr pc size ctx mem ad in
+        let value = si_to_expr pc size ctx mem v in
+        (match to_int index with
+         | Some i -> 
+            (try
+               let _ = ExprMem.find i mi in
+               None, mi
+             with Not_found ->
+               let mi' = ExprMem.add i true mi in
+               (Some (size,index, value, sz), mi')
+            )
+         | None ->
+            (Some (size, index, value, sz), mi)
+        )
+     | SI64 Store (ad, v, i, num, sz) ->
+        let size = 64 in
+        let index = si_to_expr pc size ctx mem ad in
+        let value = si_to_expr pc size ctx mem v in
+        (match to_int index with
+         | Some i -> 
+            (try
+               let _ = ExprMem.find i mi in
+               None, mi
+             with Not_found ->
+               let mi' = ExprMem.add i true mi in
+               (Some (size,index, value, sz), mi')
+            )
+         | None ->
+            (Some (size, index, value, sz), mi)
+        )
+
+     | _ -> failwith "Unexpected store - not implemented f64/32"
+    )
+
+and update_mem pc ctx mem a s =
   (*print_endline "update_mem";*)
   match s with
   | SI32 Store (ad, v, i, num, sz) ->
@@ -224,7 +293,7 @@ let rec update_mem pc ctx mem a s =
      let value = si_to_expr pc size ctx mem v in
      split_to_bytes ctx a index value sz 0 7
    | _ -> failwith "Unexpected store - not implemented f64/32"
-
+        
 and si_to_expr pc size ctx mem si: rel_type  = 
   let si' = 
       (match si with
@@ -278,7 +347,7 @@ and si_to_expr pc size ctx mem si: rel_type  =
           (*print_endline "load z3_solver"; 
           print_endline (string_of_int memi);
           print_endline (term_to_string i);*)
-          let rec get_stores tmem newmem mem = 
+          let rec get_stores tmem newmem mem optstores = 
             let index = Smemory.get_num tmem in
             (try
                let nm = ExprMem.find index !memmap in
@@ -286,17 +355,30 @@ and si_to_expr pc size ctx mem si: rel_type  =
              with Not_found ->
                let stores = Smemory.get_stores tmem in
 
+               (* let optstores', noexists = List.fold_left check_if_store_exists
+                *                              optstores stores in *)
+               let optstores', stores' =
+                 List.fold_left
+                   (fun (mi,acc) st ->
+                     let si,mi' = mem_get_stores mi pc ctx mem st in
+                     match si with
+                     | Some si -> (mi', si::acc)
+                     | None -> (mi', acc)
+                   )
+                   (optstores,[]) stores in
+
                let prev_mem = Smemory.get_prev_mem tmem in
+               
                let mem' =
                  match prev_mem with
                  | Some pmem ->
-                    let newmem' = get_stores pmem newmem mem in
-                    List.fold_left (update_mem pc ctx mem)
-                      newmem' (List.rev stores) 
+                    let newmem' = get_stores pmem newmem mem optstores' in
+                    List.fold_left (create_array pc ctx)
+                      newmem' stores'
                     
                  | None -> 
-                    List.fold_left (update_mem pc ctx mem)
-                      newmem (List.rev stores) 
+                    List.fold_left (create_array pc ctx)
+                      newmem stores'
                in
                memmap := ExprMem.add index mem' !memmap;
                mem'
@@ -339,7 +421,7 @@ and si_to_expr pc size ctx mem si: rel_type  =
                    *   print_endline (string_of_int memi);
                    *   print_endline (string_of_int (num));
                    * ); *)
-                  let fmem = get_stores tmem newmem mem in
+                  let fmem = get_stores tmem newmem mem (ExprMem.empty) in
                   (* let stores = Smemory.get_stores tmem in
                    * let fmem = List.fold_left (update_mem pc ctx mem)
                    *              newmem (List.rev stores) in
@@ -1501,6 +1583,7 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int * int) : bool =
   (* print_endline "is_sat"; *)
   let ctx = init_solver() in
   let v = pc_to_expr pc ctx mem in
+  (* print_endline "After pc_calc"; *)
   (* print_exp v; *)
   (* (match pc with
    * | (pclet, PCAnd (v',pc)) ->
@@ -1562,12 +1645,14 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int * int) : bool =
       ) else (
         if  num_exprs > magic_number_2  then (
           let filename = write_formula_to_file solver in
+          (* print_endline ("mnumber" ^ (string_of_int num_exprs) ^ "," ^ filename); *)
           let timeout = 0 in
           let res = run_solvers filename (read_sat "yices") (read_sat "z3")
                       (read_sat "cvc4") (read_sat "boolector") (read_sat "bitwuzla") timeout in
           remove filename;
           res
         ) else (
+          (* print_endline ("Z3 bindings" ^ (string_of_int num_exprs)); *)
           (if (!Flags.stats) then
              Stats.update_query_str "Z3_bindings") ;
           let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
