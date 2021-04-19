@@ -469,7 +469,4 @@ let add_high types =
     | I64Type::ts -> add_high_i ts (SI64 (Si64.of_high ())::acc)
     | _ -> failwith "Not support floats"
   in
-  add_high_i types []
-
-
-        
+  add_high_i types []        

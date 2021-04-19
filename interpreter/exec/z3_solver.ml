@@ -27,6 +27,7 @@ module ExprMem = Map.Make(struct
                      type t = int * int
                      let compare = compare_tuple
                    end)
+
 let memmap = ref ExprMem.empty
            
 module LetMap = Map.Make(struct
@@ -282,9 +283,11 @@ and si_to_expr pc size ctx mem si: rel_type  =
            with Not_found ->
              (* if !Flags.debug then (print_endline "not found load";); *)
              let smem, memlen, num = mem in
+             (*let index = Obj.magic smem in*)
+             let index = (num,memi) in
              let arr =
                (try
-                  let nm = ExprMem.find (num,memi) !memmap in
+                  let nm = ExprMem.find index !memmap in
                   (* if !Flags.debug then (print_endline "found mem";);
                    * print_endline (term_to_string si);
                    * print_endline (string_of_int memi);
@@ -311,7 +314,8 @@ and si_to_expr pc size ctx mem si: rel_type  =
                    * ); *)
                   let fmem = List.fold_left (update_mem pc ctx mem)
                                newmem (List.rev stores) in
-                  memmap := ExprMem.add (num,memi) fmem !memmap;
+                  memmap := ExprMem.add index fmem !memmap;
+                  (*memmap := ExprMem.add (num,memi) fmem !memmap;*)
                   fmem
                )
              in
