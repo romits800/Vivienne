@@ -294,6 +294,13 @@ let store_sind_value num mem store =
             prev_mem = Some mem;
             num = num}
 
+let store_init_value num mem store = 
+  (* let newstores = remove_old_stores mem.stores store in *)
+  {mem with stores = store::mem.stores;
+            prev_mem = None;
+            num = num}
+
+
 let add_secret mem sec = 
   {mem with secrets = sec::mem.secrets }
 
