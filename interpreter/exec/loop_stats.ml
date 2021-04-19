@@ -130,7 +130,6 @@ let select_invar stats =
   true
   (*let open Config in
   if stats.possible_loop_iterations > magic_number_si_loop_iter &&
-       stats.number_modified < magic_number_si_mod_vars &&
-         stats.number_instructions > magic_number_si_instr then
+       stats.number_modified < magic_number_si_mod_vars then
     true
   else false *)

@@ -35,6 +35,7 @@ val store_value :
   memory -> int -> int -> svalue -> memory
 (* inputs: memory, store_svalue (index, value); outputs: memory *)
 val store_sind_value : int -> memory -> svalue ->  memory
+val store_init_value : int -> memory -> svalue ->  memory
 val add_secret : memory -> (int * int) -> memory
 val add_public : memory -> (int * int) -> memory
 
