@@ -718,10 +718,10 @@ let rec step (c : config) : config list =
              print_endline (string_of_region e.at));
 
            (* print_endline "load"; *)
-           let imem = smemory frame.inst (0l @@ e.at) in
+           (* let imem = smemory frame.inst (0l @@ e.at) in *)
 
-           let frame = {frame with
-                         inst = update_smemory frame.inst imem (0l @@ e.at)} in
+           (* let frame = {frame with
+            *               inst = update_smemory frame.inst imem (0l @@ e.at)} in *)
            
            let addr =
              (match si with
@@ -839,8 +839,8 @@ let rec step (c : config) : config list =
            );*)
 
            let mem = smemory frame.inst (0l @@ e.at) in
-           let frame = {frame with
-                         inst = update_smemory frame.inst mem (0l @@ e.at)} in
+           (* let frame = {frame with
+            *               inst = update_smemory frame.inst mem (0l @@ e.at)} in *)
            let addr =
              (match si with
               | SI32 v -> v
