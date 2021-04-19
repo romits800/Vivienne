@@ -228,62 +228,62 @@ let eval_cvtop = op SI32CvtOp.cvtop SI64CvtOp.cvtop F32CvtOp.cvtop F64CvtOp.cvto
 
 
 
-let eval_load ty ad i sz ext =
+let eval_load ty ad i num sz ext =
   (* print_endline (string_of_int sz); *)
   (* print_endline (string_of_int ad); *)
   match ty,ad with
   | I32Type, SI32 a ->
     ( match ext with
-      | None -> SI32 (Si32.load a i sz ext)
+      | None -> SI32 (Si32.load a i num sz ext)
       | Some Types.SX ->
-         let l = Si32.load a i sz ext in
+         let l = Si32.load a i num sz ext in
          SI32 (Si32.extend_s 32 l)
       | Some Types.ZX ->
-         let l = Si32.load a i sz ext in
+         let l = Si32.load a i num sz ext in
          SI32 (Si32.extend_u 32 l)
     )
   | I64Type, SI32 a ->
     ( match ext with
-      | None -> SI64 (Si32.load a i sz ext)
+      | None -> SI64 (Si32.load a i num sz ext)
       | Some Types.SX ->
-         let l = Si64.load a i sz ext in
+         let l = Si64.load a i num sz ext in
          SI64 (Si64.extend_s 64 l)
       | Some Types.ZX ->
-         let l = Si64.load a i sz ext in
+         let l = Si64.load a i num sz ext in
          SI64 (Si64.extend_u 64 l)
     )
   | _ -> failwith "Floats not implemented."
 
 
-let eval_store ty ad sv i sz =
+let eval_store ty ad sv i num sz =
   match ty,ad,sv with 
-  | I32Type, SI32 a, SI32 v -> SI32 (Si32.store a v i sz)
-  | I64Type, SI32 a, SI64 v -> SI64 (Si64.store a v i sz)
+  | I32Type, SI32 a, SI32 v -> SI32 (Si32.store a v i num sz)
+  | I64Type, SI32 a, SI64 v -> SI64 (Si64.store a v i num sz)
   | _ -> failwith "Floats not implemented."
 
 
 let create_new_constant_store sz a v =
   let value = Si8.bv_of_int (Int64.of_int v) 8 in
   let index = Si32.bv_of_int (Int64.of_int a) 32 in
-  let st = SI32 (Si8.store index value 0 sz) in
+  let st = SI32 (Si8.store index value 0 0 sz) in
   st
 
 let create_new_hstore sz a =
   let value = Si32.of_high() in
   let index = Si32.bv_of_int (Int64.of_int a) 32 in
-  let st = SI32 (Si32.store index value 0 sz) in
+  let st = SI32 (Si32.store index value 0 0 sz) in
   st
 
 let create_new_lstore sz a =
   let value = Si32.of_low() in
   let index = Si32.bv_of_int (Int64.of_int a) 32 in
-  let st = SI32 (Si32.store index value 0 sz) in
+  let st = SI32 (Si32.store index value 0 0 sz) in
   st
 
 let create_new_value sz v a =
   let value = Si32.of_int_s v in
   let index = Si32.bv_of_int (Int64.of_int a) 32 in
-  let st = SI32 (Si32.store index value 0 sz) in
+  let st = SI32 (Si32.store index value 0 0 sz) in
   st
 
     (* match ty,ad,sv with 

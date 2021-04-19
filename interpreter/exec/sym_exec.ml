@@ -749,12 +749,12 @@ let rec step (c : config) : config list =
                (match sz with
                 | None ->
                    Eval_symbolic.eval_load ty final_addr
-                     (smemlen frame.inst) (Types.size ty) None
+                     (smemlen frame.inst) (smemnum frame.inst) (Types.size ty) None
                 | Some (sz, ext) ->
                    assert (packed_size sz <= Types.size ty);
                    let n = packed_size sz in 
                    Eval_symbolic.eval_load ty final_addr
-                     (smemlen frame.inst) n (Some ext)
+                     (smemlen frame.inst) (smemnum frame.inst) n (Some ext)
                )
              in
 
@@ -889,15 +889,16 @@ let rec step (c : config) : config list =
              (* print_pc pc' |> print_endline; *)
              (* print_pc pc'' |> print_endline; *)
 
+             let num = Instance.next_num() in
              let nv =
                (match sz with
                 | None -> Eval_symbolic.eval_store ty final_addr sv
-                            (smemlen frame.inst) (Types.size ty)
+                            (smemlen frame.inst) num (Types.size ty)
                 | Some (sz) ->
                    assert (packed_size sz <= Types.size ty);
                    let n = packed_size sz in
                    Eval_symbolic.eval_store ty final_addr sv
-                     (smemlen frame.inst) n
+                     (smemlen frame.inst) num n
                )
              in
 
@@ -906,7 +907,7 @@ let rec step (c : config) : config list =
              let mem' = Smemory.store_sind_value mem nv in
              let vs', es' = vs', [] in
              (* Update memory with a store *)
-             let nframe = {frame with inst = insert_smemory frame.inst mem'} in
+             let nframe = {frame with inst = insert_smemory frame.inst num mem'} in
 
              (* Path1: we store the value in secret memory *)
              let res =

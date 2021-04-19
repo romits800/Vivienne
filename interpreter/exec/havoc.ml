@@ -89,17 +89,17 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) : config =
         print_loopvar (StoreVar (addr, ty, sz, is_low, mo));
         print_endline (svalue_to_string sv);
      );
- 
+     let num = Instance.next_num() in
      let nv =
        (match sz with
         | None ->
            Eval_symbolic.eval_store ty addr sv
-             (smemlen c.frame.inst) (Types.size ty)
+             (smemlen c.frame.inst) num (Types.size ty)
         | Some (sz) ->
            assert (packed_size sz <= Types.size ty);
            let n = packed_size sz in
            Eval_symbolic.eval_store ty addr sv
-             (smemlen c.frame.inst) n 
+             (smemlen c.frame.inst) num n 
        )
      in
      let mem = smemory c.frame.inst (0l @@ Source.no_region) in
@@ -107,7 +107,7 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) : config =
 
            (*let mem = (havc.frame.inst.smemories, smemlen havc.frame.inst) in*)
 
-     let nframe  = {c.frame with inst = insert_smemory c.frame.inst mem'} in
+     let nframe  = {c.frame with inst = insert_smemory c.frame.inst num mem'} in
 
      let c' = { c with frame = nframe} in
 
