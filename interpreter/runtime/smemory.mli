@@ -19,6 +19,7 @@ val page_size : int64
 val get_secrets : memory -> (int * int) list
 val get_public : memory -> (int * int) list
 val get_stores : memory -> svalue list
+val get_prev_mem : memory -> memory option
 
 val alloc : smemory_type -> memory 
 val alloc2 : int32  -> memory 

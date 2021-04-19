@@ -17,15 +17,19 @@ let si_expr_counter = ref 0
 exception Timeout (*of string*)
 
 
-let compare_tuple v1 v2 =
-  match v1, v2 with 
-    (i1,m1), (i2,m2) when i1 = i2 -> m1 - m2
-  | (i1,m1), (i2,m2) -> i1 - i2
-
+(* let compare_tuple v1 v2 =
+ *   match v1, v2 with 
+ *     (i1,m1), (i2,m2) when i1 = i2 -> m1 - m2
+ *   | (i1,m1), (i2,m2) -> i1 - i2 *)
         
+(* module ExprMem = Map.Make(struct
+ *                      type t = int * int
+ *                      let compare = compare_tuple
+ *                    end) *)
+
 module ExprMem = Map.Make(struct
-                     type t = int * int
-                     let compare = compare_tuple
+                     type t = int 
+                     let compare = (-)
                    end)
 
 let memmap = ref ExprMem.empty
@@ -274,6 +278,30 @@ and si_to_expr pc size ctx mem si: rel_type  =
           (*print_endline "load z3_solver"; 
           print_endline (string_of_int memi);
           print_endline (term_to_string i);*)
+          let rec get_stores tmem newmem mem = 
+            let index = Obj.magic tmem in
+            (try
+               let nm = ExprMem.find index !memmap in
+               nm
+             with Not_found ->
+               let stores = Smemory.get_stores tmem in
+
+               let prev_mem = Smemory.get_prev_mem tmem in
+               let mem' =
+                 match prev_mem with
+                 | Some pmem ->
+                    let newmem' = get_stores pmem newmem mem in
+                    List.fold_left (update_mem pc ctx mem)
+                      newmem' (List.rev stores) 
+                    
+                 | None -> 
+                    List.fold_left (update_mem pc ctx mem)
+                      newmem (List.rev stores) 
+               in
+               memmap := ExprMem.add index mem' !memmap;
+               mem'
+            )
+          in
           (try
              let index = simap_index si mem in
              (* if !Flags.debug then print_endline ("lloc:" ^ index); *)
@@ -284,28 +312,26 @@ and si_to_expr pc size ctx mem si: rel_type  =
              (* if !Flags.debug then (print_endline "not found load";); *)
              let smem, memlen, _ = mem in
              (*let index = Obj.magic smem in*)
-             let index = (num,memi) in
+             (* let index = (num,memi) in *)
              let arr =
-               (try
-                  let nm = ExprMem.find index !memmap in
-                  (* if !Flags.debug then (print_endline "found mem";);
-                   * print_endline (term_to_string si);
-                   * print_endline (string_of_int memi);
-                   * print_endline (string_of_int (num)); *)
-                  (* raise Not_found; *)
-                  nm
-                with Not_found ->
+               (* (try
+                *    let nm = ExprMem.find index !memmap in
+                *    (\* if !Flags.debug then (print_endline "found mem";);
+                *     * print_endline (term_to_string si);
+                *     * print_endline (string_of_int memi);
+                *     * print_endline (string_of_int (num)); *\)
+                *    (\* raise Not_found; *\)
+                *    nm *)
+                (* with Not_found -> *)
                   (* if !Flags.debug then (print_endline "not found mem";); *)
                   let bva = BitVector.mk_sort ctx 32 in
                   let bvd = BitVector.mk_sort ctx 8 in
                   let arr1 = Z3Array.mk_const_s ctx "mem1" bva bvd in
                   let arr2 = Z3Array.mk_const_s ctx "mem2" bva bvd in
                   let newmem = H (arr1, arr2) in
-                  (*  print_endline ("nth_begin" ^ (string_of_int memlen) ^ "," ^ (string_of_int memi));
-                    print_endline (term_to_string si);*)
                   let tmem = Lib.List32.nth smem (Int32.of_int (memlen - memi)) in
                     (*print_endline "nth_end";*)
-                  let stores = Smemory.get_stores tmem in
+                  (*let stores = Smemory.get_stores tmem in*)
                   (*print_endline ("number stores: " ^ (string_of_int (List.length stores)));*)
                   (*List.iter (fun st -> print_endline (svalue_to_string st)) stores;*)
                   (* * if (List.length stores > 0) then (
@@ -313,12 +339,14 @@ and si_to_expr pc size ctx mem si: rel_type  =
                    *   print_endline (string_of_int memi);
                    *   print_endline (string_of_int (num));
                    * ); *)
-                  let fmem = List.fold_left (update_mem pc ctx mem)
-                               newmem (List.rev stores) in
-                  memmap := ExprMem.add index fmem !memmap;
-                  (*memmap := ExprMem.add (num,memi) fmem !memmap;*)
+                  let fmem = get_stores tmem newmem mem in
+                  (* let stores = Smemory.get_stores tmem in
+                   * let fmem = List.fold_left (update_mem pc ctx mem)
+                   *              newmem (List.rev stores) in
+                   * memmap := ExprMem.add index fmem !memmap; *)
+                  (* memmap := ExprMem.add (num,memi) fmem !memmap; *)
                   fmem
-               )
+               (* ) *)
              in
              (*if !Flags.debug then (print_endline "getting index";);*)
              let index = si_to_expr pc size ctx mem i in
