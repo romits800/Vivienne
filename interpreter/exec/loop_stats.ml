@@ -71,7 +71,7 @@ let loop_stats (es : Ast.instr list ) (reg: Source.region) : stats_t option =
          | Loop (bt, es') ->
             loop_stats_i (es' @ est) (increase_instr stats) 
          | If (bt, es1, es2) ->
-            loop_stats_i est (stats |> increase_instr |> increase_ifs)
+            loop_stats_i (es1 @ es2 @ est) (stats |> increase_instr |> increase_ifs)
          | Br x ->
             loop_stats_i est (increase_instr stats) 
          | BrIf x->
