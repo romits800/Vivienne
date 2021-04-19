@@ -43,8 +43,8 @@ type term =
   | Const of identifier * int
   (* | Multi of term list * identifier * int (\* term list, high/low, number_of_elements *\) *)
   (* index in memory and index of memory - because we cannot have the memory here*)
-  | Load of term * int * int * Types.extension option
-  | Store of term * term * int * int (* address, value, memory, size *) 
+  | Load of term * int * int * int * Types.extension option (* index * mem_index * sz * extension type*)
+  | Store of term * term * int * int *  int (* address, value, memory index, memory num, size *) 
   (* | Load of Smemory.t * term (\* memory, index *\) *)
   | App of func * term list
   (* | Let of term * term *)
@@ -138,8 +138,8 @@ let bool_to_term b =  if b then BitVec (1L, 1) else BitVec (0L, 1)
    *   | t, App(Eq, ts) -> App(Eq, t::ts)
    * | _, _-> App(Eq, [t1;t2]) *)
 
-let load t i sz ext = Load(t, i, sz, ext)
-let store t vt i sz = Store(t, vt, i, sz) 
+let load t i n sz ext = Load(t, i, n, sz, ext)
+let store t vt i n sz = Store(t, vt, i, n,  sz) 
 
 let and_ t1 t2 =
   match t1, t2 with
@@ -376,14 +376,14 @@ let func_to_string func =
            
 let rec term_to_string (t : term) : string =
   match t with
-  | Load (i, index, sz, None) ->
+  | Load (i, index, num, sz, None) ->
      "Mem[" ^ term_to_string i ^ "]" ^ "(" ^ string_of_int sz ^ ")(" ^ string_of_int index ^ ")[None]" 
-  | Load (i, index, sz, Some Types.ZX) ->
+  | Load (i, index, num, sz, Some Types.ZX) ->
      "Mem[" ^ term_to_string i ^ "]" ^ "(" ^ string_of_int sz ^ ")(" ^ string_of_int index ^")[Some ZX]" 
-  | Load (i, index, sz, Some Types.SX) ->
+  | Load (i, index, num, sz, Some Types.SX) ->
      "Mem[" ^ term_to_string i ^ "]" ^ "(" ^ string_of_int sz ^ ")(" ^ string_of_int index ^")[Some SX]" 
 
-  | Store (i, v, index, sz) ->
+  | Store (i, v, index, num, sz) ->
      "Mem[" ^ term_to_string i ^ "] = "
                                ^ term_to_string v ^ "(" ^ string_of_int sz ^ ")"  ^ "(" ^ string_of_int index ^")"
   | String s -> s
@@ -414,7 +414,7 @@ let count_depth si n =
       | Const (_) -> count + 1
       | App (f, ts) ->
          List.fold_left (fun x y -> count_depth_i (x+1) y) (count + 1) ts
-      | Load (i, memi, sz, ext) ->
+      | Load (i, memi, num, sz, ext) ->
          count_depth_i (count+1) i
       | Let i -> count + 1
       | _ -> failwith "Not supported."

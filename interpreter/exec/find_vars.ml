@@ -852,12 +852,13 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
            let nv =
              (match sz with
               | None -> Eval_symbolic.eval_load ty final_addr
-                          (smemlen frame.inst) (Types.size ty) None
+                          (smemlen frame.inst) (smemnum frame.inst)
+                          (Types.size ty) None
               | Some (sz, ext) ->
                  assert (packed_size sz <= Types.size ty);
                  let n = packed_size sz in 
                  Eval_symbolic.eval_load ty final_addr
-                   (smemlen frame.inst) n (Some ext)
+                   (smemlen frame.inst) (smemnum frame.inst) n (Some ext)
              )
            in
 
@@ -885,22 +886,24 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
 
            (* if (Z3_solver.is_v_ct_unsat (pcnum, pclet, pc) si mems) then *)
            let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
-
+           let num = Instance.next_num() in
            let nv, lvn =
              (match sz with
               | None ->
                  let nv = Eval_symbolic.eval_store ty final_addr sv
-                            (smemlen frame.inst) (Types.size ty) in
+                            (smemlen frame.inst) num (Types.size ty) in
                  let lvn = (Eval_symbolic.eval_load ty final_addr
-                              (smemlen frame.inst) (Types.size ty) None) in
+                              (smemlen frame.inst) (smemnum frame.inst)
+                              (Types.size ty) None) in
                  nv,lvn
               | Some (sz) ->
                  assert (packed_size sz <= Types.size ty);
                  let n = packed_size sz in
                  let nv = Eval_symbolic.eval_store ty final_addr sv
-                            (smemlen frame.inst) n in
+                            (smemlen frame.inst) num n in
                  let lvn = Eval_symbolic.eval_load ty final_addr
-                             (smemlen frame.inst) n None in
+                             (smemlen frame.inst) (smemnum frame.inst)
+                             n None in
                  nv, lvn)
            in
 
@@ -917,7 +920,7 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
            let mem' = Smemory.store_sind_value mem nv in
            let vs', es' = vs', [] in
            (* Update memory with a store *)
-           let nframe = {frame with inst = insert_smemory frame.inst mem'} in
+           let nframe = {frame with inst = insert_smemory frame.inst num mem'} in
 
            lv, [{c with code = vs', es' @ est;
                                     frame = nframe}]
@@ -1218,12 +1221,14 @@ let find_policy lvs c  =
          (match sz with
           | None ->
              Eval_symbolic.eval_load ty final_addr
-               (smemlen c.frame.inst) (Types.size ty) None
+               (smemlen c.frame.inst) (smemnum c.frame.inst)
+               (Types.size ty) None
           | Some (sz) ->
              assert (packed_size sz <= Types.size ty);
              let n = packed_size sz in
              let lvn = Eval_symbolic.eval_load ty final_addr
-                         (smemlen c.frame.inst) n None in
+                         (smemlen c.frame.inst) (smemnum c.frame.inst)
+                         n None in
              lvn)
        in
        let mem = get_mem_tripple c.frame in

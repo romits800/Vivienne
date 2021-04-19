@@ -862,12 +862,14 @@ let rec fiv_step (lv : triple IndVarMap.t) (c : config) (c_orig : config) :
           let nv =
             (match sz with
              | None -> Eval_symbolic.eval_load ty final_addr
-                         (smemlen frame.inst) (Types.size ty) None
+                         (smemlen frame.inst) (smemnum frame.inst)
+                         (Types.size ty) None
              | Some (sz, ext) ->
                 assert (packed_size sz <= Types.size ty);
                 let n = packed_size sz in 
                 Eval_symbolic.eval_load ty final_addr
-                  (smemlen frame.inst) n (Some ext)
+                  (smemlen frame.inst) (smemnum frame.inst)
+                  n (Some ext)
             )
           in
 
@@ -894,28 +896,32 @@ let rec fiv_step (lv : triple IndVarMap.t) (c : config) (c_orig : config) :
 
           (* if (Z3_solver.is_v_ct_unsat (pclet, pc) si mems) then *)
           let final_addr = SI32 (Si32.add addr (Si32.of_int_u offset)) in
-
+          let num = Instance.next_num() in
           (* let lv = (StoreVar final_addr)::lv in *)
           let nv, lvn, lvn_orig =
             (match sz with
              | None ->
                 let nv = Eval_symbolic.eval_store ty final_addr sv
-                           (smemlen frame.inst) (Types.size ty) in
+                           (smemlen frame.inst) num (Types.size ty) in
                 let lvn = (Eval_symbolic.eval_load ty final_addr
-                             (smemlen frame.inst) (Types.size ty) None) in
+                             (smemlen frame.inst) (smemnum frame.inst)
+                             (Types.size ty) None) in
                 let lvn_orig = (Eval_symbolic.eval_load ty final_addr
-                                  (smemlen c_orig.frame.inst) (Types.size ty) None) in
+                                  (smemlen c_orig.frame.inst)
+                                  (smemnum c_orig.frame.inst) (Types.size ty) None) in
 
                 nv,lvn,lvn_orig
              | Some (sz) ->
                 assert (packed_size sz <= Types.size ty);
                 let n = packed_size sz in
                 let nv = Eval_symbolic.eval_store ty final_addr sv
-                           (smemlen frame.inst) n in
+                           (smemlen frame.inst) num n in
                 let lvn = Eval_symbolic.eval_load ty final_addr
-                            (smemlen frame.inst) n None in
+                            (smemlen frame.inst) (smemnum frame.inst)
+                            n None in
                 let lvn_orig = Eval_symbolic.eval_load ty final_addr
-                                 (smemlen c_orig.frame.inst) n None in
+                                 (smemlen c_orig.frame.inst)
+                                 (smemnum c_orig.frame.inst) n None in
                 nv, lvn, lvn_orig)
           in
           let lv' = get_iv_triple lvn_orig lvn sv lv e.at in
@@ -929,7 +935,7 @@ let rec fiv_step (lv : triple IndVarMap.t) (c : config) (c_orig : config) :
           let mem' = Smemory.store_sind_value mem nv in
           let vs', es' = vs', [] in
           (* Update memory with a store *)
-          let nframe = {frame with inst = insert_smemory frame.inst mem'} in
+          let nframe = {frame with inst = insert_smemory frame.inst num mem'} in
 
           lv', [{c with code = vs', es' @ est;
                        frame = nframe}],  c_orig

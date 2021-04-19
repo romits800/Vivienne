@@ -209,12 +209,12 @@ let get_size e =
 let rec update_mem pc ctx mem a s =
   (*print_endline "update_mem";*)
   match s with
-  | SI32 Store (ad, v, i, sz) ->
+  | SI32 Store (ad, v, i, num, sz) ->
      let size = 32 in
      let index = si_to_expr pc size ctx mem ad in
      let value = si_to_expr pc size ctx mem v in
      split_to_bytes ctx a index value sz 0 7
-  | SI64 Store (ad, v, i, sz) ->
+  | SI64 Store (ad, v, i, num, sz) ->
      let size = 64 in
      let index = si_to_expr pc size ctx mem ad in
      let value = si_to_expr pc size ctx mem v in
@@ -270,7 +270,7 @@ and si_to_expr pc size ctx mem si: rel_type  =
                 letmap := LetMap.add i e !letmap;
                 e
           )
-       | Load (i, memi, sz, _) ->
+       | Load (i, memi, num, sz, _) ->
           (*print_endline "load z3_solver"; 
           print_endline (string_of_int memi);
           print_endline (term_to_string i);*)
@@ -282,7 +282,7 @@ and si_to_expr pc size ctx mem si: rel_type  =
              f
            with Not_found ->
              (* if !Flags.debug then (print_endline "not found load";); *)
-             let smem, memlen, num = mem in
+             let smem, memlen, _ = mem in
              (*let index = Obj.magic smem in*)
              let index = (num,memi) in
              let arr =

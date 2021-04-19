@@ -253,11 +253,11 @@ let update_smemory (inst : module_inst) (mem : Instance.smemory_inst)
   with Failure _ ->
     Crash.error x.at ("undefined smemory " ^ Int32.to_string x.it)
 
-let insert_smemory (inst : module_inst) (mem : Instance.smemory_inst)  = 
+let insert_smemory (inst : module_inst) (smemnum: int) (mem : Instance.smemory_inst)  = 
   try
     {inst with smemories = Lib.List32.insert mem inst.smemories;
                smemlen = inst.smemlen + 1;
-               smemnum = Instance.next_num()}
+               smemnum = smemnum}
   with Failure _ ->
     failwith "insert memory"
 
@@ -433,12 +433,12 @@ let rec assert_invar (lv: loopvar_t list) (c : config) : bool =
      let nv =
        (match sz with
         | None ->
-           Eval_symbolic.eval_load ty addr (smemlen c.frame.inst)
+           Eval_symbolic.eval_load ty addr (smemlen c.frame.inst) (smemnum c.frame.inst)
              (Types.size ty) None
         | Some (sz) ->
            assert (packed_size sz <= Types.size ty);
            let n = packed_size sz in
-           Eval_symbolic.eval_load ty addr (smemlen c.frame.inst) n None 
+           Eval_symbolic.eval_load ty addr (smemlen c.frame.inst) (smemnum c.frame.inst) n None 
        )
      in
      (* let mem = smemory c.frame.inst (0l @@ Source.no_region) in *)
