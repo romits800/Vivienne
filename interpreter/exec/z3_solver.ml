@@ -330,6 +330,9 @@ and si_to_expr pc size ctx mem si: rel_type  =
                   let arr2 = Z3Array.mk_const_s ctx "mem2" bva bvd in
                   let newmem = H (arr1, arr2) in
                   let tmem = Lib.List32.nth smem (Int32.of_int (memlen - memi)) in
+                    (*print_endline "nth_end";*)
+                  (*let stores = Smemory.get_stores tmem in*)
+                  (*print_endline ("number stores: " ^ (string_of_int (List.length stores)));*)
                   (*List.iter (fun st -> print_endline (svalue_to_string st)) stores;*)
                   (* * if (List.length stores > 0) then (
                    *   print_endline (term_to_string si);

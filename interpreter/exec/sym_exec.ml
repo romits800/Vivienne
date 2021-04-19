@@ -830,13 +830,13 @@ let rec step (c : config) : config list =
              print_endline (svalue_to_string si)*)
             );
 
-           if !Flags.debug then (
-             (*let mem = get_mem_tripple frame in
+           (*if !Flags.debug then (
+             let mem = get_mem_tripple frame in
              let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc sv mem in
 
              print_endline "store value is_low:";
-             print_endline (string_of_bool is_low);*)
-           );
+             print_endline (string_of_bool is_low);
+           );*)
 
            let mem = smemory frame.inst (0l @@ e.at) in
            (* let frame = {frame with
