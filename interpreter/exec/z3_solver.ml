@@ -348,12 +348,16 @@ and si_to_expr pc size ctx mem si: rel_type  =
           print_endline (term_to_string i);*)
           let rec get_stores tmem newmem mem optstores = 
             let index = Smemory.get_num tmem in
+            (*print_endline ("memory: " ^ (string_of_int index)); *)
             (try
                let nm = ExprMem.find index !memmap in
+                (*print_endline "Found";*)
                nm
              with Not_found ->
+                (*print_endline "Not Found";*)
                let stores = Smemory.get_stores tmem in
 
+                (*  List.iter (fun st -> print_endline (svalue_to_string st)) stores;*)
                (* let optstores', noexists = List.fold_left check_if_store_exists
                 *                              optstores stores in *)
                let optstores', stores' =
@@ -365,6 +369,9 @@ and si_to_expr pc size ctx mem si: rel_type  =
                      | None -> (mi', acc)
                    )
                    (optstores,[]) stores in
+
+            (*print_endline ("memory': " ^ (string_of_int index));*)
+                 (* List.iter (fun (s,ind,v,sz) -> print_exp ind) stores';*)
 
                let prev_mem = Smemory.get_prev_mem tmem in
                
@@ -1164,17 +1171,19 @@ let write_formula_to_file solver =
 
 let find_solutions (sv: svalue) (pc : pc_ext)
       (mem: Smemory.t list * int * int) : int list =
-  (* print_endline "find_solutions"; *)
+  if !Flags.debug then
+    print_endline "Finding solutions...";
+
   (* svalue_to_string sv |> print_endline; *)
   let ctx = init_solver() in
   (* print_endline "before sv_to_expr"; *)
   let v = sv_to_expr pc sv ctx mem in
   (* print_endline "after sv_to_expr"; *)
   let g = Goal.mk_goal ctx true false false in
-  
   let size = Svalues.size_of sv in
   let v' = BitVector.mk_const_s ctx "sv" size in
-  (* print_endline "after mk_Const"; *)
+ 
+
   let rec find_solutions_i (sv: svalue) (pc : pc_ext)
             (mem: Smemory.t list * int * int) (acc: int64 list) : int64 list =
     (* print_endline "find_solutions_i"; *)
@@ -1215,6 +1224,12 @@ let find_solutions (sv: svalue) (pc : pc_ext)
     remove filename;            (*  *)
     ret
   in
+
+  let num_exprs = Goal.get_num_exprs g in
+      
+  if (!Flags.stats) then
+    Stats.add_new_query "Unknown" (num_exprs) 0.0;
+ 
   let str = find_solutions_i sv pc mem [] in
   List.map (fun v -> Int64.to_int v) str
 
@@ -1222,7 +1237,7 @@ let find_solutions (sv: svalue) (pc : pc_ext)
 let simplify (sv: svalue) (pc : pc_ext)
       (mem: Smemory.t list * int * int) : bool * simpl =
   if !Flags.debug then
-        print_endline "Simplifying";
+        print_endline "Simplifying...";
   (* print_endline "simplify"; *)
   (* svalue_to_string sv |> print_endline; *)
   let ctx = init_solver() in
@@ -1289,6 +1304,9 @@ let simplify (sv: svalue) (pc : pc_ext)
 
 let simplify_pc (pc : pc_ext)
       (mem: Smemory.t list * int * int) : bool * pc_ext =
+  if !Flags.debug then
+        print_endline "Simplifying pc...";
+ 
   let ctx = init_solver() in
   let pc_exp = pc_to_expr pc ctx mem in
   let params = Params.mk_params ctx in
@@ -1455,7 +1473,7 @@ let is_v_ct_unsat ?timeout:(timeout=30) (pc : pc_ext) (sv : svalue)
    * print_endline "is_v_ct_unsat after  sv";
    * (\* print_exp v; *\)
    * print_endline (string_of_int mnum); *)
-  
+ 
   match v with
   | L v -> true
   | H (v1, v2) when Expr.equal v1 v2 -> true
@@ -1473,7 +1491,7 @@ let is_v_ct_unsat ?timeout:(timeout=30) (pc : pc_ext) (sv : svalue)
       let solver = Solver.mk_solver ctx None in
 
       let num_exprs = Goal.get_num_exprs g in
-      (if (!Flags.stats) then
+      if (!Flags.stats) then (
          Stats.add_new_query "Unknown" (num_exprs) 0.0);
       
 
@@ -1487,7 +1505,8 @@ let is_v_ct_unsat ?timeout:(timeout=30) (pc : pc_ext) (sv : svalue)
       (* Printf.printf "Solver v_ct: %s\n" (Solver.to_string solver); *)
       if !Flags.portfolio_only then (
         let filename = write_formula_to_file solver in
-        (* print_endline ("is_v_ct_unsat after write formula " ^ filename); *)
+        if !Flags.debug then
+            print_endline ("is_v_ct_unsat after write formula " ^ filename); 
         let res = 
             try (
                 not (run_solvers filename (read_sat "yices")
@@ -1582,6 +1601,9 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int * int) : bool =
   (* print_endline "is_sat"; *)
   let ctx = init_solver() in
   let v = pc_to_expr pc ctx mem in
+   if !Flags.debug then 
+      print_endline "Calculate pc";
+ 
   (* print_endline "After pc_calc"; *)
   (* print_exp v; *)
   (* (match pc with
@@ -1644,6 +1666,9 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int * int) : bool =
       ) else (
         if  num_exprs > magic_number_2  then (
           let filename = write_formula_to_file solver in
+        if !Flags.debug then
+            print_endline ("is_sat after write formula " ^ filename); 
+ 
           (* print_endline ("mnumber" ^ (string_of_int num_exprs) ^ "," ^ filename); *)
           let timeout = 0 in
           let res = run_solvers filename (read_sat "yices") (read_sat "z3")
@@ -1698,6 +1723,8 @@ let min = Optimize.minimize
 
 let optimize (f : Z3.Optimize.optimize -> Z3.Expr.expr -> Z3.Optimize.handle)
       (pc : pc_ext) (mem: Smemory.t list * int * int) (sv : svalue)  =
+  if !Flags.debug then
+        print_endline "Optimizing...";
   (* print_endline "optimize"; *)
   (* svalue_to_string sv |> print_endline; *)
   (* let cfg = [("model", "true"); ("proof", "false")] in

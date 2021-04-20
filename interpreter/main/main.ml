@@ -44,11 +44,11 @@ let argspec = Arg.align
   "--explicit-leaks", Arg.Set Flags.explicit_leaks, " include explicit leaks to the memory";
   "--estimate-loop-size", Arg.Set Flags.estimate_loop_size, " estimate the loop size and deside on whether to apply the invariant or not ";
   "--replace-expressions", Arg.Set Flags.replace_expressions, " replace long expressions with single high or low variables";
+  "--exclude-zero-address", Arg.Set Flags.exclude_zero_address, " exclude store to zero address for havocing - special for Hacl*";
   "--stats", Arg.Set Flags.stats, " generate solver statistics";
   "--debug", Arg.Set Flags.debug, " enable debug msgs";
   "--num-merge-states", Arg.Int (fun n -> Flags.merge_states := n),
     " Maximum number of paths to merge; used in conjunction with -p (default 4)";
- 
   "-v", Arg.Unit banner, " show version"
 ]
 

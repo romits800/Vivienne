@@ -21,3 +21,4 @@ let debug = ref false
 let estimate_loop_size = ref false
 let replace_expressions = ref false
 let merge_states = ref 4
+let exclude_zero_address = ref false

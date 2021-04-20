@@ -184,13 +184,13 @@ let loop_invariant e' bt frame e vs es es' pcext c =
     (* print_endline "Finding vars"; *)
     let lvs, analyzed =
       let index = (Obj.magic e') in
-      try (
+      (*try (
         let lvs = ModifiedVarsMap.find index !modified_vars in
         (* check if we have different initial policy *)
         let lvs' = find_policy lvs c in
         lvs', compare_policies lvs lvs'
         
-      ) with Not_found -> (
+      ) with Not_found -> ( *)
         (*let lvs, _ = find_modified_vars (Obj.magic e')*)
         let lvs = fv_eval (Obj.magic e')
                     {c with code = vs'', es''} in (* @ List.tl es;} in*)
@@ -203,7 +203,7 @@ let loop_invariant e' bt frame e vs es es' pcext c =
         let lvs = merge_vars lvs in
         modified_vars := ModifiedVarsMap.add index lvs !modified_vars;
         lvs, false
-      )
+      (* ) *)
     in
     if !Flags.debug then (
       print_endline ("Printing loopvars." ^ (string_of_int (Obj.magic e')));
@@ -356,15 +356,15 @@ let rec step (c : config) : config list =
              print_endline ("Loop number of instructions: " ^ (string_of_int (List.length es')));
            );
            
-               let tmp_select reg = 
+               (*let tmp_select reg = 
                 match reg.left.line with
-                (*| 27694
+                | 27694
                  | 27728 
-                 | 27927*)
+                 | 27927
                  | 24689
-                 (*| 24792*) -> true
+                 | 24792 -> true
                 | _ -> false
-               in
+               in*)
 
 
            (match loop_stats es' e.at with
@@ -382,7 +382,7 @@ let rec step (c : config) : config list =
                if !Flags.estimate_loop_size then (
                  estimate_loop_size e' bt frame e vs pcext es' c es 
                )
-               else if !Flags.loop_invar && select_invar stats && tmp_select e.at then (
+               else if !Flags.loop_invar && select_invar stats (*&& tmp_select e.at*) then (
                  if !Flags.debug then print_endline "Running loop invariant.";
                  loop_invariant e' bt frame e vs es es' pcext c
                )
@@ -398,7 +398,7 @@ let rec step (c : config) : config list =
                  )
             | None -> (* No stats *)
                let pcext = pcnum, pclet, pc in
-               if !Flags.loop_invar && tmp_select e.at then (
+               if !Flags.loop_invar (*&& tmp_select e.at*) then (
                  if !Flags.debug then print_endline "Running loop invariant.";
                  loop_invariant e' bt frame e vs es es' pcext c
                 ) else (
@@ -1146,11 +1146,11 @@ let rec step (c : config) : config list =
        let args, vs' = take n vs e.at, drop n vs e.at in
        let lvs, analyzed =
          let index = (Obj.magic l) in
-         try (
+         (*try (
            let lvs = ModifiedVarsMap.find index !modified_vars in
            let lvs' = find_policy lvs c in
            lvs', compare_policies lvs lvs'
-         ) with Not_found -> (
+         ) with Not_found -> ( *)
            let vs'', es'' = vs', [Label (n, [Plain l @@ loc],
                                         (args, code'''), (pcnum, pclet,pc),
                                         c.induction_vars, c.ct_check) @@ e.at] in
@@ -1162,7 +1162,7 @@ let rec step (c : config) : config list =
            let lvs = merge_vars lvs in
            modified_vars := ModifiedVarsMap.add index lvs !modified_vars;
            lvs, false
-         )
+         (* ) *)
        in
        if !Flags.debug then (
            print_endline ("Printing loopvars." ^ (string_of_int (Obj.magic l)));
