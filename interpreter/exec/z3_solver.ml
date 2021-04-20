@@ -223,14 +223,13 @@ let get_size e =
 
 let to_int rt =
   match rt with
-  | L v ->
-     if (Expr.is_numeral v) then
-       Some (int_of_string (Expr.to_string v))
-     else None
-  | H (v1,v2) when v1 = v2 -> 
-     if (Expr.is_numeral v1) then
-       Some (int_of_string (Expr.to_string v1))
-     else None
+  | L v  when BitVector.is_bv_numeral v ->
+       let str = BitVector.numeral_to_string v in
+        print_endline str;
+       Some (int_of_string str)
+  | H (v1,v2) when v1 = v2  && BitVector.is_bv_numeral v1 -> 
+       let str = BitVector.numeral_to_string v1 in
+       Some (int_of_string str)
   | _ -> None
 
 
