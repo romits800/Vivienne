@@ -62,8 +62,8 @@ let  merge_vars (lv: loopvar_t list) : loopvar_t list =
        take care of it *)
     (*| _ :: lvs -> merge_vars_i lvs mp*)
     | (StoreVar (sv, ty, sz, is_low, mo) as lvh) :: lvs ->
-       if (!Flags.debug) then
-         print_loopvar lvh;
+       (*if (!Flags.debug) then
+         print_loopvar lvh;*)
        (* Todo(Romy) add a flag for this *)
        if (!Flags.exclude_zero_address && is_int_addr sv && get_int_addr sv = 0) then (
          if !Flags.debug then print_endline "Address is zero";
