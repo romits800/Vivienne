@@ -1470,7 +1470,7 @@ let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int * int) =
        )
      )
      
-let is_v_ct_unsat ?timeout:(timeout=30) (pc : pc_ext) (sv : svalue)
+let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv : svalue)
       (mem: Smemory.t list * int * int) : bool =
    if !Flags.debug then 
       print_endline "Checking if value is CT..";
@@ -1529,7 +1529,7 @@ let is_v_ct_unsat ?timeout:(timeout=30) (pc : pc_ext) (sv : svalue)
             print_endline ("is_v_ct_unsat after write formula " ^ filename); 
         let res = 
             try (
-                not (run_solvers filename (read_sat "yices")
+                not (run_solvers ~model:model filename (read_sat "yices")
                          (read_sat "z3")
                          (read_sat "cvc4") (read_sat "boolector")
                          (read_sat "bitwuzla") timeout)
@@ -1571,7 +1571,7 @@ let is_v_ct_unsat ?timeout:(timeout=30) (pc : pc_ext) (sv : svalue)
           (* print_endline ("is_v_ct_unsat after write formula " ^ filename); *)
           let res = 
             try (
-                not (run_solvers filename (read_sat "yices") (read_sat "z3")
+                not (run_solvers ~model:model filename (read_sat "yices") (read_sat "z3")
                            (read_sat "cvc4") (read_sat "boolector")
                            (read_sat "bitwuzla") timeout)
             )
