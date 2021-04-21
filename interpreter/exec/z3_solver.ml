@@ -1608,18 +1608,18 @@ let is_v_ct_unsat ?timeout:(timeout=30) (pc : pc_ext) (sv : svalue)
       
 
 
-let is_sat (pc : pc_ext) (mem: Smemory.t list * int * int) : bool =
-   if !Flags.debug then 
-      print_endline "Checking satisfiability..";
- 
+let is_sat ?timeout:(timeout=30) (pc : pc_ext) (mem: Smemory.t list * int * int) : bool =
+  if !Flags.debug then 
+    print_endline "Checking satisfiability..";
+  
   (* check only satisfiability *)
   (* print_endline "is_sat"; *)
   let ctx = init_solver() in
   let v = pc_to_expr pc ctx mem in
-   if !Flags.debug then 
-      print_endline "Calculate pc";
+  if !Flags.debug then 
+    print_endline "Calculate pc";
 
-   (* print_endline (Expr.get_simplify_help ctx); *)
+  (* print_endline (Expr.get_simplify_help ctx); *)
   (* print_endline "After pc_calc"; *)
   (* print_exp v; *)
   (* (match pc with
@@ -1657,10 +1657,16 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int * int) : bool =
 
       if !Flags.portfolio_only then (
         let filename = write_formula_to_file solver in
-        let timeout = 0 in
-        let res = run_solvers filename (read_sat "yices") (read_sat "z3")
-                    (read_sat "cvc4") (read_sat "boolector") 
-                    (read_sat "bitwuzla") timeout in
+        (* let timeout = 0 in *)
+        let res =
+          try ( 
+            run_solvers filename (read_sat "yices") (read_sat "z3")
+              (read_sat "cvc4") (read_sat "boolector") 
+              (read_sat "bitwuzla") timeout
+          )
+          with Timeout -> true
+        in
+
         remove filename;
         res
       ) else if !Flags.z3_only then ( 
@@ -1687,13 +1693,21 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int * int) : bool =
       ) else (
         if  num_exprs > magic_number_2  then (
           let filename = write_formula_to_file solver in
-        if !Flags.debug then
+          if !Flags.debug then
             print_endline ("is_sat after write formula " ^ filename); 
- 
+          
           (* print_endline ("mnumber" ^ (string_of_int num_exprs) ^ "," ^ filename); *)
-          let timeout = 0 in
-          let res = run_solvers filename (read_sat "yices") (read_sat "z3")
-                      (read_sat "cvc4") (read_sat "boolector") (read_sat "bitwuzla") timeout in
+          (* let timeout = 0 in *)
+          let res = 
+            try ( 
+              run_solvers filename (read_sat "yices") (read_sat "z3")
+                (read_sat "cvc4") (read_sat "boolector") 
+                (read_sat "bitwuzla") timeout
+            )
+            with Timeout -> true
+          in
+          (* let res = run_solvers filename (read_sat "yices") (read_sat "z3")
+           *             (read_sat "cvc4") (read_sat "boolector") (read_sat "bitwuzla") timeout in *)
           remove filename;
           res
         ) else (
