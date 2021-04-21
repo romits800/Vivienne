@@ -3,13 +3,23 @@ open Svalues
 open Types
 open Source
 open Pc_type
-
-let rec havoc_vars (lv: loopvar_t list) (c : config) : config =
+open Ast
+open Loop_stats
+   
+let rec havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
   if !Flags.debug then (
     print_endline "Havocing Variables..";
   );
   match lv with
   | LocalVar (x, is_low, mo) :: lvs ->
+     let rec is_store_index indexes acc =
+       match indexes with
+       | {it = LocalGet x'; at}::indexes when x' = x -> (indexes @ acc, true)
+       | {it = LocalTee x'; at}::indexes when x' = x -> (indexes @ acc, true)
+       | ind::indexes -> is_store_index indexes (ind::acc)
+       | [] -> (acc, false)
+     in
+           
      let v = local c.frame x in
      (* let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in *)
      (* let is_low = Z3_solver.is_v_ct_unsat c.pc v mem in *)
@@ -24,23 +34,28 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) : config =
         print_endline "New val";
         print_endline (svalue_to_string newv);
      );
- 
+
+     let indexes = get_store_indexes stats in
+     let indexes', tf = is_store_index indexes [] in
      let c' = { c with frame = update_local c.frame x newv } in
-     (* let c'' =
-      *   match newv, mo with
-      *   | SI32 nv, Increase (SI32 v) ->
-      *      { c' with pc = (fst c'.pc, PCAnd(SI32 (Si32.ge_u nv v), snd c'.pc)) }
-      *   | SI32 nv, Decrease (SI32 v) ->
-      *      { c' with pc = (fst c'.pc, PCAnd(SI32 (Si32.le_u nv v), snd c'.pc)) }
-      *   | SI64 nv, Increase (SI64 v) ->
-      *      { c' with pc = (fst c'.pc, PCAnd(SI64 (Si64.ge_u nv v), snd c'.pc)) }
-      *   | SI64 nv, Decrease (SI64 v) ->
-      *      { c' with pc = (fst c'.pc, PCAnd(SI64 (Si64.le_u nv v), snd c'.pc)) }
-      *   (\* | _, Nothing -> c' *\)
-      *   | _ -> c'
-      * in *)
-     havoc_vars lvs c'
+
+     let c'' =
+       match newv, tf with
+       | SI32 nv, true ->
+          let data = Si32.of_int_u 40000 in
+          let pcnum, pclet, pc = c'.pc in
+          { c' with pc = (pcnum, pclet, PCAnd(SI32 (Si32.ge_u nv data), c'.pc)) }
+       | _ -> c'
+     in
+     havoc_vars lvs c'' (set_store_indexes stats indexes')
   | GlobalVar (x, is_low, mo) :: lvs ->
+     let rec is_store_index indexes acc =
+       match indexes with
+       | {it = GlobalGet x'; at}::indexes when x' = x -> (indexes @ acc, true)
+       | ind::indexes -> is_store_index indexes (ind::acc)
+       | [] -> (acc, false)
+     in
+
      let v = Sglobal.load (sglobal c.frame.inst x) in
      (* let mem = (c..inst.smemories, smemlen c.frame.inst) in *)
      (* let is_low = Z3_solver.is_v_ct_unsat c.pc v mem in *)
@@ -57,22 +72,21 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) : config =
            | Sglobal.Type -> Crash.error x.at "type mismatch at global write")
      in
      
+     let indexes = get_store_indexes stats in
+     let indexes', tf = is_store_index indexes [] in
      let c' = { c with frame = {c.frame with inst = update_sglobal c.frame.inst newg x } } in
-     (* let c'' =
-      *   match newv, mo with
-      *   | SI32 nv, Increase (SI32 v) ->
-      *      { c' with pc = (fst c'.pc, PCAnd(SI32 (Si32.ge_u nv v), snd c'.pc)) }
-      *   | SI32 nv, Decrease (SI32 v) ->
-      *      { c' with pc = (fst c'.pc, PCAnd(SI32 (Si32.le_u nv v), snd c'.pc)) }
-      *   | SI64 nv, Increase (SI64 v) ->
-      *      { c' with pc = (fst c'.pc, PCAnd(SI64 (Si64.ge_u nv v), snd c'.pc)) }
-      *   | SI64 nv, Decrease (SI64 v) ->
-      *      { c' with pc = (fst c'.pc, PCAnd(SI64 (Si64.le_u nv v), snd c'.pc)) }
-      *   (\* | _, Nothing -> c' *\)
-      *   | _ -> c'
-      * in *)
 
-     havoc_vars lvs c'
+     let c'' =
+       match newv, tf with
+       | SI32 nv, true ->
+          let data = Si32.of_int_u 40000 in
+          let pcnum, pclet, pc = c'.pc in
+          { c' with pc = (pcnum, pclet, PCAnd(SI32 (Si32.ge_u nv data), c'.pc)) }
+       | _ -> c'
+     in
+
+
+     havoc_vars lvs c'' (set_store_indexes stats indexes')
   | StoreVar (SI32 addr' as addr, ty, sz, is_low, mo) :: lvs when Si32.is_int addr' ->
 
      let sv =
@@ -125,7 +139,7 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) : config =
        | _ -> c'
      in
 *)
-     havoc_vars lvs c'
-  | StoreVar _ :: lvs -> havoc_vars lvs c
+     havoc_vars lvs c' stats
+  | StoreVar _ :: lvs -> havoc_vars lvs c stats
   | [] -> c
                 

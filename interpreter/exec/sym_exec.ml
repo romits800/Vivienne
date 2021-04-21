@@ -120,7 +120,7 @@ let estimate_loop_size e' bt frame e vs pcext es' c es =
       print_endline "printing loopvars.";
       List.iter print_loopvar lvs
     );
-    let havc = havoc_vars lvs c in
+    let havc = havoc_vars lvs c (Loop_stats.init_stats()) in
 
     (* FIND INDUCTION VARIABLES *)
     let vs'', es'' = vs', [Label (n1, [],
@@ -156,7 +156,7 @@ let estimate_loop_size e' bt frame e vs pcext es' c es =
 
 
 
-let loop_invariant e' bt frame e vs es es' pcext c =
+let loop_invariant e' bt frame e vs es es' pcext c stats =
   let FuncType (ts1, ts2) = block_type frame.inst bt in
   let n1 = Lib.List32.length ts1 in
   let args, vs' = take n1 vs e.at, drop n1 vs e.at in
@@ -183,7 +183,7 @@ let loop_invariant e' bt frame e vs es es' pcext c =
 
     (* print_endline "Finding vars"; *)
     let lvs, analyzed =
-      let index = (Obj.magic e') in
+      (* let index = (Obj.magic e') in *)
       (*try (
         let lvs = ModifiedVarsMap.find index !modified_vars in
         (* check if we have different initial policy *)
@@ -196,12 +196,12 @@ let loop_invariant e' bt frame e vs es es' pcext c =
                     {c with code = vs'', es''} in (* @ List.tl es;} in*)
 
         if !Flags.debug then (
-           print_endline ("Printing loopvars 1." ^ (string_of_int (Obj.magic e')));
-           List.iter print_loopvar lvs
-       );
+          print_endline ("Printing loopvars 1." ^ (string_of_int (Obj.magic e')));
+          List.iter print_loopvar lvs
+        );
 
         let lvs = merge_vars lvs in
-        modified_vars := ModifiedVarsMap.add index lvs !modified_vars;
+        (* modified_vars := ModifiedVarsMap.add index lvs !modified_vars; *)
         lvs, false
       (* ) *)
     in
@@ -211,7 +211,7 @@ let loop_invariant e' bt frame e vs es es' pcext c =
     );
 
     (* HAVOC *)
-    let havc = havoc_vars lvs c in
+    let havc = havoc_vars lvs c stats in
     
     if !Flags.elim_induction_variables then (
       let vs'', es'' = vs', [Label (n1, [], (*Plain e' @@ e.at],*)
@@ -380,12 +380,13 @@ let rec step (c : config) : config list =
                );
                let pcext = pcnum, pclet, pc in
                if !Flags.estimate_loop_size then (
+                 (* failwith "Estimate loop size not supported." *)
                  estimate_loop_size e' bt frame e vs pcext es' c es 
                )
                else if !Flags.loop_invar &&
                          select_invar stats (*&& tmp_select e.at*) then (
                  if !Flags.debug then print_endline "Running loop invariant.";
-                 loop_invariant e' bt frame e vs es es' pcext c
+                 loop_invariant e' bt frame e vs es es' pcext c stats
                )
                else ( (* Not using loop invariants *)
                  let FuncType (ts1, ts2) = block_type frame.inst bt in
@@ -1125,9 +1126,10 @@ let rec step (c : config) : config list =
        )
     | Havoc lvs, vs ->
        (* print_endline "havoc"; *)
-       let havc = havoc_vars lvs c in
-       [{havc with code = vs, List.tl es}]
-
+       (* let havc = havoc_vars lvs c in
+        * [{havc with code = vs, List.tl es}] *)
+       failwith "Havoc: Not in use"
+      
     | FirstPass  (n, es0, (vs', code')), vs ->
        (* print_endline "first pass"; *)
        (* Not used right now *)
@@ -1135,7 +1137,7 @@ let rec step (c : config) : config list =
                                   (pcnum, pclet, pc), c.induction_vars, true) @@ e.at] in
        [{c with code = vs', es' @ List.tl es}]
 
-    | SecondPass  (n, [{it=Plain ((Loop _) as l); at=loc}], (vs''', code''')), vs ->
+    | SecondPass  (n, [{it=Plain ((Loop (bt, es') ) as l); at=loc}], (vs''', code''')), vs ->
        (* print_endline "second pass"; *)
        (* print_endline "Printing induction variables";
         * print_endline (induction_vars_to_string c.induction_vars); *)
@@ -1170,8 +1172,9 @@ let rec step (c : config) : config list =
            List.iter print_loopvar lvs
        );
 
+       let stats = loop_stats es' loc in
        (* HAVOC *)
-       let havc = havoc_vars lvs c in
+       let havc = havoc_vars lvs c stats in
         (* print_endline ("Number memories" ^ string_of_int (List.length havc.frame.inst.smemories));
                   let stores = Smemory.get_stores (List.hd havc.frame.inst.smemories) in
         List.iter (fun st -> print_endline (svalue_to_string st)) stores;

@@ -9,6 +9,8 @@ type stats_t = {
     number_calls: int;
     number_ifs: int;
     number_mem_ops: int;
+    stack_instructions: Ast.instr list;
+    possible_store_indexes: Ast.instr list;
   }
 
 let init_stats () =
@@ -17,7 +19,9 @@ let init_stats () =
     number_instructions = 0;
     number_calls = 0;
     number_ifs = 0;
-    number_mem_ops = 0 }
+    number_mem_ops = 0;
+    stack_instructions = [];
+    possible_store_indexes = []}
   
 let increase_instr stats =
   {stats with number_instructions = stats.number_instructions + 1} 
@@ -34,6 +38,34 @@ let increase_ifs stats =
 let increase_mem stats =
   {stats with number_mem_ops = stats.number_mem_ops + 1} 
 
+let add_instruction v stats =
+  {stats with stack_instructions = v::stats.stack_instructions}
+
+let remove_instruction stats =
+  match stats.stack_instructions with
+  | s::ss -> {stats with stack_instructions = ss}
+  | [] -> stats
+
+let remove_two_instructions stats =
+  match stats.stack_instructions with
+  | s1::s2::ss -> {stats with stack_instructions = ss}
+  | _ -> stats
+
+let remove_three_instructions stats =
+  match stats.stack_instructions with
+  | s1::s2::s3::ss -> {stats with stack_instructions = ss}
+  | _ -> stats
+
+let add_store_index stats =
+  match stats.stack_instructions with
+  | v1::v2::vs -> {stats with possible_store_indexes = v2::stats.possible_store_indexes}
+  | _ -> stats
+
+let get_store_indexes stats =
+  stats.possible_store_indexes
+
+let set_store_indexes stats indexes =
+  {stats with possible_store_indexes = indexes }
 
 let increase_loop_iter x stats =
   let new_const = 
@@ -71,47 +103,64 @@ let loop_stats (es : Ast.instr list ) (reg: Source.region) : stats_t =
          | Loop (bt, es') ->
             loop_stats_i (es' @ est) (increase_instr stats) 
          | If (bt, es1, es2) ->
-            loop_stats_i (es1 @ es2 @ est) (stats |> increase_instr |> increase_ifs)
+            loop_stats_i (es1 @ es2 @ est)
+              (stats |> increase_instr |> increase_ifs |> remove_instruction)
          | Br x ->
             loop_stats_i est (increase_instr stats) 
          | BrIf x->
-            loop_stats_i est (stats |> increase_instr |> increase_ifs)
+            loop_stats_i est (stats |> increase_instr |> increase_ifs |> remove_instruction)
          | Return ->
             loop_stats_i est (increase_instr stats) 
          | Call x ->
             (*TODO(Romy): not taken into consideration*)
             loop_stats_i est (stats |> increase_instr |> increase_calls)
          | Drop->
-            loop_stats_i est (increase_instr stats) 
+            loop_stats_i est (increase_instr stats |> remove_instruction) 
          | Select->
-            loop_stats_i est (increase_instr stats) 
+            loop_stats_i est (increase_instr stats |> remove_three_instructions)
          | LocalGet x ->
-            loop_stats_i est (increase_instr stats) 
+            loop_stats_i est (increase_instr stats |> add_instruction e') 
          | LocalSet x->
-            loop_stats_i est (stats |> increase_instr |> increase_mv)
+            loop_stats_i est (stats |> increase_instr |> increase_mv |> remove_instruction)
          | LocalTee x->
-            loop_stats_i est (stats |> increase_instr |> increase_mv)
+            loop_stats_i est (stats |> increase_instr |> increase_mv
+                              |> remove_instruction |> add_instruction e')
          | GlobalGet x ->
-            loop_stats_i est (increase_instr stats) 
+            loop_stats_i est (increase_instr stats |> add_instruction e') 
          | GlobalSet x->
-            loop_stats_i est (stats |> increase_instr |> increase_mv)
+            loop_stats_i est (stats |> increase_instr |> increase_mv |> remove_instruction)
          | Load {offset; ty; sz; _}->
-            loop_stats_i est (increase_instr stats |> increase_mem) 
+            loop_stats_i est (increase_instr stats |> increase_mem |> add_instruction e') 
          | Store {offset; ty; sz; _}->
-            loop_stats_i est (stats |> increase_instr |> increase_mv |> increase_mem)
+            loop_stats_i est (stats |> increase_instr |> increase_mv |> increase_mem
+                              |> add_store_index |> remove_two_instructions)
          | Const v ->
-            loop_stats_i est (stats |> increase_instr |> increase_loop_iter v.it)
+            loop_stats_i est (stats |> increase_instr |> increase_loop_iter v.it
+                              |> add_instruction e')
          | Test testop->
-            loop_stats_i est (increase_instr stats) 
+            loop_stats_i est (increase_instr stats |> remove_instruction
+                              |> add_instruction e') 
          | Compare relop->
-            loop_stats_i est (increase_instr stats) 
+            loop_stats_i est (increase_instr stats |> remove_two_instructions
+                              |> add_instruction e') 
          | Unary unop->
-            loop_stats_i est (increase_instr stats) 
+            loop_stats_i est (increase_instr stats |> remove_instruction |> add_instruction e') 
          | Binary binop->
-            loop_stats_i est (increase_instr stats) 
+            loop_stats_i est (increase_instr stats |> remove_two_instructions
+                              |> add_instruction e')
          | Convert cvtop->
-            loop_stats_i est (increase_instr stats) 
-         | _ ->
+            loop_stats_i est (increase_instr stats |> remove_instruction |> add_instruction e') 
+         | CallIndirect x ->
+            loop_stats_i est (increase_instr stats |> remove_instruction)
+         (* | MemorySize ->
+          *    loop_stats_i est (increase_instr stats |> remove_instruction)
+          * | MemoryGrow ->
+          *    loop_stats_i est (increase_instr stats |> remove_instruction)
+          * | BrTable (xs,x) ->
+          *   loop_stats_i est (increase_instr stats |> remove_instruction)
+          * | Sconst x ->
+          *   loop_stats_i est (increase_instr stats |> remove_instruction) *)
+        | _ ->
             loop_stats_i est (increase_instr stats) 
         )
      | [] -> stats
