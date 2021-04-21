@@ -1056,7 +1056,7 @@ let read_sat solver_name fname =
   ret
 
 
-let run_solvers input_file yices z3 cvc4 boolector bitwuzla timeout =
+let run_solvers ?model:(model=true) input_file yices z3 cvc4 boolector bitwuzla timeout =
   (* print_endline ("run_solvers: " ^ input_file); *)
   try
     let out_file = input_file ^ ".run_solvers.out" in
@@ -1066,7 +1066,8 @@ let run_solvers input_file yices z3 cvc4 boolector bitwuzla timeout =
     
     (*let timeout_str = if timeout then " timeout -s SIGKILL 10m " else "" in*)
     let timeout_str = if timeout > 0 then " timeout " ^ string_of_int timeout ^ "s " else "" in
-    let rc = Sys.command @@ timeout_str ^ " bash " ^  !path ^ "run_solvers.sh " ^
+    let portfolio_script = if model then  "run_solvers.sh" else "run_solvers_nomodel.sh" in
+    let rc = Sys.command @@ timeout_str ^ " bash " ^  !path ^ portfolio_script ^ " " ^
                              input_file ^ " 1> " ^ out_file ^ " 2> " ^ err_file in
     (*if (rc == 137) then (*for SIGKILL*) *)
     if (rc == 124) then (
@@ -1165,16 +1166,20 @@ let run_solvers input_file yices z3 cvc4 boolector bitwuzla timeout =
    *         )
    *    ) *)
 
-let write_formula_to_file solver =
+let write_formula_to_file ?model:(model=true) solver =
   (* print_endline "write_formula_to_file"; *)
   let filename = Filename.temp_file "wasm_" ".smt2" in
   let oc = open_out filename in
   Printf.fprintf oc "(set-logic QF_ABV)\n";
   Printf.fprintf oc "%s\n" (Solver.to_string solver);
-  Printf.fprintf oc "(check-sat)\n(get-model)\n";
+  Printf.fprintf oc "(check-sat)\n";
+  if model then
+    Printf.fprintf oc "(get-model)\n";
   close_out oc;
   filename
 
+
+  
 let find_solutions (sv: svalue) (pc : pc_ext)
       (mem: Smemory.t list * int * int) : int list =
   if !Flags.debug then
@@ -1656,11 +1661,11 @@ let is_sat ?timeout:(timeout=30) (pc : pc_ext) (mem: Smemory.t list * int * int)
          Stats.add_new_query "Unknown" num_exprs 0.0);
 
       if !Flags.portfolio_only then (
-        let filename = write_formula_to_file solver in
+        let filename = write_formula_to_file ~model:false solver in
         (* let timeout = 0 in *)
         let res =
           try ( 
-            run_solvers filename (read_sat "yices") (read_sat "z3")
+            run_solvers ~model:false filename (read_sat "yices") (read_sat "z3")
               (read_sat "cvc4") (read_sat "boolector") 
               (read_sat "bitwuzla") timeout
           )
@@ -1692,7 +1697,7 @@ let is_sat ?timeout:(timeout=30) (pc : pc_ext) (mem: Smemory.t list * int * int)
            false
       ) else (
         if  num_exprs > magic_number_2  then (
-          let filename = write_formula_to_file solver in
+          let filename = write_formula_to_file ~model:false solver in
           if !Flags.debug then
             print_endline ("is_sat after write formula " ^ filename); 
           
@@ -1700,7 +1705,7 @@ let is_sat ?timeout:(timeout=30) (pc : pc_ext) (mem: Smemory.t list * int * int)
           (* let timeout = 0 in *)
           let res = 
             try ( 
-              run_solvers filename (read_sat "yices") (read_sat "z3")
+              run_solvers ~model:false filename (read_sat "yices") (read_sat "z3")
                 (read_sat "cvc4") (read_sat "boolector") 
                 (read_sat "bitwuzla") timeout
             )
