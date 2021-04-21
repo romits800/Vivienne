@@ -43,7 +43,7 @@ let argspec = Arg.align
   "--no-clean", Arg.Set Flags.no_clean, " don't clean the solver tmp files from the /tmp fs";
   "--explicit-leaks", Arg.Set Flags.explicit_leaks, " include explicit leaks to the memory";
   "--estimate-loop-size", Arg.Set Flags.estimate_loop_size, " estimate the loop size and deside on whether to apply the invariant or not ";
-  "--replace-expressions", Arg.Set Flags.replace_expressions, " replace long expressions with single high or low variables";
+  "--replace-expressions", Arg.Int (fun n -> Flags.replace_expressions := n), " replace long expressions with single high or low variables - num controls the probability";
   "--exclude-zero-address", Arg.Set Flags.exclude_zero_address, " exclude store to zero address for havocing - special for Hacl*";
   "--stats", Arg.Set Flags.stats, " generate solver statistics";
   "--debug", Arg.Set Flags.debug, " enable debug msgs";

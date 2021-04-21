@@ -281,7 +281,7 @@ let rec step (c : config) : config list =
   (* let pclet,pc = simplify_pc frame (pclet,pc) in *)
   let c = {c with pc = (pcnum, pclet,pc)} in
   let vs = 
-    if (!Flags.replace_expressions && (Random.int 100 == 0)) then (
+    if (!Flags.replace_expressions >= 0 && (Random.int !Flags.replace_expressions == 0)) then (
       if !Flags.debug then (
         print_endline "Testing expression simplification.";
       );
@@ -565,7 +565,7 @@ let rec step (c : config) : config list =
         | CallIndirect x, SI32 i :: vs ->
             if !Flags.debug then (
              print_endline ("Calling indirect function:" ^ svalue_to_string (SI32 i));
-             (*print_endline (print_pc c.pc);*)
+             print_endline (print_pc c.pc);
             ); 
             
            (* print_endline "call indirect"; *)
