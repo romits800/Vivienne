@@ -829,16 +829,6 @@ let init_solver () =
 let bin_of_string str =
   let len = String.length str in
   if len < 3 then failwith "Bitvector.of_string : too short string" else
-    (* let size =
-     *   match str.[0], str.[1], str.[2] with
-     *   | '0', 'x', _ -> (len - 2) * 4
-     *   | '0', 'b', _ -> len - 2
-     *   | '+', '0', 'x'
-     *   | '-', '0', 'x' -> (len - 3) * 4
-     *   | '+', '0', 'b'
-     *   | '-', '0', 'b' -> len - 3
-     *   | _ -> failwith "Bitvector.of_string : should start with [+-]?0[xb]"
-     * in *)
     try
       let num = Big_int.big_int_of_string str in
       Big_int.int64_of_big_int num 
@@ -1268,7 +1258,6 @@ let simplify (sv: svalue) (pc : pc_ext)
   let v = sv_to_expr pc sv ctx mem in
   (* print_endline (Expr.get_simplify_help ctx); *)
   let params = Params.mk_params ctx in
-  (* Params.add_int params (Symbol.mk_string ctx "max_steps") 1000000000; *)
   (* print_endline (Params.to_string params); *)
   try
     match v with
@@ -1518,6 +1507,9 @@ let is_v_ct_unsat ?timeout:(timeout=30) (pc : pc_ext) (sv : svalue)
          Stats.add_new_query "Unknown" (num_exprs) 0.0);
       
 
+      let params = Params.mk_params ctx in
+      Params.add_bool params (Symbol.mk_string ctx "sort_store") true;
+
       let s_formulas = (List.map (fun e -> Expr.simplify e None) (Goal.get_formulas g)) in
 
       List.iter (fun f -> Solver.add solver [f]) s_formulas;
@@ -1626,7 +1618,8 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int * int) : bool =
   let v = pc_to_expr pc ctx mem in
    if !Flags.debug then 
       print_endline "Calculate pc";
- 
+
+   (* print_endline (Expr.get_simplify_help ctx); *)
   (* print_endline "After pc_calc"; *)
   (* print_exp v; *)
   (* (match pc with
@@ -1647,10 +1640,15 @@ let is_sat (pc : pc_ext) (mem: Smemory.t list * int * int) : bool =
        | H (v1,v2) -> Goal.add g [v1;v2]
       );
       (* Printf.printf "Goal: %s\n" (Goal.to_string g); *)
-      let solver = Solver.mk_solver ctx None in
-      List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
       (* if !Flags.debug then
        *   Printf.printf "Solver is_sat: %s\n" (Solver.to_string solver); *)
+      let params = Params.mk_params ctx in
+      Params.add_bool params (Symbol.mk_string ctx "sort_store") true;
+
+      let s_formulas = (List.map (fun e -> Expr.simplify e None) (Goal.get_formulas g)) in
+
+      let solver = Solver.mk_solver ctx None in
+      List.iter (fun f -> Solver.add solver [f]) s_formulas;
 
       let num_exprs = Goal.get_num_exprs g in
       
