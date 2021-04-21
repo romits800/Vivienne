@@ -57,7 +57,7 @@ let init_statsmap () =
   statsmap := StatsMap.empty
 
 
-let loop_stats (es : Ast.instr list ) (reg: Source.region) : stats_t option =
+let loop_stats (es : Ast.instr list ) (reg: Source.region) : stats_t = 
   let rec loop_stats_i (es : Ast.instr list ) (stats : stats_t) : stats_t =
     (match es with
      | e'::est ->
@@ -119,17 +119,15 @@ let loop_stats (es : Ast.instr list ) (reg: Source.region) : stats_t option =
   in
   let line = reg.left.line in
   try
-    let _ = StatsMap.find line !statsmap in
-    None
+    let stats = StatsMap.find line !statsmap in
+    stats
   with Not_found->
     let stats = loop_stats_i es (init_stats()) in
     statsmap := StatsMap.add line stats !statsmap;
-    Some stats
+    stats
 
 let select_invar stats =
-  true
-  (*let open Config in
-  if stats.possible_loop_iterations > magic_number_si_loop_iter &&
-       stats.number_modified < magic_number_si_mod_vars then
+  let open Config in
+  if stats.number_modified < magic_number_si_mod_vars then
     true
-  else false *)
+  else false

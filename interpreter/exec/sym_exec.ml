@@ -368,7 +368,7 @@ let rec step (c : config) : config list =
 
 
            (match loop_stats es' e.at with
-              Some stats ->
+              stats ->
                if !Flags.stats then (
                  print_endline (string_of_region e.at);
                  print_endline ("Number of local variables: " ^ (string_of_int (stats.number_modified)));
@@ -382,7 +382,8 @@ let rec step (c : config) : config list =
                if !Flags.estimate_loop_size then (
                  estimate_loop_size e' bt frame e vs pcext es' c es 
                )
-               else if !Flags.loop_invar && select_invar stats (*&& tmp_select e.at*) then (
+               else if !Flags.loop_invar &&
+                         select_invar stats (*&& tmp_select e.at*) then (
                  if !Flags.debug then print_endline "Running loop invariant.";
                  loop_invariant e' bt frame e vs es es' pcext c
                )
@@ -396,20 +397,20 @@ let rec step (c : config) : config list =
                                              c.induction_vars, c.ct_check) @@ e.at] in
                  [{c with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
                  )
-            | None -> (* No stats *)
-               let pcext = pcnum, pclet, pc in
-               if !Flags.loop_invar (*&& tmp_select e.at*) then (
-                 if !Flags.debug then print_endline "Running loop invariant.";
-                 loop_invariant e' bt frame e vs es es' pcext c
-                ) else (
-               let FuncType (ts1, ts2) = block_type frame.inst bt in
-               let n1 = Lib.List32.length ts1 in
-               let args, vs' = take n1 vs e.at, drop n1 vs e.at in
-               let vs', es' = vs', [Label (n1, [Plain e' @@ e.at],
-                                           (args, List.map plain es'), (pcnum, pclet,pc),
-                                           c.induction_vars, c.ct_check) @@ e.at] in
-               [{c with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
-               )
+            (* | stats, true -> (\* No stats *\)
+             *    let pcext = pcnum, pclet, pc in
+             *    if !Flags.loop_invar (\*&& tmp_select e.at*\) then (
+             *      if !Flags.debug then print_endline "Running loop invariant.";
+             *      loop_invariant e' bt frame e vs es es' pcext c
+             *     ) else (
+             *    let FuncType (ts1, ts2) = block_type frame.inst bt in
+             *    let n1 = Lib.List32.length ts1 in
+             *    let args, vs' = take n1 vs e.at, drop n1 vs e.at in
+             *    let vs', es' = vs', [Label (n1, [Plain e' @@ e.at],
+             *                                (args, List.map plain es'), (pcnum, pclet,pc),
+             *                                c.induction_vars, c.ct_check) @@ e.at] in
+             *    [{c with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
+             *    ) *)
            )
         | If (bt, es1, es2), v :: vs' ->
            if (!Flags.debug) then (
