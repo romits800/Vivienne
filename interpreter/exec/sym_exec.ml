@@ -212,7 +212,7 @@ let loop_invariant e' bt frame e vs es es' pcext c stats =
 
     (* HAVOC *)
     let havc = havoc_vars lvs c stats in
-    
+    (*print_pc havc.pc |> print_endline; *)
     if !Flags.elim_induction_variables then (
       let vs'', es'' = vs', [Label (n1, [], (*Plain e' @@ e.at],*)
                                     (args, List.map plain es'), 
@@ -233,7 +233,7 @@ let loop_invariant e' bt frame e vs es es' pcext c stats =
       let assrt = Assert (lvs, e', analyzed) in
       let vs', es' = vs', [Label (n1, [assrt @@ e.at],
                                   (args, List.map plain es'),
-                                  pcext,
+                                  havc.pc,
                                   havc.induction_vars, true) @@ e.at ] in
       [{havc with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
 
@@ -257,7 +257,8 @@ let loop_invariant e' bt frame e vs es es' pcext c stats =
 let rec step (c : config) : config list =
   let {frame; code = vs, es; pc = pcnum, pclet, pc; _} = c in
   let e = List.hd es in
-  (* print_pc pc |> print_endline; *)
+
+
   let vs, (pcnum, pclet, pc) = 
       match vs with
       | v::vs' ->
@@ -562,6 +563,11 @@ let rec step (c : config) : config list =
            [{c with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
 
         | CallIndirect x, SI32 i :: vs ->
+            if !Flags.debug then (
+             print_endline ("Calling indirect function:" ^ svalue_to_string (SI32 i));
+             (*print_endline (print_pc c.pc);*)
+            ); 
+            
            (* print_endline "call indirect"; *)
 
            (* Check Constant-time violation *)
@@ -1183,7 +1189,7 @@ let rec step (c : config) : config list =
 
        if !Flags.elim_induction_variables then (
          let vs'', es'' = vs', [Label (n, [], (*Plain l @@ loc],*)
-                                       (args, code'''), (pcnum, pclet,pc),
+                                       (args, code'''), havc.pc,
                                        c.induction_vars, c.ct_check) @@ e.at] in
          let nhavc = {havc with code = vs'', es'' (*@ List.tl es;*)} in
          let nc = {c with code = vs'', es'' @ List.tl es;} in
@@ -1216,7 +1222,7 @@ let rec step (c : config) : config list =
          let assrt = Assert (lvs, l, analyzed) in
          
          let vs'', es'' = vs', [Label (n, [assrt @@ e.at],
-                                       (args, code'''), (pcnum, pclet,pc),
+                                       (args, code'''), havc.pc,
                                        havc.induction_vars, c.ct_check) @@ e.at] in
 
          (* print_endline "Finish second pass"; *)

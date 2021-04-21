@@ -14,8 +14,8 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
   | LocalVar (x, is_low, mo) :: lvs ->
      let rec is_store_index indexes acc =
        match indexes with
-       | {it = LocalGet x'; at}::indexes when x' = x -> (indexes @ acc, true)
-       | {it = LocalTee x'; at}::indexes when x' = x -> (indexes @ acc, true)
+       | {it = LocalGet x'; at}::indexes when x'.it = x.it -> (indexes @ acc, true)
+       | {it = LocalTee x'; at}::indexes when x'.it = x.it -> (indexes @ acc, true)
        | ind::indexes -> is_store_index indexes (ind::acc)
        | [] -> (acc, false)
      in
@@ -31,27 +31,35 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
        )
      in
      if !Flags.debug then (
-        print_endline "New val";
-        print_endline (svalue_to_string newv);
+        print_endline ("Local" ^ (string_of_int (I32.to_int_u x.it)) ^ " newval:" ^ (svalue_to_string newv));
      );
 
      let indexes = get_store_indexes stats in
      let indexes', tf = is_store_index indexes [] in
-     let c' = { c with frame = update_local c.frame x newv } in
+     let c' = { c with frame = update_local c.frame x newv } in 
+
+     if !Flags.debug then (
+        print_endline "Is index";
+        print_endline (string_of_bool tf);
+     );
+
 
      let c'' =
-       match newv, tf with
-       | SI32 nv, true ->
-          let data = Si32.of_int_u 40000 in
-          let pcnum, pclet, pc = c'.pc in
-          { c' with pc = (pcnum, pclet, PCAnd(SI32 (Si32.ge_u nv data), c'.pc)) }
-       | _ -> c'
+       if !Flags.end_of_ro_data >= 0 then (
+           match newv, tf with
+           | SI32 nv, true ->
+              let data = Si32.of_int_u (!Flags.end_of_ro_data) in
+              let pcnum, pclet, pc = c'.pc in
+              print_endline "adding constraint";
+              { c' with pc = (pcnum, pclet, PCAnd(SI32 (Si32.gt_u nv data), c'.pc)) }
+           | _ -> c'
+       ) else c'
      in
      havoc_vars lvs c'' (set_store_indexes stats indexes')
   | GlobalVar (x, is_low, mo) :: lvs ->
      let rec is_store_index indexes acc =
        match indexes with
-       | {it = GlobalGet x'; at}::indexes when x' = x -> (indexes @ acc, true)
+       | {it = GlobalGet x'; at}::indexes when x'.it = x.it -> (indexes @ acc, true)
        | ind::indexes -> is_store_index indexes (ind::acc)
        | [] -> (acc, false)
      in

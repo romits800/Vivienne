@@ -386,8 +386,9 @@ and si_to_expr pc size ctx mem si: rel_type  =
                     List.fold_left (create_array pc ctx)
                       newmem stores'
                in
-               memmap := ExprMem.add index mem' !memmap;
-               mem'
+               let simp = propagate_policy_one (fun x -> Expr.simplify x None) mem' in
+               memmap := ExprMem.add index simp !memmap;
+               simp
             )
           in
           (try
@@ -861,18 +862,24 @@ let find_sv cmds solver =
                | _ -> false)
            then (
              (match term.term_desc with
-              | TermSpecConstant (CstBinary str) ->
-                 let b64 = bin_of_string ("0b" ^ str) in
-                 (* Int64.to_int b64 |> string_of_int |> print_endline; *)
-                 (* Smtlib_pp.pp_symbol Format.std_formatter symb; *)
-                 (* Smtlib_pp.pp_term Format.std_formatter term; *)
-                 b64
-              | _ ->
-                 print_endline "unknown term";
+              | TermSpecConstant cst ->
+                    (match cst with 
+                     | CstBinary str ->
+                         let b64 = bin_of_string ("0b" ^ str) in
+                         b64
+                     | CstHexadecimal str ->
+                         let b64 = bin_of_string ("0x" ^ str) in
+                         b64
+                     | _ -> 
+                         print_endline "unknown constant";
+                         failwith "Unknown constant");
+ 
+              | _ -> 
+                 print_endline "unknown term desc";
                  Smtlib_pp.pp_symbol Format.std_formatter symb;
                  Smtlib_pp.pp_term Format.std_formatter term;
                  (* print_endline "after prints"; *)
-                 failwith "Unknown term");
+                 failwith "Unknown term desc")
            ) else 
              find_command tl
         | _ ->
@@ -995,7 +1002,7 @@ let read_z3 fname =
           find_sv mc tmp_file
         with e ->
           close_in chan;
-          (* print_endline "failed z3"; *)
+          print_endline "failed z3"; 
           raise e
        ) in
      (* close_in chan; *)
@@ -1004,6 +1011,13 @@ let read_z3 fname =
 
 let read_yices fname =
   (* print_endline "read_yices"; *)
+  let rec find_sv_solution lst =
+    match lst with
+    | ("sv",v)::lst -> v
+    |  _ :: lst -> find_sv_solution lst 
+    | [] -> print_endline "Not found";
+            failwith "Not foujnd sv"
+  in
   let tmp_file = fname ^ ".yices.out" in
   (* let _ = Sys.command @@ "yices-smt2 /tmp/out.smt2 > " ^ tmp_file in *)
   let chan = open_in tmp_file in
@@ -1013,13 +1027,15 @@ let read_yices fname =
      close_in chan;
      None
   | "sat" ->
+     (*print_endline (input_line chan);*)
      let lexbuf = Lexing.from_channel chan in
      (try
-        (* print_endline "reading line"; *)
-        match Smt2_parser.model Smt2_lexer.token lexbuf with
+        let parse = Smt2_parser.model Smt2_lexer.token lexbuf in
+        match  parse with
         | Smtlib.Sat lst ->
            (* print_endline "test binary to string sat"; *)
-           let num = bin_of_string ("0b" ^ snd (List.hd lst)) in
+           let strnum = find_sv_solution lst in
+           let num = bin_of_string ("0b" ^ strnum) in
            (* print_endline "after binary to string sat"; *)
            close_in chan;
            (* print_endline "after close chan"; *)
@@ -1179,20 +1195,28 @@ let find_solutions (sv: svalue) (pc : pc_ext)
   (* print_endline "before sv_to_expr"; *)
   let v = sv_to_expr pc sv ctx mem in
   (* print_endline "after sv_to_expr"; *)
-  let g = Goal.mk_goal ctx true false false in
   let size = Svalues.size_of sv in
   let v' = BitVector.mk_const_s ctx "sv" size in
- 
-
-  let rec find_solutions_i (sv: svalue) (pc : pc_ext)
-            (mem: Smemory.t list * int * int) (acc: int64 list) : int64 list =
-    (* print_endline "find_solutions_i"; *)
-    let vrec = 
+  let vrec = 
       (match v with
        | L v ->  Boolean.mk_eq ctx v' v
        | H (v1,v2) -> Boolean.mk_eq ctx v' v1
       );
-    in
+  in
+  let pcex = pc_to_expr pc ctx mem in
+ 
+  let rec find_solutions_i (sv: svalue) (pc : pc_ext)
+            (mem: Smemory.t list * int * int) (acc: int64 list) : int64 list =
+    if !Flags.debug then
+         print_endline "Finding solutions internal...";
+
+    let g = Goal.mk_goal ctx true false false in
+    let num_exprs = Goal.get_num_exprs g in
+      
+    if (!Flags.stats) then
+       Stats.add_new_query "Unknown" (num_exprs) 0.0;
+ 
+    (* print_endline "find_solutions_i"; *)
     Goal.add g [vrec];
     let previous_values = List.map (fun i ->
                               let bv = Expr.get_sort v'  in
@@ -1200,8 +1224,7 @@ let find_solutions (sv: svalue) (pc : pc_ext)
                               let eq = Boolean.mk_eq ctx old_val v' in
                               Boolean.mk_not ctx eq) acc in
     Goal.add g previous_values;
-    let pcex = pc_to_expr pc ctx mem in
-    (* print_endline "find_solutions_i_ after pc_to_expr"; *)
+   (* print_endline "find_solutions_i_ after pc_to_expr"; *)
     (match pcex with
      | L v ->
         Goal.add g [v]
@@ -1219,17 +1242,17 @@ let find_solutions (sv: svalue) (pc : pc_ext)
     let ret = match run_solvers filename read_yices read_z3
                       read_cvc4 read_boolector read_bitwuzla timeout with
       | None -> acc
-      | Some v -> find_solutions_i sv pc mem (v::acc)
+      | Some v -> 
+        if !Flags.debug then(
+            print_endline "Found_solution";
+            print_endline (Int64.to_string v));
+        find_solutions_i sv pc mem (v::acc)
     in
     remove filename;            (*  *)
     ret
   in
 
-  let num_exprs = Goal.get_num_exprs g in
-      
-  if (!Flags.stats) then
-    Stats.add_new_query "Unknown" (num_exprs) 0.0;
- 
+
   let str = find_solutions_i sv pc mem [] in
   List.map (fun v -> Int64.to_int v) str
 

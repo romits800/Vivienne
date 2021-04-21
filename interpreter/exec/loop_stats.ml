@@ -67,6 +67,46 @@ let get_store_indexes stats =
 let set_store_indexes stats indexes =
   {stats with possible_store_indexes = indexes }
 
+let ast_instr_to_string = function
+  | Unreachable         -> "Unreachable"
+  | Nop                 -> "Nop"
+  | Drop                -> "Drop"
+  | Select              -> "Select"
+  | Block _             -> "Block"
+  | Loop _		-> "Loop"
+  | If _		-> "If"
+  | Br _		-> "Br"
+  | BrIf _		-> "BrIf"
+  | BrTable _		-> "BrTable"
+  | Return              -> "Return"
+  | Call _		-> "Call"
+  | CallIndirect _	-> "CallIndirect"
+  | LocalGet _		-> "LocalGet"
+  | LocalSet _		-> "LocalSet"
+  | LocalTee _		-> "LocalTee"
+  | GlobalGet _		-> "GlobalGet"
+  | GlobalSet _		-> "GlSet"
+  | Load _		-> "Load"
+  | Store _		-> "STore"
+  | MemorySize          -> "MemorySize"
+  | MemoryGrow          -> "MemoryGrow"
+  | Const _		-> "Const"
+  | Sconst _		-> "Sconst"
+  | Test _		-> "Test"
+  | Compare _		-> "Compare"
+  | Unary _		-> "Unary"
+  | Binary _		-> "Binary"
+  | Convert _		-> "Convert"
+
+
+let rec print_store_indexes indexes = 
+    match indexes with
+    {it=LocalGet x;at} :: sts -> print_endline ("Local" ^ (string_of_int (I32.to_int_u x.it )));  print_store_indexes sts
+    | {it=LocalTee x;at} :: sts -> print_endline ("LocalTee" ^ (string_of_int (I32.to_int_u x.it )));  print_store_indexes sts
+    | {it=GlobalGet x;at} :: sts -> print_endline ("LocalTee" ^ (string_of_int (I32.to_int_u x.it )));  print_store_indexes sts
+    | {it= ins;at} :: sts -> print_endline (ast_instr_to_string ins); print_store_indexes sts
+    | [] -> ()
+
 let increase_loop_iter x stats =
   let new_const = 
     match x with

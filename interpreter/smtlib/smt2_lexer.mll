@@ -1,8 +1,8 @@
 {
   open Smt2_parser        (* The type token is defined in parser.mli *)
 }
-let lower = ['a'-'z']
-let upper = ['A'-'Z']
+let lower = ['a'-'z''_']
+let upper = ['A'-'Z''_']
 let digit = ['0'-'9']
 (* let other = ['~' '!' '@' '$' '%' '^' '&' '*'
  *                  '_' '-' '+' '=' '<' '>' '.' '?' '/''|'
