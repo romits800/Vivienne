@@ -135,6 +135,14 @@ let bind category space x =
   space.map <- VarMap.add x.it i space.map;
   i
 
+let anon_fmemset c =
+  0l
+
+let bind_fmemset c x =
+  if x.it = "$memset" then
+    1l
+  else 0l
+  
 let bind_type (c : context) x ty =
   c.types.list <- c.types.list @ [ty];
   bind "type" c.types.space x
@@ -572,7 +580,15 @@ const_expr :
 func :
   | LPAR FUNC bind_var_opt func_fields RPAR
     { let at = at $startpos $endpos in
-      fun c -> let x = $3 c anon_func bind_func @@ at in fun () -> $4 c x at }
+      fun c -> let x = $3 c anon_func bind_func @@ at in
+               fun () ->
+               let x' = $3 c anon_fmemset bind_fmemset @@ at in
+               let tf = if I32.eq x'.it 0l then false else true in
+               let fns, ims, exps = $4 c x at in
+               match fns with
+               | {it=f; at}::fns -> {it={f with memset = tf}; at}::fns, ims, exps
+               | _ -> fns, ims, exps
+    }
 
 func_fields :
   | type_use func_fields_body
@@ -599,7 +615,8 @@ func_fields :
          idesc = FuncImport y @@ at } @@ at ], [] }
   | inline_export func_fields  /* Sugar */
     { fun c x at ->
-      let fns, ims, exs = $2 c x at in fns, ims, $1 (FuncExport x) c :: exs }
+      let fns, ims, exs = $2 c x at in
+      fns, ims, $1 (FuncExport x) c :: exs }
 
 func_fields_import :  /* Sugar */
   | func_fields_import_result { $1 }
@@ -633,7 +650,7 @@ func_result_body :
 func_body :
   | instr_list
     { fun c -> let c' = anon_label c in
-      {ftype = -1l @@ at $startpos $endpos; locals = []; body = $1 c'} }
+      {ftype = -1l @@ at $startpos $endpos; locals = []; body = $1 c'; memset = false} }
   | LPAR LOCAL value_type_list RPAR func_body
     { fun c -> anon_locals c (lazy $3); let f = $5 c in
       {f with locals = $3 @ f.locals} }

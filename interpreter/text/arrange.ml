@@ -270,7 +270,7 @@ let const c =
 (* Functions *)
 
 let func_with_name name f =
-  let {ftype; locals; body} = f.it in
+  let {ftype; locals; body; memset} = f.it in
   Node ("func" ^ name,
     [Node ("type " ^ var ftype, [])] @
     decls "local" locals @

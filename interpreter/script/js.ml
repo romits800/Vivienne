@@ -269,7 +269,7 @@ let wrap module_name item_name wrap_action wrap_assertion at =
     [ Block (ValBlockType None, action @ assertion @ [Return @@ at]) @@ at;
       Unreachable @@ at ]
   in
-  let funcs = [{ftype = 0l @@ at; locals; body} @@ at] in
+  let funcs = [{ftype = 0l @@ at; locals; body; memset = false} @@ at] in
   let m = {empty_module with types; funcs; imports; exports} @@ at in
   Encode.encode m
 

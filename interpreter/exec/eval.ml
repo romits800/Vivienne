@@ -67,6 +67,7 @@ type frame =
 {
   inst : module_inst;
   locals : svalue LocalVarsMap.t ; (*svalue list;*)
+  is_memset : bool;
 }
 
 
@@ -216,7 +217,7 @@ let print_loopvar = function
      
   
     
-let frame inst locals = {inst; locals}
+let frame inst locals = {inst; locals; is_memset = false}
 let config inst vs es =
   {frame = frame inst LocalVarsMap.empty; code = vs, es; budget = 300;
    pc = empty_pc(); msecrets = inst.secrets; loops = []; abstract_loops = [];
@@ -287,6 +288,11 @@ let func_elem inst x i at =
   | FuncElem f -> f
   | _ -> Crash.error at ("type mismatch for element " ^ Int32.to_string i)
 
+let func_is_memset = function
+  | Func.AstFunc (t, inst, f) -> f.it.memset
+  | Func.HostFunc (t, _) -> false
+
+       
 let func_type_of = function
   | Func.AstFunc (t, inst, f) -> t
   | Func.HostFunc (t, _) -> t

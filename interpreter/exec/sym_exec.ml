@@ -384,8 +384,9 @@ let rec step (c : config) : config list =
                  (* failwith "Estimate loop size not supported." *)
                  estimate_loop_size e' bt frame e vs pcext es' c es 
                )
-               else if !Flags.loop_invar &&
-                         select_invar stats (*&& tmp_select e.at*) then (
+               else if !Flags.loop_invar && select_invar stats
+                       && not frame.is_memset (* && tmp_select e.at *)
+               then (
                  if !Flags.debug then print_endline "Running loop invariant.";
                  loop_invariant e' bt frame e vs es es' pcext c stats
                )
@@ -1042,7 +1043,8 @@ let rec step (c : config) : config list =
 
         (*TODO(Romy): Implement Const*)
         | Const v, vs ->
-           (* print_endline "const"; *)
+           (* print_endline "const";
+            * print_endline (string_of_bool (frame.is_memset)); *)
            let va = 
              match v.it with
              | Values.I32 i ->
@@ -1403,6 +1405,8 @@ let rec step (c : config) : config list =
     | Invoke func, vs ->
        (* print_endline "invoke"; *)
        (* print_endline ("inv:" ^ (string_of_int c.counter)); *)
+       let is_memset = func_is_memset func in
+       (* print_endline (string_of_bool is_memset); *)
        let FuncType (ins, out) = func_type_of func in
        let n1, n2 = Lib.List32.length ins, Lib.List32.length out in
        let args, vs' = take n1 vs e.at, drop n1 vs e.at in
@@ -1428,7 +1432,7 @@ let rec step (c : config) : config list =
                                     sglobals = sglobals;
                        } in
 
-           let frame' = {inst = inst'; locals = locals_map} in
+           let frame' = {inst = inst'; locals = locals_map; is_memset = is_memset} in
            let instr' = [Label (n2, [], ([], List.map plain f.it.body),
                                 c.pc, c.induction_vars, c.ct_check) @@ f.at] in 
            let vs', es' = vs', [Frame (n2, frame', ([], instr'), c.pc, c.induction_vars) @@ e.at] in

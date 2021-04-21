@@ -127,6 +127,7 @@ and func' =
   ftype : var;
   locals : value_type list;
   body : instr list;
+  memset : bool;
 }
 
 

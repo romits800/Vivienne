@@ -379,7 +379,7 @@ let check_type (t : type_) =
  *)
 
 let check_func (c : context) (f : func) =
-  let {ftype; locals; body} = f.it in
+  let {ftype; locals; body; memset} = f.it in
   let FuncType (ins, out) = type_ c ftype in
   let c' = {c with locals = ins @ locals; results = out; labels = [out]} in
   check_block c' body (FuncType ([], out)) f.at

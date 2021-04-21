@@ -615,7 +615,7 @@ let code _ s =
   let locals = List.flatten (List.map (Lib.Fun.uncurry Lib.List32.make) nts) in
   let body = instr_block s in
   end_ s;
-  {locals; body; ftype = Source.((-1l) @@ Source.no_region)}
+  {locals; body; ftype = Source.((-1l) @@ Source.no_region); memset = false}
 
 let code_section s =
   section `CodeSection (vec (at (sized code))) [] s
