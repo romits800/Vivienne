@@ -26,34 +26,34 @@ let get_int_addr sv =
 (* Merge new variables *)
 let  merge_vars (lv: loopvar_t list) : loopvar_t list =
   let rec merge_vars_i (lv: loopvar_t list)
-            (mp: loopvar_t LoopVarMap.t) : loopvar_t list =
+            (mp: (loopvar_t * int)  LoopVarMap.t) : loopvar_t list =
     match lv with
     | (LocalVar (x,is_low,mo) as lvh) :: lvs ->
        let str = "Local" ^ string_of_int (Int32.to_int x.it) in 
        (try
-          let is_low_old = get_policy_loopvar (LoopVarMap.find str mp) in
+          let is_low_old = LoopVarMap.find str mp |> fst |> get_policy_loopvar in
           if (is_low_old = is_low) then
               merge_vars_i lvs mp
           else (
-              let mp' = LoopVarMap.add str (LocalVar (x,false,mo)) mp in
+              let mp' = LoopVarMap.add str (LocalVar (x,false,mo), 2) mp in
               merge_vars_i lvs mp'
           )
         with Not_found ->
-          let mp' = LoopVarMap.add str lvh mp in
+          let mp' = LoopVarMap.add str (lvh,2) mp in
           merge_vars_i lvs mp'
        )
     | (GlobalVar (x,is_low,mo) as lvh) :: lvs ->
        let str = "Global" ^ string_of_int (Int32.to_int x.it) in
        (try
-          let is_low_old = LoopVarMap.find str mp |> get_policy_loopvar in
+          let is_low_old = LoopVarMap.find str mp |> fst |> get_policy_loopvar in
           if (is_low_old = is_low) then 
               merge_vars_i lvs  mp
           else (
-              let mp' = LoopVarMap.add str (GlobalVar (x,false,mo)) mp in
+              let mp' = LoopVarMap.add str (GlobalVar (x,false,mo), 2) mp in
               merge_vars_i lvs  mp'
           )
         with Not_found ->
-          let mp' = LoopVarMap.add str lvh mp in
+          let mp' = LoopVarMap.add str (lvh, 2) mp in
           merge_vars_i lvs mp'
        )
 
@@ -63,30 +63,36 @@ let  merge_vars (lv: loopvar_t list) : loopvar_t list =
     (*| _ :: lvs -> merge_vars_i lvs mp*)
     | (StoreVar (sv, ty, sz, is_low, mo) as lvh) :: lvs ->
        if (!Flags.debug) then
-           print_loopvar lvh;
-        (* Todo(Romy) add a flag for this *)
+         print_loopvar lvh;
+       (* Todo(Romy) add a flag for this *)
        if (!Flags.exclude_zero_address && is_int_addr sv && get_int_addr sv = 0) then (
-            if !Flags.debug then print_endline "Address is zero";
-            merge_vars_i lvs mp
+         if !Flags.debug then print_endline "Address is zero";
+         merge_vars_i lvs mp
        ) else (
-            
-           let str = "Store" ^ Pc_type.svalue_to_string sv in
-           (try
-              let is_low_old = LoopVarMap.find str mp |> get_policy_loopvar in
-              if (is_low_old = is_low) then
-                  merge_vars_i lvs mp
-              else (
-                  let mp' = LoopVarMap.add str (StoreVar (sv, ty, sz, false, mo)) mp in
-                  merge_vars_i lvs mp'
-              )
-           with Not_found ->
-             let mp' = LoopVarMap.add str lvh mp in
-             (* merge_vars_i lvs (lvh::acc) mp' *)
-             merge_vars_i lvs mp'
-           )
-      )
+         
+         let str = "Store" ^ Pc_type.svalue_to_string sv in
+         (try
+            let lh, num = LoopVarMap.find str mp in
+            let is_low_old = lh |> get_policy_loopvar in
+            if (is_low_old = is_low) then (
+              (* Increase number of times we found this *)
+              let mp' = LoopVarMap.add str (lvh, num+1) mp in
+              merge_vars_i lvs mp'
+            )
+            else (
+              let mp' = LoopVarMap.add str (StoreVar (sv, ty, sz, false, mo), num+1) mp in
+              merge_vars_i lvs mp'
+            )
+          with Not_found ->
+            let mp' = LoopVarMap.add str (lvh, 1) mp in
+            (* merge_vars_i lvs (lvh::acc) mp' *)
+            merge_vars_i lvs mp'
+         )
+       )
 
-    | [] -> LoopVarMap.bindings mp |> List.map (fun (k,v) -> v) 
+    | [] -> LoopVarMap.bindings mp |>
+              List.filter (fun (k,(v,num)) -> num > 1) |>
+              List.map (fun (k,(v,num)) -> v) 
          
   in
   if (!Flags.debug) then 
