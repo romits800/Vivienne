@@ -7,9 +7,9 @@ rm -f /tmp/*bitwuzla.err /tmp/*bitwuzla.out /tmp/*boolector.err /tmp/*boolector.
 #cvc4_pid=$!
 { z3 -smt2 $filename 1> $filename.z3.out 2> $filename.z3.err ; echo z3; } &
 z3_pid=$!
-#{ bitwuzla -m ${filename}.bool 1> $filename.bitwuzla.out 2> $filename.bitwuzla.err ; echo bitwuzla; } &
+#{ bitwuzla ${filename} 1> $filename.bitwuzla.out 2> $filename.bitwuzla.err ; echo bitwuzla; } &
 #bitwuzla_pid=$!
-{ boolector ${filename}.bool 1> $filename.boolector.out 2> $filename.boolector.err ; echo boolector; } &
+{ boolector ${filename} 1> $filename.boolector.out 2> $filename.boolector.err ; echo boolector; } &
 boolector_pid=$!
 { yices-smt2 $filename 1> $filename.yices.out 2> $filename.yices.err && echo yices; } &
 yices_pid=$!

@@ -386,7 +386,11 @@ and si_to_expr pc size ctx mem si: rel_type  =
                     List.fold_left (create_array pc ctx)
                       newmem stores'
                in
-               let simp = propagate_policy_one (fun x -> Expr.simplify x None) mem' in
+(*      let params = Params.mk_params ctx in
+      Params.add_bool params (Symbol.mk_string ctx "sort_store") true;
+
+*)
+               let simp = mem' in (*propagate_policy_one (fun x -> Expr.simplify x (Some params)) mem' in*)
                memmap := ExprMem.add index simp !memmap;
                simp
             )
@@ -1066,7 +1070,7 @@ let run_solvers ?model:(model=true) input_file yices z3 cvc4 boolector bitwuzla 
     
     (*let timeout_str = if timeout then " timeout -s SIGKILL 10m " else "" in*)
     let timeout_str = if timeout > 0 then " timeout " ^ string_of_int timeout ^ "s " else "" in
-    let portfolio_script = if model then  "run_solvers.sh" else "run_solvers_nomodel.sh" in
+    let portfolio_script = if model then  "run_solvers.sh" else "run_solvers_no_model.sh" in
     let rc = Sys.command @@ timeout_str ^ " bash " ^  !path ^ portfolio_script ^ " " ^
                              input_file ^ " 1> " ^ out_file ^ " 2> " ^ err_file in
     (*if (rc == 137) then (*for SIGKILL*) *)
@@ -1123,10 +1127,12 @@ let run_solvers ?model:(model=true) input_file yices z3 cvc4 boolector bitwuzla 
     with e ->
       close_in chan;
       print_endline ("Solver error " ^ input_file);
+      let chan = open_in err_file in
+      print_endline (input_line chan);
       raise e
   with e ->
     if !Flags.debug then 
-        print_endline "failed - might timeout";
+        print_endline "failed";
     raise e
   (* match fork() with
    * | 0 -> run_cvc4()
@@ -1206,11 +1212,7 @@ let find_solutions (sv: svalue) (pc : pc_ext)
          print_endline "Finding solutions internal...";
 
     let g = Goal.mk_goal ctx true false false in
-    let num_exprs = Goal.get_num_exprs g in
-      
-    if (!Flags.stats) then
-       Stats.add_new_query "Unknown" (num_exprs) 0.0;
- 
+
     (* print_endline "find_solutions_i"; *)
     Goal.add g [vrec];
     let previous_values = List.map (fun i ->
@@ -1226,6 +1228,12 @@ let find_solutions (sv: svalue) (pc : pc_ext)
      | H (v1,v2) ->
         Goal.add g [v1]
     );
+
+    let num_exprs = Goal.get_num_exprs g in
+      
+    if (!Flags.stats) then
+       Stats.add_new_query "Unknown" (num_exprs) 0.0;
+ 
     (* Printf.printf "Goal: %s\n" (Goal.to_string g); *)
     let solver = Solver.mk_solver ctx None in
     List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
@@ -1382,9 +1390,9 @@ let is_unsat (pc : pc_ext) (mem: Smemory.t list * int) =
  *)
   
 let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int * int) =
-  if !Flags.debug then 
+  if !Flags.debug then (
        print_endline "Checking if conditional is CT..";
-
+  );
   let ctx = init_solver() in
 
   let v = sv_to_expr pc sv ctx mem in
@@ -1472,8 +1480,10 @@ let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int * int) =
      
 let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv : svalue)
       (mem: Smemory.t list * int * int) : bool =
-   if !Flags.debug then 
+   if !Flags.debug then (
       print_endline "Checking if value is CT..";
+      print_endline ("Model: " ^ (string_of_bool model));
+   );
  
   (* print_endline "is_v_ct_unsat"; *) 
   (* Pc_type.print_pc (snd pc) |> print_endline;
@@ -1511,11 +1521,15 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
       if (!Flags.stats) then (
          Stats.add_new_query "Unknown" (num_exprs) 0.0);
       
+       if !Flags.debug then (
+          print_endline ("Num exprs: " ^ (string_of_int num_exprs));
+       );
+     
 
       let params = Params.mk_params ctx in
-      Params.add_bool params (Symbol.mk_string ctx "sort_store") true;
+      (*Params.add_bool params (Symbol.mk_string ctx "sort_store") true;*)
 
-      let s_formulas = (List.map (fun e -> Expr.simplify e None) (Goal.get_formulas g)) in
+      let s_formulas = (List.map (fun e -> Expr.simplify e (Some params)) (Goal.get_formulas g)) in
 
       List.iter (fun f -> Solver.add solver [f]) s_formulas;
 
@@ -1524,7 +1538,7 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
 
       (* Printf.printf "Solver v_ct: %s\n" (Solver.to_string solver); *)
       if !Flags.portfolio_only then (
-        let filename = write_formula_to_file solver in
+        let filename = write_formula_to_file ~model:model solver in
         if !Flags.debug then
             print_endline ("is_v_ct_unsat after write formula " ^ filename); 
         let res = 
@@ -1567,7 +1581,7 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
         if num_exprs > magic_number then (
           if !Flags.debug then print_endline "Using portfolio solver..";
  
-          let filename = write_formula_to_file solver in
+          let filename = write_formula_to_file ~model:model solver in
           (* print_endline ("is_v_ct_unsat after write formula " ^ filename); *)
           let res = 
             try (
@@ -1650,7 +1664,7 @@ let is_sat ?timeout:(timeout=30) (pc : pc_ext) (mem: Smemory.t list * int * int)
       let params = Params.mk_params ctx in
       Params.add_bool params (Symbol.mk_string ctx "sort_store") true;
 
-      let s_formulas = (List.map (fun e -> Expr.simplify e None) (Goal.get_formulas g)) in
+      let s_formulas = (List.map (fun e -> Expr.simplify e (Some params)) (Goal.get_formulas g)) in
 
       let solver = Solver.mk_solver ctx None in
       List.iter (fun f -> Solver.add solver [f]) s_formulas;

@@ -127,26 +127,10 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
      let mem = smemory c.frame.inst (0l @@ Source.no_region) in
      let mem' = Smemory.store_sind_value num mem nv in
 
-           (*let mem = (havc.frame.inst.smemories, smemlen havc.frame.inst) in*)
-
      let nframe  = {c.frame with inst = insert_smemory c.frame.inst num mem'} in
 
      let c' = { c with frame = nframe} in
 
-(*     let c'' =
-       match nv, mo with
-       | SI32 nv, Increase (SI32 v) ->
-          { c' with pc = (fst c'.pc, PCAnd(SI32 (Si32.ge_u nv v), snd c'.pc)) }
-       | SI32 nv, Decrease (SI32 v) ->
-          { c' with pc = (fst c'.pc, PCAnd(SI32 (Si32.le_u nv v), snd c'.pc)) }
-       | SI64 nv, Increase (SI64 v) ->
-          { c' with pc = (fst c'.pc, PCAnd(SI64 (Si64.ge_u nv v), snd c'.pc)) }
-       | SI64 nv, Decrease (SI64 v) ->
-          { c' with pc = (fst c'.pc, PCAnd(SI64 (Si64.le_u nv v), snd c'.pc)) }
-       (* | _, Nothing -> c' *)
-       | _ -> c'
-     in
-*)
      havoc_vars lvs c' stats
   | StoreVar _ :: lvs -> havoc_vars lvs c stats
   | [] -> c

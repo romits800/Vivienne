@@ -183,7 +183,7 @@ let loop_invariant e' bt frame e vs es es' pcext c stats =
 
     (* print_endline "Finding vars"; *)
     let lvs, analyzed =
-      (* let index = (Obj.magic e') in *)
+      let index = (Obj.magic e') in 
       (*try (
         let lvs = ModifiedVarsMap.find index !modified_vars in
         (* check if we have different initial policy *)
@@ -202,7 +202,12 @@ let loop_invariant e' bt frame e vs es es' pcext c stats =
 
         let lvs = merge_vars lvs in
         (* modified_vars := ModifiedVarsMap.add index lvs !modified_vars; *)
-        lvs, false
+        try (
+            let lvs' = ModifiedVarsMap.find index !modified_vars in
+            lvs, compare_policies lvs lvs'
+        ) with Not_found -> (
+            lvs, false
+        )
       (* ) *)
     in
     if !Flags.debug then (
@@ -359,14 +364,21 @@ let rec step (c : config) : config list =
            
                (*let tmp_select reg = 
                 match reg.left.line with
-                | 27694
+                (*| 27694
                  | 27728 
                  | 27927
                  | 24689
-                 | 24792 -> true
+                 | 24792 *)
+                (*| 51468 *)
+                (*| 51313 *)
+                (*| 51713 *)
+                (*| 50689 *)
+                (*| 51625 *)
+                (*| 51755*) 
+                | 772-> true
                 | _ -> false
-               in*)
-
+               in
+                *)
 
            (match loop_stats es' e.at with
               stats ->
@@ -385,7 +397,7 @@ let rec step (c : config) : config list =
                  estimate_loop_size e' bt frame e vs pcext es' c es 
                )
                else if !Flags.loop_invar && select_invar stats
-                       && not frame.is_memset (* && tmp_select e.at *)
+                       && not frame.is_memset (*&& tmp_select e.at *)
                then (
                  if !Flags.debug then print_endline "Running loop invariant.";
                  loop_invariant e' bt frame e vs es es' pcext c stats
