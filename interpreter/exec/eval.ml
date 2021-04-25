@@ -476,3 +476,7 @@ let add_high types =
     | _ -> failwith "Not support floats"
   in
   add_high_i types []        
+
+
+let begin_line_number reg = 
+    reg.left.line

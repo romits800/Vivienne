@@ -356,7 +356,7 @@ let rec step (c : config) : config list =
            [{c with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
         | Loop (bt, es'), vs ->
            if !Flags.debug then (
-             print_endline "Entering loop..";
+             print_endline ("Entering loop: " ^ (string_of_int (begin_line_number e.at))) ;
              print_endline (string_of_region e.at);
              (* print_endline ("Number of local variables: " ^ (string_of_int (List.length frame.locals))); *)
              print_endline ("Loop number of instructions: " ^ (string_of_int (List.length es')));
@@ -1517,7 +1517,7 @@ let eval_dfs (cs : config list) : pc_ext list =
         | vs, {it = Trapping msg; at} :: _ -> Trap.error at msg
         | vs, es -> (
            let ncs = step {c with counter = c.counter + 1} in
-           let num_paths' = num_paths * (List.length ncs) in
+           let num_paths' = if (List.length ncs) = 0 then num_paths else  num_paths * (List.length ncs) in
            eval_dfs_i (ncs @ cs') acc num_paths'
         )
        )
@@ -1525,7 +1525,7 @@ let eval_dfs (cs : config list) : pc_ext list =
   in
   let pcs, num_paths = eval_dfs_i cs [] 1 in
   if !Flags.debug || !Flags.stats then
-    print_endline ("Number of paths" ^ (string_of_int num_paths));
+    print_endline ("Number of paths: " ^ (string_of_int num_paths));
   pcs
 
 
