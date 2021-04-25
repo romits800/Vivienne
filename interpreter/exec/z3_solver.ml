@@ -50,6 +50,20 @@ let defmap = ref DefMap.empty
 type simap_t = PC of (int * int) |
                SI of (int * int)
 
+
+let num_queries = ref 0
+
+
+let inc_num_queries () =
+  num_queries := !num_queries + 1
+
+let init_num_queries () =
+  num_queries := 0
+
+let get_num_queries () =
+  !num_queries
+  
+
 let compare_simap v1 v2 =
   match v1, v2 with 
     PC (i1,m1), PC (i2,m2) when i1 = i2 -> m1 - m2
@@ -822,12 +836,14 @@ let clean_solver () =
   memmap := ExprMem.empty;
   letmap := LetMap.empty;
   defmap := DefMap.empty;
-  simap := SiMap.empty
+  simap := SiMap.empty;
+  init_num_queries ()
 
   
   
 let init_solver () =
   (*memmap := ExprMem.empty;*)
+  inc_num_queries ();
   !ctx
 
 let bin_of_string str =
