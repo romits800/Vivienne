@@ -843,7 +843,8 @@ let clean_solver () =
   
 let init_solver () =
   (*memmap := ExprMem.empty;*)
-  inc_num_queries ();
+  if !Flags.stats then
+      inc_num_queries ();
   !ctx
 
 let bin_of_string str =
