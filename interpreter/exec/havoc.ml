@@ -87,16 +87,13 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
      let c'' =
        match newv, tf with
        | SI32 nv, true ->
-          let data = Si32.of_int_u 40000 in
+          let data = Si32.of_int_u (!Flags.end_of_ro_data) in
           let pcnum, pclet, pc = c'.pc in
           { c' with pc = (pcnum, pclet, PCAnd(SI32 (Si32.ge_u nv data), c'.pc)) }
        | _ -> c'
      in
-
-
      havoc_vars lvs c'' (set_store_indexes stats indexes')
   | StoreVar (SI32 addr' as addr, ty, sz, is_low, mo) :: lvs when Si32.is_int addr' ->
-
      let sv =
        (match ty with
         |Types.I32Type ->
@@ -128,10 +125,10 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
      let mem' = Smemory.store_sind_value num mem nv in
 
      let nframe  = {c.frame with inst = insert_smemory c.frame.inst num mem'} in
-
      let c' = { c with frame = nframe} in
 
      havoc_vars lvs c' stats
   | StoreVar _ :: lvs -> havoc_vars lvs c stats
+  | StoreZeroVar _ :: lvs -> havoc_vars lvs c stats
   | [] -> c
                 

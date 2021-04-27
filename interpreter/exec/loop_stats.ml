@@ -217,6 +217,8 @@ let loop_stats (es : Ast.instr list ) (reg: Source.region) : stats_t =
 
 let select_invar stats =
   let open Config in
-  if stats.number_modified < magic_number_si_mod_vars then
+  if stats.number_modified < magic_number_si_mod_vars (*&& *)
+     (*(not !Flags.exclude_zero_address || stats.number_calls = 0)*)
+  then
     true
   else false

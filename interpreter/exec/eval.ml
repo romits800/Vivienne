@@ -76,6 +76,7 @@ type modifier = Increase of svalue | Decrease of svalue | Nothing
 type loopvar_t = LocalVar of int32 Source.phrase * bool * modifier (* local x * is_sat *)
                | GlobalVar of int32 Source.phrase * bool * modifier
                | StoreVar of svalue * Types.value_type * Types.pack_size option * bool * modifier
+               | StoreZeroVar of svalue
 
 
 module MaxLoopSize = Map.Make(struct
@@ -214,6 +215,8 @@ let print_loopvar = function
      "Global " ^ (string_of_bool tf) ^ " " ^ (Int32.to_int i.it |> string_of_int) |> print_endline
   | StoreVar (sv, ty, sz, tf, mo) ->
      "Store " ^ (string_of_bool tf) ^ " " ^ (svalue_to_string sv) |> print_endline
+  | StoreZeroVar (sv) ->
+     "StoreZero: Prev Value " ^ (svalue_to_string sv) |> print_endline
      
   
     
@@ -404,7 +407,8 @@ let get_mem_tripple frame =
   (frame.inst.smemories, smemlen frame.inst, smemnum frame.inst)
 
 (* Assert invariant *)
-let rec assert_invar (lv: loopvar_t list) (c : config) : bool =
+let assert_invar (lv : loopvar_t list) (c : config) : bool =
+ let rec assert_invar_i (lv : loopvar_t list) (c : config) : bool =
   match lv with
   | LocalVar (x, (true as is_low), mo) :: lvs ->
      (* print_endline "localvar"; *)
@@ -414,10 +418,10 @@ let rec assert_invar (lv: loopvar_t list) (c : config) : bool =
      let mem = get_mem_tripple c.frame in
      let is_low_new = Z3_solver.is_v_ct_unsat ~timeout:200 c.pc v mem in
      if !Flags.debug then print_endline (string_of_bool is_low_new);
-     if match_policy is_low is_low_new then assert_invar lvs c
+     if match_policy is_low is_low_new then assert_invar_i lvs c
      else (
        (* print_endline (Int32.to_string x.it); *)
-       let _ = assert_invar lvs c in
+       (*let _ = assert_invar_i lvs c in*)
        false )
 
   | GlobalVar (x, (true as is_low), mo) :: lvs ->
@@ -427,9 +431,9 @@ let rec assert_invar (lv: loopvar_t list) (c : config) : bool =
      let mem = get_mem_tripple c.frame in 
      let is_low_new = Z3_solver.is_v_ct_unsat ~timeout:200 c.pc v mem in
      if !Flags.debug then print_endline (string_of_bool is_low_new);
-     if match_policy is_low is_low_new then assert_invar lvs c
+     if match_policy is_low is_low_new then assert_invar_i lvs c
      else (
-        let _ = assert_invar lvs c in
+        (*let _ = assert_invar_i lvs c in*)
          false
      )
 
@@ -453,13 +457,26 @@ let rec assert_invar (lv: loopvar_t list) (c : config) : bool =
      let is_low_new = Z3_solver.is_v_ct_unsat ~timeout:200 c.pc nv memtuple in
      if !Flags.debug then  print_endline (string_of_bool is_low_new);
 
-     if match_policy is_low is_low_new then assert_invar lvs c
+     if match_policy is_low is_low_new then assert_invar_i lvs c
      else (
-        let _ = assert_invar lvs c in
+        (*let _ = assert_invar_i lvs c in*)
         false)
   (* if it is high, we don't mind if it got low *)
-  | _ :: lvs -> assert_invar lvs c
+  | StoreZeroVar sv :: lvs -> 
+      let ty = Types.I32Type in 
+      let final_addr = Svalues.SI32 (Si32.of_int_u 0) in
+      let nv = Eval_symbolic.eval_load ty final_addr 
+            (smemlen c.frame.inst) (smemnum c.frame.inst) 4 None
+      in
+      let memtuple = get_mem_tripple c.frame in
+      if Z3_solver.are_same sv nv c.pc memtuple then
+          assert_invar_i lvs c
+      else (false)
+  | _ :: lvs -> assert_invar_i lvs c
   | [] -> true
+ in
+
+ assert_invar_i lv c
 
 (* let disable_ct = ref false *)       
   

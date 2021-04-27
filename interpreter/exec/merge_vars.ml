@@ -12,6 +12,7 @@ let get_policy_loopvar = function
   | LocalVar (x,is_low,mo) -> is_low
   | GlobalVar (x,is_low,mo) -> is_low
   | StoreVar (sv, ty, sz, is_low, mo) -> is_low
+  | StoreZeroVar (_) -> true
     
 let is_int_addr sv =
     match sv with
@@ -24,7 +25,7 @@ let get_int_addr sv =
     | _ -> failwith "Address should be i32."
 
 (* Merge new variables *)
-let  merge_vars (lv: loopvar_t list) : loopvar_t list =
+let merge_vars (lv: loopvar_t list) : loopvar_t list =
   let rec merge_vars_i (lv: loopvar_t list)
             (mp: (loopvar_t * int)  LoopVarMap.t) : loopvar_t list =
     match lv with
@@ -88,8 +89,10 @@ let  merge_vars (lv: loopvar_t list) : loopvar_t list =
             (* merge_vars_i lvs (lvh::acc) mp' *)
             merge_vars_i lvs mp'
          )
-       )
+       ) 
 
+    | (StoreZeroVar (sv)) :: lvs ->
+            failwith "Not expected StoreZeroVar in merge_variables."
     | [] -> LoopVarMap.bindings mp |>
               List.filter (fun (k,(v,num)) -> num > 1) |>
               List.map (fun (k,(v,num)) -> v) 
@@ -99,3 +102,16 @@ let  merge_vars (lv: loopvar_t list) : loopvar_t list =
       print_endline "Merging variables";
   let mp = LoopVarMap.empty in
   merge_vars_i lv mp
+
+
+
+let add_store_zero c lvs =
+    let ty = Types.I32Type in 
+    let final_addr = Svalues.SI32 (Si32.of_int_u 0) in
+    let nv = Eval_symbolic.eval_load ty final_addr 
+            (smemlen c.frame.inst) (smemnum c.frame.inst) 4 None
+    in
+    (StoreZeroVar nv):: lvs
+
+
+

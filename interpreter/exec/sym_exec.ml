@@ -201,6 +201,12 @@ let loop_invariant e' bt frame e vs es es' pcext c stats =
         );
 
         let lvs = merge_vars lvs in
+        let lvs = 
+            if !Flags.exclude_zero_address then
+                add_store_zero c lvs 
+            else
+                lvs
+        in
         (* modified_vars := ModifiedVarsMap.add index lvs !modified_vars; *)
         try (
             let lvs' = ModifiedVarsMap.find index !modified_vars in

@@ -1920,3 +1920,164 @@ let get_num_exprs_pc (pc : pc_ext) (mem: Smemory.t list * int * int) : int =
 
   let num_exprs = Goal.get_num_exprs g in
   num_exprs
+
+
+let are_same ?timeout:(timeout=30) ?model:(model=false) (sv1 : svalue) (sv2 : svalue)
+    (pc : pc_ext) (mem: Smemory.t list * int * int) : bool =
+   if !Flags.debug then (
+      print_endline "Checking if values are same..";
+   );
+ 
+  (* print_endline "is_v_ct_unsat"; *) 
+  (* Pc_type.print_pc (snd pc) |> print_endline;
+   * svalue_to_string sv |> print_endline; *)
+   (* svalue_to_string sv |> print_endline; *)
+
+  let ctx = init_solver() in
+  
+  let g = Goal.mk_goal ctx true false false in
+  (* print_endline "is_v_ct_unsat before sv"; *)
+  let v1 = sv_to_expr pc sv1 ctx mem in
+  let v2 = sv_to_expr pc sv2 ctx mem in
+ 
+  match v1,v2 with
+  | L v1, L v2 when Expr.equal v1 v2 -> true
+  | H (v11, v12), H (v21, v22) when Expr.equal v11 v21 && Expr.equal v12 v22 -> true
+  | _, _ -> 
+    let v' = 
+        match v1,v2 with 
+          | L v1, L v2 -> 
+              let v' = Boolean.mk_eq ctx v1 v2 in
+              let v' = Boolean.mk_not ctx v' in
+              v'
+          | H (v11, v12), H (v21, v22) ->
+              let v' = Boolean.mk_eq ctx v11 v21 in
+              let v' = Boolean.mk_not ctx v' in
+              let v'' = Boolean.mk_eq ctx v12 v22 in
+              let v'' = Boolean.mk_not ctx v'' in
+              Boolean.mk_or ctx [v'; v'']
+          | H (v11, v12), L (v2)
+              | L (v2), H (v11, v12) ->
+              let v' = Boolean.mk_eq ctx v11 v2 in
+              let v' = Boolean.mk_not ctx v' in
+              let v'' = Boolean.mk_eq ctx v12 v2 in
+              let v'' = Boolean.mk_not ctx v'' in
+              Boolean.mk_or ctx [v'; v'']
+    in
+            
+    let pcexp = pc_to_expr pc ctx mem in
+    let pcexp' = 
+        match pcexp with
+        | L pcv -> pcv 
+        | H (pcv1, pcv2) -> Boolean.mk_and ctx [pcv1; pcv2]
+    in
+      Goal.add g [v'];
+      Goal.add g [pcexp'];
+      let solver = Solver.mk_solver ctx None in
+
+      let num_exprs = Goal.get_num_exprs g in
+      if (!Flags.stats) then (
+         Stats.add_new_query "Unknown" (num_exprs) 0.0);
+      
+       if !Flags.debug then (
+          print_endline ("Num exprs: " ^ (string_of_int num_exprs));
+       );
+     
+
+      let params = Params.mk_params ctx in
+      (*Params.add_bool params (Symbol.mk_string ctx "sort_store") true;*)
+
+      let s_formulas = (List.map (fun e -> Expr.simplify e (Some params)) (Goal.get_formulas g)) in
+
+      List.iter (fun f -> Solver.add solver [f]) s_formulas;
+
+      (* let stats = Solver.get_statistics solver in
+       * print_endline (Statistics.to_string stats); *)     
+
+      (* Printf.printf "Solver v_ct: %s\n" (Solver.to_string solver); *)
+      if !Flags.portfolio_only then (
+        let filename = write_formula_to_file ~model:model solver in
+        if !Flags.debug then
+            print_endline ("is_v_ct_unsat after write formula " ^ filename); 
+        let res = 
+            try (
+                not (run_solvers ~model:model filename (read_sat "yices")
+                         (read_sat "z3")
+                         (read_sat "cvc4") (read_sat "boolector")
+                         (read_sat "bitwuzla") timeout)
+            ) with Timeout -> (
+                false
+            )
+        in
+        remove filename;
+        res
+      ) else if !Flags.z3_only then (
+
+        (if (!Flags.stats) then
+           Stats.update_query_str "Z3_bindings") ;
+        let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
+        (* print_endline "is_v_ct_unsat_before_solving"; *) 
+        match (Solver.check solver []) with
+        | Solver.UNSATISFIABLE ->
+           (if (!Flags.stats) then
+              Stats.update_query_time (Unix.gettimeofday () -. start));
+           true
+        | Solver.SATISFIABLE ->
+           (if (!Flags.stats) then
+              Stats.update_query_time (Unix.gettimeofday () -. start));
+           (* let model = Solver.get_model solver in
+            * (match model with
+            *  | None -> print_endline "None"
+            *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
+            * ); *)
+           false
+        | _ ->
+          (if (!Flags.stats) then
+             Stats.update_query_time (Unix.gettimeofday () -. start));
+           false
+      ) else (
+        if num_exprs > magic_number then (
+          if !Flags.debug then print_endline "Using portfolio solver..";
+ 
+          let filename = write_formula_to_file ~model:model solver in
+          (* print_endline ("is_v_ct_unsat after write formula " ^ filename); *)
+          let res = 
+            try (
+                not (run_solvers ~model:model filename (read_sat "yices") (read_sat "z3")
+                           (read_sat "cvc4") (read_sat "boolector")
+                           (read_sat "bitwuzla") timeout)
+            )
+            with Timeout -> false
+          in
+          remove filename;
+          res
+        ) else (
+
+          if !Flags.debug then print_endline "Using Z3 solver..";
+
+          (if (!Flags.stats) then
+             Stats.update_query_str "Z3_bindings") ;
+          let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
+          (* print_endline "is_v_ct_unsat_before_solving"; *) 
+          match (Solver.check solver []) with
+          | Solver.UNSATISFIABLE ->
+             (if (!Flags.stats) then
+                Stats.update_query_time (Unix.gettimeofday () -. start));
+             true
+          | Solver.SATISFIABLE ->
+             (if (!Flags.stats) then
+                Stats.update_query_time (Unix.gettimeofday () -. start));
+             (* let model = Solver.get_model solver in
+              * (match model with
+              *  | None -> print_endline "None"
+              *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
+              * ); *)
+             false
+          | _ ->
+             (if (!Flags.stats) then
+                Stats.update_query_time (Unix.gettimeofday () -. start));
+             false
+        )
+        
+      )
+
