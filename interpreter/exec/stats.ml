@@ -40,3 +40,6 @@ let update_query_time t =
   | s::tail -> stats := {!stats with queries = {s with time = t}::tail}
   | [] -> failwith "No query"
 
+
+let print_last () =
+  print_query (List.hd !stats.queries)

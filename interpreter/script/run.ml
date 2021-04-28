@@ -354,8 +354,8 @@ let run_action act : Values.value list =
            let stop = Unix.gettimeofday () in
            trace (Printf.sprintf "Execution time: %fs" (stop -. start));
            if (!Flags.stats) then (
-             trace (Printf.sprintf "Solver statistics:");
-             Stats.print_stats();
+             (* trace (Printf.sprintf "Solver statistics:"); *)
+             (* Stats.print_stats(); *)
              print_endline ("Number solver queries: " ^ (string_of_int (Z3_solver.get_num_queries ())));
            );
          with e ->
