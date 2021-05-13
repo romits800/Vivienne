@@ -478,7 +478,7 @@ let rec step (c : config) : config list =
                  let index =  (Obj.magic e') in
                  (try let _ = VulnerabilitiesMap.find index !cond_vuln in ()
                   with Not_found ->
-                   let solv = Z3_solver.is_ct_unsat (pcnum, pclet, pc) v mem in
+                   let solv = Z3_solver.is_ct_unsat ~timeout:60 ~model:(!Flags.generate_model) (pcnum, pclet, pc) v mem in
                    if solv then () else (
                      cond_vuln := VulnerabilitiesMap.add (Obj.magic e') solv !cond_vuln;
                      ConstantTime.warn e.at "If: Constant-time Violation"
@@ -548,7 +548,7 @@ let rec step (c : config) : config list =
                  let index =  (Obj.magic e') in
                  (try let _ = VulnerabilitiesMap.find index !cond_vuln in ()
                   with Not_found ->
-                    let solv = Z3_solver.is_ct_unsat (pcnum, pclet, pc) v mem in
+                    let solv = Z3_solver.is_ct_unsat ~timeout:60 ~model:(!Flags.generate_model) (pcnum, pclet, pc) v mem in
                     if solv then () else (
                       cond_vuln := VulnerabilitiesMap.add index solv !cond_vuln;
                       ConstantTime.warn e.at "Br_if: Constant-time Violation"
@@ -584,14 +584,13 @@ let rec step (c : config) : config list =
         | CallIndirect x, SI32 i :: vs ->
             if !Flags.debug then (
              print_endline ("Calling indirect function:" ^ svalue_to_string (SI32 i));
-             print_endline (print_pc c.pc);
             ); 
             
            (* print_endline "call indirect"; *)
 
            (* Check Constant-time violation *)
            let mem = get_mem_tripple frame in
-           if (Z3_solver.is_v_ct_unsat ~timeout:60 ~model:false  (pcnum, pclet, pc) (SI32 i) mem) then ()
+           if (Z3_solver.is_v_ct_unsat ~timeout:60 ~model:(!Flags.generate_model)  (pcnum, pclet, pc) (SI32 i) mem) then ()
            else ConstantTime.warn e.at "CallIndirect: Constant-time Violation";
 
            (* print_endline "before find_solutions"; *)
@@ -627,7 +626,7 @@ let rec step (c : config) : config list =
            let res = [{c with code = vs', es' @ List.tl es; progc = Obj.magic e'}] in
            if (!Flags.select_unsafe) then (
              let mem = get_mem_tripple frame in
-             if Z3_solver.is_ct_unsat (pcnum, pclet, pc) v0 mem then res
+             if Z3_solver.is_ct_unsat ~timeout:60 ~model:(!Flags.generate_model) (pcnum, pclet, pc) v0 mem then res
              else (
                ConstantTime.warn e.at "Select: Constant-time Violation";
                res
@@ -814,7 +813,7 @@ let rec step (c : config) : config list =
                  try
                    VulnerabilitiesMap.find index !memindex_vuln, true 
                  with Not_found ->
-                       let solv = Z3_solver.is_v_ct_unsat ~timeout:60 ~model:true
+                       let solv = Z3_solver.is_v_ct_unsat ~timeout:60 ~model:(!Flags.generate_model)
                                     (pcnum, pclet, pc) final_addr mem in
                        if not solv then (
                          memindex_vuln := VulnerabilitiesMap.add index solv !memindex_vuln
@@ -912,7 +911,7 @@ let rec step (c : config) : config list =
                  try
                    VulnerabilitiesMap.find index !memindex_vuln, true 
                  with Not_found ->
-                       let solv = Z3_solver.is_v_ct_unsat ~timeout:60 ~model:true
+                       let solv = Z3_solver.is_v_ct_unsat ~timeout:60 ~model:(!Flags.generate_model)
                                     (pcnum, pclet, pc) final_addr mems in
                        if not solv then ( 
                          memindex_vuln := VulnerabilitiesMap.add index solv !memindex_vuln;
@@ -979,7 +978,7 @@ let rec step (c : config) : config list =
                    let index =  (Obj.magic e') in
                    try VulnerabilitiesMap.find index !noninter_vuln, true 
                    with Not_found ->
-                         let solv = Z3_solver.is_v_ct_unsat ~timeout:60 ~model:true (pcnum'', pclet, pc'') sv mems in
+                         let solv = Z3_solver.is_v_ct_unsat ~timeout:60 ~model:(!Flags.generate_model) (pcnum'', pclet, pc'') sv mems in
                          if not solv then  
                            noninter_vuln := VulnerabilitiesMap.add index solv !noninter_vuln;
                          solv, false)

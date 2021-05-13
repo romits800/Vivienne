@@ -33,7 +33,8 @@ let argspec = Arg.align
   "-t", Arg.Set Flags.trace, " trace execution";
   "-b", Arg.Set Flags.bfs, " run breadth first Search instead of default DFS";
   "-l", Arg.Set Flags.loop_invar, " use loop invariant";
-  "-m", Arg.Set Flags.simplify, " enable simplify from Z3";
+  "-m", Arg.Set Flags.generate_model, " generate model for CT violations";
+  "--simplify", Arg.Set Flags.simplify, " enable simplify from Z3";
   "-p", Arg.Set Flags.pfs, " run pfs instead of default DFS";
   "-S", Arg.Set Flags.select_unsafe, " set \"select\" instruction as unsafe";
   "--z3-only", Arg.Set Flags.z3_only, " run using the z3 bindings";

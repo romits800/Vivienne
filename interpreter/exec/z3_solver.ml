@@ -331,12 +331,19 @@ and si_to_expr pc size ctx mem si: rel_type  =
           )
        | App (f, ts) ->
           (* print_endline "app"; *)
-          (* (try
-           *    SiMap.find (Obj.magic si) !simap
-           *  with Not_found -> *)
+           (*let index = simap_index si mem in
+           (try
+             SiMap.find index !simap
+            with Not_found -> *)
              let res = app_to_expr pc ts size ctx mem f in
+             (*let simp = propagate_policy_one (fun x -> Expr.simplify x None) res in
+             (* print_endline "simplify_after"; *)
+             (* print_exp simp; *)
+             simap := SiMap.add (simap_index si mem) simp !simap;
+ 
+             simp
+           ) *)
              res
-          (* ) *)
        | Let (i) ->
           (*print_endline "let z3_solver"; 
                 print_endline (string_of_int i);
@@ -404,7 +411,7 @@ and si_to_expr pc size ctx mem si: rel_type  =
       Params.add_bool params (Symbol.mk_string ctx "sort_store") true;
 
 *)
-               let simp = mem' in (*propagate_policy_one (fun x -> Expr.simplify x (Some params)) mem' in*)
+               let simp = propagate_policy_one (fun x -> Expr.simplify x None) mem' in
                memmap := ExprMem.add index simp !memmap;
                simp
             )
@@ -447,6 +454,7 @@ and si_to_expr pc size ctx mem si: rel_type  =
                    *   print_endline (string_of_int (num));
                    * ); *)
                   let fmem = get_stores tmem newmem mem (ExprMem.empty) in
+                
                   (* let stores = Smemory.get_stores tmem in
                    * let fmem = List.fold_left (update_mem pc ctx mem)
                    *              newmem (List.rev stores) in
@@ -764,26 +772,28 @@ and sv_to_expr pc sv ctx mem =
   (*TODO(Romy): Not implemented*)
   | _ -> failwith "Float not implemented."
   in
-  (try
+  (* (try
      let index = simap_index v mem in
      (* if !Flags.debug then print_endline ("svloc:" ^ index); *)
      let f =  SiMap.find index !simap in
-     (* if !Flags.debug then print_endline "found sv_to_expr"; *)
+     (*if !Flags.debug then print_endline "found sv_to_expr"; *)
      (* print_exp f; *)
      (* raise Not_found; *)
      f 
    with Not_found ->
+     (*if !Flags.debug then print_endline "not found sv_to_expr"; *)
          (* if !Flags.debug then (
           *   print_endline "notfound sv_to_expr";
           *   (\* print_endline (svalue_to_string sv); *\)
-          * ); *)
+          * ); *)*)
          let v' = si_to_expr pc n ctx mem v in
          (* print_endline "sv_to_expr before simp"; *)
-         let simp = propagate_policy_one (fun x -> Expr.simplify x None) v' in
+         (*let simp = propagate_policy_one (fun x -> Expr.simplify x None) v' in
          (* print_endline "sv_to_expr after simp"; *)
          simap := SiMap.add (simap_index v mem) simp !simap;
          (* print_endline "sv_to_expr simp end"; *)
-         simp)
+         simp)*)
+    v'
 
 
 
@@ -1107,6 +1117,7 @@ let run_solvers ?model:(model=true) input_file yices z3 cvc4 boolector bitwuzla 
           Stats.update_query_time (Unix.gettimeofday () -. start);
           stats := {!stats with yices = !stats.yices + 1 };
           Stats.update_query_str "Yices";
+          Stats.print_last();
         );
         yices input_file
       )
@@ -1114,28 +1125,36 @@ let run_solvers ?model:(model=true) input_file yices z3 cvc4 boolector bitwuzla 
         if (!Flags.stats) then (
           Stats.update_query_time (Unix.gettimeofday () -. start);
           stats := {!stats with z3 = !stats.z3 + 1 };
-          Stats.update_query_str "Z3";);
+          Stats.update_query_str "Z3";
+          Stats.print_last();
+        );
         z3 input_file
       )
       else if solver = "cvc4" then (
         if (!Flags.stats) then (
           Stats.update_query_time (Unix.gettimeofday () -. start);
           stats := {!stats with cvc4 = !stats.cvc4 + 1 };
-          Stats.update_query_str "CVC4";);
+          Stats.update_query_str "CVC4";
+          Stats.print_last();
+        );
         cvc4 input_file
       )
       else if solver = "boolector" then (
         if (!Flags.stats) then (
           Stats.update_query_time (Unix.gettimeofday () -. start);
           stats := {!stats with boolector = !stats.boolector + 1 };
-          Stats.update_query_str "Boolector";);
+          Stats.update_query_str "Boolector";
+          Stats.print_last();
+        );
         boolector input_file
       )
       else if solver = "bitwuzla" then (
         if (!Flags.stats) then (
           Stats.update_query_time (Unix.gettimeofday () -. start);
           stats := {!stats with bitwuzla = !stats.bitwuzla + 1 };
-          Stats.update_query_str "Bitwuzla";);
+          Stats.update_query_str "Bitwuzla";
+          Stats.print_last();
+        );
         bitwuzla input_file
       )
 
@@ -1208,11 +1227,18 @@ let find_solutions (sv: svalue) (pc : pc_ext)
   if !Flags.debug then
     print_endline "Finding solutions...";
 
+  let start_t = if !Flags.debug then Unix.gettimeofday() else 0.0 in
   (* svalue_to_string sv |> print_endline; *)
   let ctx = init_solver() in
   (* print_endline "before sv_to_expr"; *)
   let v = sv_to_expr pc sv ctx mem in
   (* print_endline "after sv_to_expr"; *)
+
+  if !Flags.debug then (
+    let dt = Unix.gettimeofday () -. start_t in
+    "Finding solutions time: " ^ (string_of_float dt) |> print_endline;
+  );
+
   let size = Svalues.size_of sv in
   let v' = BitVector.mk_const_s ctx "sv" size in
   let vrec = 
@@ -1248,6 +1274,7 @@ let find_solutions (sv: svalue) (pc : pc_ext)
 
     let num_exprs = Goal.get_num_exprs g in
       
+ 
     if (!Flags.stats) then
        Stats.add_new_query "Unknown" (num_exprs) 0.0;
  
@@ -1406,15 +1433,23 @@ let is_unsat (pc : pc_ext) (mem: Smemory.t list * int) =
     )
  *)
   
-let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int * int) =
+let is_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int * int) =
   if !Flags.debug then (
        print_endline "Checking if conditional is CT..";
   );
+  let start_t = if !Flags.debug then Unix.gettimeofday() else 0.0 in
+
   let ctx = init_solver() in
 
   let v = sv_to_expr pc sv ctx mem in
   let pc = pc_to_expr pc ctx mem in
   let g = Goal.mk_goal ctx true false false in
+
+  if !Flags.debug then (
+    let dt = Unix.gettimeofday () -. start_t in
+    "Checking cond time: " ^ (string_of_float dt) |> print_endline;
+  );
+
   match v with
   | L v -> true
   | H (v1,v2) ->
@@ -1430,9 +1465,8 @@ let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int * int) =
       | H (pc1, pc2) ->  Goal.add g [pc1; pc2 ]
      );
 
-
      let num_exprs = Goal.get_num_exprs g in
-     
+
      if (!Flags.stats) then
         Stats.add_new_query "Unknown" (num_exprs) 0.0;
       
@@ -1442,7 +1476,6 @@ let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int * int) =
      (* Printf.printf "Solver: %s\n" (Solver.to_string solver); *)
      if !Flags.portfolio_only then (
        let filename = write_formula_to_file solver in
-       let timeout = 0 in
        let res = not (run_solvers filename (read_sat "yices")
                         (read_sat "z3") (read_sat "cvc4")
                         (read_sat "boolector") (read_sat "bitwuzla") timeout) in
@@ -1475,9 +1508,9 @@ let is_ct_unsat (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int * int) =
           false
      ) else (
        if num_exprs > magic_number then (
-         let filename = write_formula_to_file solver in
+         let filename = write_formula_to_file ~model:model solver in
          let timeout = 0 in
-         let res = not (run_solvers filename (read_sat "yices")
+         let res = not (run_solvers ~model:model filename (read_sat "yices")
                           (read_sat "z3") (read_sat "cvc4")
                           (read_sat "boolector") (read_sat "bitwuzla") 
                           timeout) in
@@ -1515,11 +1548,19 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
    * svalue_to_string sv |> print_endline; *)
    (* svalue_to_string sv |> print_endline; *)
 
+  let start_t = if !Flags.debug then Unix.gettimeofday() else 0.0 in
+
   let ctx = init_solver() in
   
   let g = Goal.mk_goal ctx true false false in
   (* print_endline "is_v_ct_unsat before sv"; *)
   let v = sv_to_expr pc sv ctx mem in
+
+  if !Flags.debug then (
+    let dt = Unix.gettimeofday () -. start_t in
+    "Checking vct time: " ^ (string_of_float dt) |> print_endline;
+  );
+
 
   (* let _,_,mnum = mem in
    * print_endline "is_v_ct_unsat after  sv";
@@ -1543,13 +1584,10 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
       let solver = Solver.mk_solver ctx None in
 
       let num_exprs = Goal.get_num_exprs g in
+
       if (!Flags.stats) then (
          Stats.add_new_query "Unknown" (num_exprs) 0.0);
       
-      if !Flags.debug then (
-        print_endline ("Num exprs: " ^ (string_of_int num_exprs));
-      );     
-
       let params = Params.mk_params ctx in
       (*Params.add_bool params (Symbol.mk_string ctx "sort_store") true;*)
 
@@ -1661,13 +1699,19 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
 let is_sat ?timeout:(timeout=30) (pc : pc_ext) (mem: Smemory.t list * int * int) : bool =
   if !Flags.debug then 
     print_endline "Checking satisfiability..";
+
+
+  let start_t = if !Flags.debug then Unix.gettimeofday() else 0.0 in
   
   (* check only satisfiability *)
   (* print_endline "is_sat"; *)
   let ctx = init_solver() in
   let v = pc_to_expr pc ctx mem in
-  if !Flags.debug then 
-    print_endline "Calculate pc";
+
+  if !Flags.debug then (
+    let dt = Unix.gettimeofday () -. start_t in
+    "Checking sat time: " ^ (string_of_float dt) |> print_endline;
+  );
 
   (* print_endline (Expr.get_simplify_help ctx); *)
   (* print_endline "After pc_calc"; *)
@@ -1947,6 +1991,7 @@ let are_same ?timeout:(timeout=30) ?model:(model=false) (sv1 : svalue) (sv2 : sv
   if !Flags.debug then (
     print_endline "Checking if values are same..";
   );
+  let start_t = if !Flags.debug then Unix.gettimeofday() else 0.0 in
   
   (* print_endline "is_v_ct_unsat"; *) 
   (* Pc_type.print_pc (snd pc) |> print_endline;
@@ -1959,6 +2004,14 @@ let are_same ?timeout:(timeout=30) ?model:(model=false) (sv1 : svalue) (sv2 : sv
   (* print_endline "is_v_ct_unsat before sv"; *)
   let v1 = sv_to_expr pc sv1 ctx mem in
   let v2 = sv_to_expr pc sv2 ctx mem in
+
+
+  if !Flags.debug then (
+    let dt = Unix.gettimeofday () -. start_t in
+    "Checking same time: " ^ (string_of_float dt) |> print_endline;
+  );
+
+
   
   match v1,v2 with
   | L v1, L v2 when Expr.equal v1 v2 -> true
@@ -1996,14 +2049,10 @@ let are_same ?timeout:(timeout=30) ?model:(model=false) (sv1 : svalue) (sv2 : sv
      let solver = Solver.mk_solver ctx None in
 
      let num_exprs = Goal.get_num_exprs g in
+
      if (!Flags.stats) then (
        Stats.add_new_query "Unknown" (num_exprs) 0.0);
      
-     if !Flags.debug then (
-       print_endline ("Num exprs: " ^ (string_of_int num_exprs));
-     );
-     
-
      let params = Params.mk_params ctx in
      (*Params.add_bool params (Symbol.mk_string ctx "sort_store") true;*)
 

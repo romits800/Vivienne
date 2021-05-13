@@ -1,5 +1,5 @@
-let magic_number = 600 (* Select portfolio *)
-let magic_number_2 = 2000 (* Select portfolio for is_sat *)
+let magic_number = 1000 (* Select portfolio *)
+let magic_number_2 = 1000 (* Select portfolio for is_sat *)
 
 let magic_number_loop_inv = 20
 let magic_number_num_exprs = 2000
