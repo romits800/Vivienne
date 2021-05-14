@@ -3,7 +3,7 @@
 filename=$1
 rm -f /tmp/*bitwuzla.err /tmp/*bitwuzla.out /tmp/*boolector.err /tmp/*boolector.out /tmp/*cvc4.err /tmp/*cvc4.out /tmp/*z3.err /tmp/*z3.out /tmp/*yices.err /tmp/*yices.out
 
-{ cvc4-1.8-x86_64-linux-opt -m $filename 1> $filename.cvc4.out 2> $filename.cvc4.err ; echo cvc4; } &
+{ cvc4-1.8-x86_64-linux-opt $filename 1> $filename.cvc4.out 2> $filename.cvc4.err ; echo cvc4; } &
 cvc4_pid=$!
 { z3 -smt2 $filename 1> $filename.z3.out 2> $filename.z3.err ; echo z3; } &
 z3_pid=$!

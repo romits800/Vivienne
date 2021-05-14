@@ -1601,8 +1601,6 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
       (* Printf.printf "Solver v_ct: %s\n" (Solver.to_string solver); *)
       if !Flags.portfolio_only then (
         let filename = write_formula_to_file ~model:model solver in
-        if !Flags.debug then
-            print_endline ("is_v_ct_unsat after write formula " ^ filename); 
         let res = 
             try (
                 not (run_solvers ~model:model filename (read_sat "yices")
