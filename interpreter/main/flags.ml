@@ -24,3 +24,5 @@ let merge_states = ref 4
 let exclude_zero_address = ref false
 let end_of_ro_data = ref (-1)
 let generate_model = ref false
+let magic_number_2 = ref 1000
+let magic_number_1 = ref 1000

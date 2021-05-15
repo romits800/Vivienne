@@ -50,6 +50,10 @@ let argspec = Arg.align
   "--debug", Arg.Set Flags.debug, " enable debug msgs";
   "--num-merge-states", Arg.Int (fun n -> Flags.merge_states := n),
     " Maximum number of paths to merge; used in conjunction with -p (default 4)";
+  "--magic-number-2", Arg.Int (fun n -> Flags.magic_number_2 := n),
+    " Magic Number 2";
+  "--magic-number-1", Arg.Int (fun n -> Flags.magic_number_1 := n),
+    " Magic Number";
   "--end-of-ro-data", Arg.Int (fun n -> Flags.end_of_ro_data := n),
     " End of read-only data for addition in the invariant for the indexes to the memory.";
   "-v", Arg.Unit banner, " show version"

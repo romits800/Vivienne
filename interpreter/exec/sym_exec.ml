@@ -117,7 +117,7 @@ let estimate_loop_size e' bt frame e vs pcext es' c es =
     in
     
     if !Flags.debug then (
-      print_endline "printing loopvars.";
+      print_endline "printing loopvars..";
       List.iter print_loopvar lvs
     );
     let havc = havoc_vars lvs c (Loop_stats.init_stats()) in
@@ -217,8 +217,8 @@ let loop_invariant e' bt frame e vs es es' pcext c stats =
       (* ) *)
     in
     if !Flags.debug then (
-      print_endline ("Printing loopvars." ^ (string_of_int (Obj.magic e')));
-      List.iter print_loopvar lvs
+      print_endline ("Printing loopvars.." ^ (string_of_int (Obj.magic e')));
+      List.iter print_loopvar lvs;
     );
 
     (* HAVOC *)

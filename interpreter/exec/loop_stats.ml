@@ -10,7 +10,7 @@ type stats_t = {
     number_ifs: int;
     number_mem_ops: int;
     stack_instructions: Ast.instr list;
-    possible_store_indexes: Ast.instr list;
+    possible_store_indexes: (Ast.instr * Ast.instr) list;
   }
 
 let init_stats () =
@@ -56,9 +56,9 @@ let remove_three_instructions stats =
   | s1::s2::s3::ss -> {stats with stack_instructions = ss}
   | _ -> stats
 
-let add_store_index stats =
+let add_store_index st stats =
   match stats.stack_instructions with
-  | v1::v2::vs -> {stats with possible_store_indexes = v2::stats.possible_store_indexes}
+  | v1::v2::vs -> {stats with possible_store_indexes = (v2,st)::stats.possible_store_indexes}
   | _ -> stats
 
 let get_store_indexes stats =
@@ -101,10 +101,10 @@ let ast_instr_to_string = function
 
 let rec print_store_indexes indexes = 
     match indexes with
-    {it=LocalGet x;at} :: sts -> print_endline ("Local" ^ (string_of_int (I32.to_int_u x.it )));  print_store_indexes sts
-    | {it=LocalTee x;at} :: sts -> print_endline ("LocalTee" ^ (string_of_int (I32.to_int_u x.it )));  print_store_indexes sts
-    | {it=GlobalGet x;at} :: sts -> print_endline ("LocalTee" ^ (string_of_int (I32.to_int_u x.it )));  print_store_indexes sts
-    | {it= ins;at} :: sts -> print_endline (ast_instr_to_string ins); print_store_indexes sts
+    ({it=LocalGet x;at},_) :: sts -> print_endline ("Local" ^ (string_of_int (I32.to_int_u x.it )));  print_store_indexes sts
+    | ({it=LocalTee x;at},_) :: sts -> print_endline ("LocalTee" ^ (string_of_int (I32.to_int_u x.it )));  print_store_indexes sts
+    | ({it=GlobalGet x;at},_) :: sts -> print_endline ("LocalTee" ^ (string_of_int (I32.to_int_u x.it )));  print_store_indexes sts
+    | ({it= ins;at},_) :: sts -> print_endline (ast_instr_to_string ins); print_store_indexes sts
     | [] -> ()
 
 let increase_loop_iter x stats =
@@ -173,7 +173,7 @@ let loop_stats (es : Ast.instr list ) (reg: Source.region) : stats_t =
             loop_stats_i est (increase_instr stats |> increase_mem |> add_instruction e') 
          | Store {offset; ty; sz; _}->
             loop_stats_i est (stats |> increase_instr |> increase_mv |> increase_mem
-                              |> add_store_index |> remove_two_instructions)
+                              |> add_store_index e' |> remove_two_instructions)
          | Const v ->
             loop_stats_i est (stats |> increase_instr |> increase_loop_iter v.it
                               |> add_instruction e')

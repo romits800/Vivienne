@@ -6,7 +6,6 @@ open Sys
 (* open Unix *)
 open Smtlib
 open Stats  
-open Config
    
 let path = ref (getenv "VIV_PATH")
 
@@ -1207,13 +1206,14 @@ let run_solvers ?model:(model=true) input_file yices z3 cvc4 boolector bitwuzla 
    *             )
    *         )
    *    ) *)
-
+(*4513*)
 let write_formula_to_file ?model:(model=true) solver =
-  (* print_endline "write_formula_to_file"; *)
   let filename = Filename.temp_file "wasm_" ".smt2" in
   let oc = open_out filename in
   Printf.fprintf oc "(set-logic QF_ABV)\n";
-  Printf.fprintf oc "%s\n" (Solver.to_string solver);
+  (*let _ = Solver.to_string solver in*)
+  let st = Solver.to_string solver in
+  Printf.fprintf oc "%s\n" st;
   Printf.fprintf oc "(check-sat)\n";
   if model then
     Printf.fprintf oc "(get-model)\n";
@@ -1465,15 +1465,16 @@ let is_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv : s
       | H (pc1, pc2) ->  Goal.add g [pc1; pc2 ]
      );
 
-     let num_exprs = Goal.get_num_exprs g in
 
-     if (!Flags.stats) then
-        Stats.add_new_query "Unknown" (num_exprs) 0.0;
-      
+     
      let solver = Solver.mk_solver ctx None in
      List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
 
-     (* Printf.printf "Solver: %s\n" (Solver.to_string solver); *)
+     let num_exprs = Goal.get_num_exprs g in
+     (* Some bug causes seg fault *)
+     if (!Flags.stats) then
+        Stats.add_new_query "Unknown" (num_exprs) 0.0;
+ 
      if !Flags.portfolio_only then (
        let filename = write_formula_to_file solver in
        let res = not (run_solvers filename (read_sat "yices")
@@ -1507,7 +1508,8 @@ let is_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv : s
            * ); *)
           false
      ) else (
-       if num_exprs > magic_number then (
+       if num_exprs > !Flags.magic_number_1 then (
+
          let filename = write_formula_to_file ~model:model solver in
          let timeout = 0 in
          let res = not (run_solvers ~model:model filename (read_sat "yices")
@@ -1587,7 +1589,6 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
 
       if (!Flags.stats) then (
          Stats.add_new_query "Unknown" (num_exprs) 0.0);
-      
       let params = Params.mk_params ctx in
       (*Params.add_bool params (Symbol.mk_string ctx "sort_store") true;*)
 
@@ -1642,7 +1643,7 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
             Stats.print_last());
           false
       ) else (
-        if num_exprs > magic_number then (
+        if num_exprs > !Flags.magic_number_1 then (
           if !Flags.debug then print_endline "Using portfolio solver..";
  
           let filename = write_formula_to_file ~model:model solver in
@@ -1727,20 +1728,24 @@ let is_sat ?timeout:(timeout=30) (pc : pc_ext) (mem: Smemory.t list * int * int)
    | H (v1,v2) when Boolean.is_false v1 && Boolean.is_false v2 -> false
    | H (v1,v2) when Boolean.is_true v1 && Boolean.is_true v2 -> true
    | _ ->
+      let params = Params.mk_params ctx in
+      Params.add_bool params (Symbol.mk_string ctx "sort_store") true;
       (match v with
-       | L v -> Goal.add g [v]
-       | H (v1,v2) -> Goal.add g [v1;v2]
+       | L v -> 
+            let v' = Expr.simplify v (Some params) in
+            Goal.add g [v']
+       | H (v1,v2) -> 
+            let v1' = Expr.simplify v1 (Some params) in
+            let v2' = Expr.simplify v2 (Some params) in
+            Goal.add g [v1';v2']
       );
       (* Printf.printf "Goal: %s\n" (Goal.to_string g); *)
       (* if !Flags.debug then
        *   Printf.printf "Solver is_sat: %s\n" (Solver.to_string solver); *)
-      let params = Params.mk_params ctx in
-      Params.add_bool params (Symbol.mk_string ctx "sort_store") true;
-
-      let s_formulas = (List.map (fun e -> Expr.simplify e (Some params)) (Goal.get_formulas g)) in
+      (*let s_formulas = (List.map (fun e -> Expr.simplify e (Some params)) (Goal.get_formulas g)) in*)
 
       let solver = Solver.mk_solver ctx None in
-      List.iter (fun f -> Solver.add solver [f]) s_formulas;
+      List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
 
       let num_exprs = Goal.get_num_exprs g in
       
@@ -1787,7 +1792,7 @@ let is_sat ?timeout:(timeout=30) (pc : pc_ext) (mem: Smemory.t list * int * int)
            );
            false
       ) else (
-        if  num_exprs > magic_number_2  then (
+        if  num_exprs > !Flags.magic_number_2  then (
           let filename = write_formula_to_file ~model:false solver in
           if !Flags.debug then
             print_endline ("is_sat after write formula " ^ filename); 
@@ -2106,7 +2111,7 @@ let are_same ?timeout:(timeout=30) ?model:(model=false) (sv1 : svalue) (sv2 : sv
             Stats.print_last());
           false
      ) else (
-       if num_exprs > magic_number then (
+       if num_exprs > !Flags.magic_number_1 then (
          if !Flags.debug then print_endline "Using portfolio solver..";
          
          let filename = write_formula_to_file ~model:model solver in

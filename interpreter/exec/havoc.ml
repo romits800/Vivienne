@@ -9,17 +9,19 @@ open Loop_stats
 let rec havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
   if !Flags.debug then (
     print_endline "Havocing Variables..";
+    List.iter print_loopvar lv
   );
   match lv with
   | LocalVar (x, is_low, mo) :: lvs ->
+ 
      let rec is_store_index indexes acc =
        match indexes with
-       | {it = LocalGet x'; at}::indexes when x'.it = x.it -> (indexes @ acc, true)
-       | {it = LocalTee x'; at}::indexes when x'.it = x.it -> (indexes @ acc, true)
+       | ({it = LocalGet x'; at},st)::indexes when x'.it = x.it -> (indexes @ acc, Some st, true)
+       | ({it = LocalTee x'; at},st)::indexes when x'.it = x.it -> (indexes @ acc, Some st, true)
        | ind::indexes -> is_store_index indexes (ind::acc)
-       | [] -> (acc, false)
+       | [] -> (acc, None, false)
      in
-           
+          
      let v = local c.frame x in
      (* let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in *)
      (* let is_low = Z3_solver.is_v_ct_unsat c.pc v mem in *)
@@ -31,11 +33,12 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
        )
      in
      if !Flags.debug then (
-        print_endline ("Local" ^ (string_of_int (I32.to_int_u x.it)) ^ " newval:" ^ (svalue_to_string newv));
+        print_endline ("Local" ^ (string_of_int (Int32.to_int x.it)) ^ " newval:" ^ (svalue_to_string newv));
      );
-
+    
      let indexes = get_store_indexes stats in
-     let indexes', tf = is_store_index indexes [] in
+     let indexes', st, tf = is_store_index indexes [] in
+    
      let c' = { c with frame = update_local c.frame x newv } in 
 
      if !Flags.debug then (
@@ -43,6 +46,40 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
         print_endline (string_of_bool tf);
      );
 
+     let c' = 
+        match tf, st with
+        | true, Some ({it=Store {offset; ty; sz;_};at}) ->
+             let sv =
+               (match ty with
+                |Types.I32Type ->
+                  SI32 (Si32.of_high())
+                |Types.I64Type ->
+                  SI64 (Si64.of_high())
+                | _ -> failwith "not implemented float types"
+               )
+             in          
+
+             let num = Instance.next_num() in
+             let nv =
+               (match sz with
+                | None ->
+                   Eval_symbolic.eval_store ty newv sv
+                     (smemlen c'.frame.inst) num (Types.size ty)
+                | Some (sz) ->
+                   assert (packed_size sz <= Types.size ty);
+                   let n = packed_size sz in
+                   Eval_symbolic.eval_store ty newv sv
+                     (smemlen c'.frame.inst) num n 
+               )
+             in
+             let mem = smemory c'.frame.inst (0l @@ Source.no_region) in
+             let mem' = Smemory.store_sind_value num mem nv in
+
+             let nframe  = {c'.frame with inst = insert_smemory c'.frame.inst num mem'} 
+             in { c' with frame = nframe}
+     
+        | _, _ -> c'
+     in
 
      let c'' =
        if !Flags.end_of_ro_data >= 0 then (
@@ -59,9 +96,9 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
   | GlobalVar (x, is_low, mo) :: lvs ->
      let rec is_store_index indexes acc =
        match indexes with
-       | {it = GlobalGet x'; at}::indexes when x'.it = x.it -> (indexes @ acc, true)
+       | ({it = GlobalGet x'; at},st)::indexes when x'.it = x.it -> (indexes @ acc, Some st, true)
        | ind::indexes -> is_store_index indexes (ind::acc)
-       | [] -> (acc, false)
+       | [] -> (acc, None, false)
      in
 
      let v = Sglobal.load (sglobal c.frame.inst x) in
@@ -81,7 +118,7 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
      in
      
      let indexes = get_store_indexes stats in
-     let indexes', tf = is_store_index indexes [] in
+     let indexes', st, tf = is_store_index indexes [] in
      let c' = { c with frame = {c.frame with inst = update_sglobal c.frame.inst newg x } } in
 
      let c'' =
