@@ -211,14 +211,14 @@ let modifier_to_string = function
 let print_loopvar = function
   | LocalVar (i, tf, mo, Some sv) ->
      "Local " ^ (string_of_bool tf) ^ " " ^
-       (Int32.to_int i.it |> string_of_int) ^
+       (Int32.to_int i.it |> string_of_int) ^ " " ^
          (svalue_to_string sv) |> print_endline
   | LocalVar (i, tf, mo, _) ->
      "Local " ^ (string_of_bool tf) ^ " " ^
        (Int32.to_int i.it |> string_of_int) |> print_endline
   | GlobalVar (i, tf, mo, Some sv) ->
      "Global " ^ (string_of_bool tf) ^ " " ^
-       (Int32.to_int i.it |> string_of_int) ^
+       (Int32.to_int i.it |> string_of_int) ^  " " ^
          (svalue_to_string sv) |> print_endline
   | GlobalVar (i, tf, mo, _) ->
      "Global " ^ (string_of_bool tf) ^ " " ^
@@ -504,19 +504,19 @@ let assert_invar (lv : loopvar_t list) (c : config) : bool =
 
      if match_policy is_low is_low_new then assert_invar_i lvs c
      else (
-        (*let _ = assert_invar_i lvs c in*)
-        false)
+       (*let _ = assert_invar_i lvs c in*)
+       false)
   (* if it is high, we don't mind if it got low *)
   | StoreZeroVar sv :: lvs -> 
-      let ty = Types.I32Type in 
-      let final_addr = Svalues.SI32 (Si32.of_int_u 0) in
-      let nv = Eval_symbolic.eval_load ty final_addr 
-            (smemlen c.frame.inst) (smemnum c.frame.inst) 4 None
-      in
-      let memtuple = get_mem_tripple c.frame in
-      if Z3_solver.are_same sv nv c.pc memtuple then
-          assert_invar_i lvs c
-      else (false)
+     let ty = Types.I32Type in 
+     let final_addr = Svalues.SI32 (Si32.of_int_u 0) in
+     let nv = Eval_symbolic.eval_load ty final_addr 
+                (smemlen c.frame.inst) (smemnum c.frame.inst) 4 None
+     in
+     let memtuple = get_mem_tripple c.frame in
+     if Z3_solver.are_same sv nv c.pc memtuple then
+       assert_invar_i lvs c
+     else (false)
   | _ :: lvs -> assert_invar_i lvs c
   | [] -> true
  in

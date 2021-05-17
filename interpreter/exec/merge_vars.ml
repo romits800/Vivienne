@@ -94,12 +94,12 @@ let merge_vars (lv: loopvar_t list) (lv_stats: loopvar_t list) : loopvar_t list 
 
           )
 
-          (* if (is_low_old = is_low) then 
-           *     merge_vars_i lvs  mp
-           * else (
-           *     let mp' = LoopVarMap.add str (GlobalVar (x,false,mo), 1) mp in
-           *     merge_vars_i lvs  mp'
-           * ) *)
+        (* if (is_low_old = is_low) then 
+         *     merge_vars_i lvs  mp
+         * else (
+         *     let mp' = LoopVarMap.add str (GlobalVar (x,false,mo), 1) mp in
+         *     merge_vars_i lvs  mp'
+         * ) *)
         with Not_found ->
           let mp' = LoopVarMap.add str (lvh, 2) mp in
           merge_vars_i lvs mp'
@@ -140,7 +140,7 @@ let merge_vars (lv: loopvar_t list) (lv_stats: loopvar_t list) : loopvar_t list 
     | StoreVar _ :: lvs ->
        failwith "Not expected StoreZeroVar in merge_variables."
     | (StoreZeroVar (sv)) :: lvs ->
-            failwith "Not expected StoreZeroVar in merge_variables."
+       failwith "Not expected StoreZeroVar in merge_variables."
     | [] -> mp
   in
 
@@ -170,25 +170,25 @@ let merge_vars (lv: loopvar_t list) (lv_stats: loopvar_t list) : loopvar_t list 
         *   if !Flags.debug then print_endline "Address is zero";
         *   merge_stats_vars_i lvs mp
         * ) else ( *)
-         
-         let str = "Store" ^ string_of_region loc in
-         (try
-            let _ = LoopVarMap.find str mp in
-            merge_stats_vars_i lvs mp
-          with Not_found ->
-            let mp' = LoopVarMap.add str (lvh, 1) mp in
-            merge_stats_vars_i lvs mp'
-         )
-       (* ) *)
+       
+       let str = "Store" ^ string_of_region loc in
+       (try
+          let _ = LoopVarMap.find str mp in
+          merge_stats_vars_i lvs mp
+        with Not_found ->
+          let mp' = LoopVarMap.add str (lvh, 1) mp in
+          merge_stats_vars_i lvs mp'
+       )
+    (* ) *)
     | (StoreZeroVar (sv)) :: lvs ->
-            failwith "Not expected StoreZeroVar in merge_variables."
+       failwith "Not expected StoreZeroVar in merge_variables."
     | [] -> LoopVarMap.bindings mp |>
               (*List.filter (fun (k,(v,num)) -> num > 1) |>*)
               List.map (fun (k,(v,num)) -> v) 
           
   in
   if (!Flags.debug) then 
-      print_endline "Merging variables";
+    print_endline "Merging variables";
   let mp = LoopVarMap.empty in
   let mp' = merge_vars_i lv mp in
   merge_stats_vars_i lv_stats mp'
@@ -196,12 +196,12 @@ let merge_vars (lv: loopvar_t list) (lv_stats: loopvar_t list) : loopvar_t list 
 
 
 let add_store_zero c lvs =
-    let ty = Types.I32Type in 
-    let final_addr = Svalues.SI32 (Si32.of_int_u 0) in
-    let nv = Eval_symbolic.eval_load ty final_addr 
-            (smemlen c.frame.inst) (smemnum c.frame.inst) 4 None
-    in
-    (StoreZeroVar nv):: lvs
+  let ty = Types.I32Type in 
+  let final_addr = Svalues.SI32 (Si32.of_int_u 0) in
+  let nv = Eval_symbolic.eval_load ty final_addr 
+             (smemlen c.frame.inst) (smemnum c.frame.inst) 4 None
+  in
+  (StoreZeroVar nv):: lvs
 
 
 
