@@ -418,14 +418,39 @@ let match_policy b1 b2 =
 let get_mem_tripple frame =
   (frame.inst.smemories, smemlen frame.inst, smemnum frame.inst)
 
+
+let is_int sv =
+    match sv with
+    | Svalues.SI32 s32 -> Si32.is_int s32
+    | Svalues.SI64 s64 -> Si64.is_int s64
+    | _ -> failwith "No support for floats."
+
+let get_int sv =
+    match sv with
+    | Svalues.SI32 s32 -> Si32.to_int_u s32
+    | Svalues.SI64 s64 -> Si64.to_int_u s64
+    | _ -> failwith "No support for floats."
+
+         
+
+  
 (* Assert invariant *)
 let assert_invar (lv : loopvar_t list) (c : config) : bool =
  let rec assert_invar_i (lv : loopvar_t list) (c : config) : bool =
   match lv with
-  | LocalVar (x, (true as is_low), mo, _) :: lvs ->
+  | LocalVar (x, _, mo, Some nv) as lh :: lvs ->
      (* print_endline "localvar"; *)
      
-     if !Flags.debug then print_loopvar (List.hd lv);
+     if !Flags.debug then print_loopvar lh;
+     if !Flags.debug then print_endline (svalue_to_string nv);
+     let v = local c.frame x in
+     if (is_int v && get_int v = get_int nv) then assert_invar_i lvs c
+     else false
+     
+  | LocalVar (x, (true as is_low), mo, None) as lh :: lvs ->
+     (* print_endline "localvar"; *)
+     
+     if !Flags.debug then print_loopvar lh;
      let v = local c.frame x in
      let mem = get_mem_tripple c.frame in
      let is_low_new = Z3_solver.is_v_ct_unsat ~timeout:200 c.pc v mem in
@@ -436,8 +461,15 @@ let assert_invar (lv : loopvar_t list) (c : config) : bool =
        (*let _ = assert_invar_i lvs c in*)
        false )
 
-  | GlobalVar (x, (true as is_low), mo, _) :: lvs ->
-     if !Flags.debug then print_loopvar (List.hd lv);
+  | GlobalVar (x, _, mo, Some nv) as lh :: lvs ->     
+     if !Flags.debug then print_loopvar lh;
+     if !Flags.debug then print_endline (svalue_to_string nv);
+     let v = Sglobal.load (sglobal c.frame.inst x) in
+     if (is_int v && get_int v = get_int nv) then assert_invar_i lvs c
+     else false
+
+  | GlobalVar (x, (true as is_low), mo, None) as lh :: lvs ->
+     if !Flags.debug then print_loopvar lh;
      (* print_endline "globalvar"; *)
      let v = Sglobal.load (sglobal c.frame.inst x) in
      let mem = get_mem_tripple c.frame in 
@@ -449,7 +481,8 @@ let assert_invar (lv : loopvar_t list) (c : config) : bool =
          false
      )
 
-  | StoreVar (Some (SI32 addr' as addr), ty, sz, (true as is_low), mo, loc) :: lvs  when Si32.is_int addr' ->
+  | StoreVar (Some (SI32 addr' as addr), ty, sz, (true as is_low), mo, loc) :: lvs
+       when Si32.is_int addr' ->
      if !Flags.debug then print_loopvar (List.hd lv);
      (* print_endline "storevar"; *)
      let nv =

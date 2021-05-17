@@ -70,11 +70,13 @@ let get_store_index stats =
   | _ -> None
 
        
-       
-
 let add_mod_var var stats =
   {stats with modified_variables = var::stats.modified_variables}
-       
+
+let get_mod_var (stats: stats_t) :  loopvar_t list =
+  stats.modified_variables
+  
+  
 let get_store_indexes stats =
   stats.possible_store_indexes
 

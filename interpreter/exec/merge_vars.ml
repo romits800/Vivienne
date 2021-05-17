@@ -31,23 +31,10 @@ let get_int_addr sv =
     | _ -> failwith "Address should be i32."
 
 
-let is_int sv =
-    match sv with
-    | Svalues.SI32 s32 -> Si32.is_int s32
-    | Svalues.SI64 s64 -> Si64.is_int s64
-    | _ -> failwith "No support for floats."
-
-let get_int sv =
-    match sv with
-    | Svalues.SI32 s32 -> Si32.to_int_u s32
-    | Svalues.SI64 s64 -> Si64.to_int_u s64
-    | _ -> failwith "No support for floats."
-
-         
 (* Merge new variables *)
-let merge_vars (lv: loopvar_t list) : loopvar_t list =
+let merge_vars (lv: loopvar_t list) (lv_stats: loopvar_t list) : loopvar_t list =
   let rec merge_vars_i (lv: loopvar_t list)
-            (mp: (loopvar_t * int)  LoopVarMap.t) : loopvar_t list =
+            (mp: (loopvar_t * int)  LoopVarMap.t) : (loopvar_t * int)  LoopVarMap.t = 
     match lv with
     | (LocalVar (x,is_low,mo,v) as lvh) :: lvs ->
        let str = "Local" ^ string_of_int (Int32.to_int x.it) in 
@@ -131,7 +118,7 @@ let merge_vars (lv: loopvar_t list) : loopvar_t list =
          merge_vars_i lvs mp
        ) else (
          
-         let str = "Store" ^ Pc_type.svalue_to_string sv in
+         let str = "Store" ^ string_of_region loc in
          (try
             let lh, num = LoopVarMap.find str mp in
             let is_low_old = lh |> get_policy_loopvar in
@@ -154,15 +141,57 @@ let merge_vars (lv: loopvar_t list) : loopvar_t list =
        failwith "Not expected StoreZeroVar in merge_variables."
     | (StoreZeroVar (sv)) :: lvs ->
             failwith "Not expected StoreZeroVar in merge_variables."
+    | [] -> mp
+  in
+
+  let rec merge_stats_vars_i (lv: loopvar_t list)
+            (mp: (loopvar_t * int)  LoopVarMap.t) : loopvar_t list =
+    match lv with
+    | (LocalVar (x,is_low,mo,v) as lvh) :: lvs ->
+       let str = "Local" ^ string_of_int (Int32.to_int x.it) in 
+       (try
+          let _ = LoopVarMap.find str mp in
+          merge_stats_vars_i lvs mp
+        with Not_found ->
+          let mp' = LoopVarMap.add str (lvh,1) mp in
+          merge_stats_vars_i lvs mp'
+       )
+    | (GlobalVar (x,is_low,mo,v) as lvh) :: lvs ->
+       let str = "Global" ^ string_of_int (Int32.to_int x.it) in
+       (try
+          let _ = LoopVarMap.find str mp in
+          merge_stats_vars_i lvs mp
+        with Not_found ->
+          let mp' = LoopVarMap.add str (lvh, 1) mp in
+          merge_stats_vars_i lvs mp'
+       )
+    | (StoreVar (_, ty, sz, is_low, mo, loc) as lvh) :: lvs ->
+       (* if (!Flags.exclude_zero_address && is_int_addr sv && get_int_addr sv = 0) then (
+        *   if !Flags.debug then print_endline "Address is zero";
+        *   merge_stats_vars_i lvs mp
+        * ) else ( *)
+         
+         let str = "Store" ^ string_of_region loc in
+         (try
+            let _ = LoopVarMap.find str mp in
+            merge_stats_vars_i lvs mp
+          with Not_found ->
+            let mp' = LoopVarMap.add str (lvh, 1) mp in
+            merge_stats_vars_i lvs mp'
+         )
+       (* ) *)
+    | (StoreZeroVar (sv)) :: lvs ->
+            failwith "Not expected StoreZeroVar in merge_variables."
     | [] -> LoopVarMap.bindings mp |>
               (*List.filter (fun (k,(v,num)) -> num > 1) |>*)
               List.map (fun (k,(v,num)) -> v) 
-         
+          
   in
   if (!Flags.debug) then 
       print_endline "Merging variables";
   let mp = LoopVarMap.empty in
-  merge_vars_i lv mp
+  let mp' = merge_vars_i lv mp in
+  merge_stats_vars_i lv_stats mp'
 
 
 

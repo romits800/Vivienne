@@ -110,7 +110,7 @@ let estimate_loop_size e' bt frame e vs pcext es' c es =
         (*let lvs, _ = find_modified_vars (Obj.magic e')*)
         let lvs = fv_eval (Obj.magic e')
                     {c with code = vs'', es''} in (* @ List.tl es;} in*)
-        let lvs = merge_vars lvs in
+        let lvs = merge_vars lvs [] in
         modified_vars := ModifiedVarsMap.add index lvs !modified_vars;
         lvs
       )
@@ -142,8 +142,6 @@ let estimate_loop_size e' bt frame e vs pcext es' c es =
     [{havc' with code = vs', es' @ List.tl es; progc = Obj.magic e'}]
 
   )
-
-
                   
 (*   assertX;
      havocv1; ... ;havocvn;
@@ -153,8 +151,6 @@ let estimate_loop_size e' bt frame e vs pcext es' c es =
        assertX;
        assume false;
      } *)
-
-
 
 let loop_invariant e' bt frame e vs es es' pcext c stats =
   let FuncType (ts1, ts2) = block_type frame.inst bt in
@@ -200,7 +196,9 @@ let loop_invariant e' bt frame e vs es es' pcext c stats =
           List.iter print_loopvar lvs
         );
 
-        let lvs = merge_vars lvs in
+        let lvs' = get_mod_var stats in
+        let lvs = merge_vars lvs lvs' in
+
         let lvs = 
             if !Flags.exclude_zero_address then
                 add_store_zero c lvs 
@@ -1189,7 +1187,7 @@ let rec step (c : config) : config list =
            let lvs = fv_eval (Obj.magic l)
                           {c with code = vs'', es''} in (* @ List.tl es;} in*)
 
-           let lvs = merge_vars lvs in
+           let lvs = merge_vars lvs [] in
            modified_vars := ModifiedVarsMap.add index lvs !modified_vars;
            lvs, false
          (* ) *)
