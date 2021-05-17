@@ -75,7 +75,7 @@ type modifier = Increase of svalue | Decrease of svalue | Nothing
                                                        
 type loopvar_t = LocalVar of int32 Source.phrase * bool * modifier (* local x * is_sat *)
                | GlobalVar of int32 Source.phrase * bool * modifier
-               | StoreVar of svalue * Types.value_type * Types.pack_size option * bool * modifier
+               | StoreVar of svalue * Types.value_type * Types.pack_size option * bool * modifier * region
                | StoreZeroVar of svalue
 
 
@@ -213,7 +213,7 @@ let print_loopvar = function
      "Local " ^ (string_of_bool tf) ^ " " ^ (Int32.to_int i.it |> string_of_int) |> print_endline
   | GlobalVar (i, tf, mo) ->
      "Global " ^ (string_of_bool tf) ^ " " ^ (Int32.to_int i.it |> string_of_int) |> print_endline
-  | StoreVar (sv, ty, sz, tf, mo) ->
+  | StoreVar (sv, ty, sz, tf, mo, loc) ->
      "Store " ^ (string_of_bool tf) ^ " " ^ (svalue_to_string sv) |> print_endline
   | StoreZeroVar (sv) ->
      "StoreZero: Prev Value " ^ (svalue_to_string sv) |> print_endline
@@ -437,7 +437,7 @@ let assert_invar (lv : loopvar_t list) (c : config) : bool =
          false
      )
 
-  | StoreVar (SI32 addr' as addr, ty, sz, (true as is_low), mo) :: lvs  when Si32.is_int addr' ->
+  | StoreVar (SI32 addr' as addr, ty, sz, (true as is_low), mo, loc) :: lvs  when Si32.is_int addr' ->
      if !Flags.debug then print_loopvar (List.hd lv);
      (* print_endline "storevar"; *)
      let nv =

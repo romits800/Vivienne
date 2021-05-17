@@ -5,8 +5,20 @@ open Source
 open Pc_type
 open Ast
 open Loop_stats
-   
-let rec havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
+  
+let havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
+(* let has_index (stats: stats_t) loc = 
+    let rec has_index_i indexes loc = 
+       match indexes with
+       | (lv,st,Some nv)::indexes when st.at = loc -> Some nv, true
+       | ind::indexes -> has_index_i indexes loc
+       | [] -> None, false
+    in
+    has_index_i (get_store_indexes stats) loc
+    
+ in
+*)
+ let rec havoc_vars_i (lv: loopvar_t list) (c : config) (stats: stats_t) =
   if !Flags.debug then (
     print_endline "Havocing Variables..";
     List.iter print_loopvar lv
@@ -14,11 +26,15 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
   match lv with
   | LocalVar (x, is_low, mo) :: lvs ->
  
-     let rec is_store_index indexes acc =
+     let rec is_store_index indexes nv acc =
        match indexes with
-       | ({it = LocalGet x'; at},st)::indexes when x'.it = x.it -> (indexes @ acc, Some st, true)
-       | ({it = LocalTee x'; at},st)::indexes when x'.it = x.it -> (indexes @ acc, Some st, true)
-       | ind::indexes -> is_store_index indexes (ind::acc)
+       | ({it = LocalGet x'; at},st,None)::indexes when x'.it = x.it -> 
+            let ind = ({it = LocalGet x'; at}, st, Some nv) in 
+            ((ind::indexes) @ acc, Some st, true)
+       | ({it = LocalTee x'; at},st,None)::indexes when x'.it = x.it ->
+            let ind = ({it = LocalTee x'; at}, st, Some nv) in
+            ((ind::indexes) @ acc, Some st, true)
+       | ind::indexes -> is_store_index indexes nv (ind::acc)
        | [] -> (acc, None, false)
      in
           
@@ -37,7 +53,7 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
      );
     
      let indexes = get_store_indexes stats in
-     let indexes', st, tf = is_store_index indexes [] in
+     let indexes', st, tf = is_store_index indexes newv [] in
     
      let c' = { c with frame = update_local c.frame x newv } in 
 
@@ -46,40 +62,6 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
         print_endline (string_of_bool tf);
      );
 
-     let c' = 
-        match tf, st with
-        | true, Some ({it=Store {offset; ty; sz;_};at}) ->
-             let sv =
-               (match ty with
-                |Types.I32Type ->
-                  SI32 (Si32.of_high())
-                |Types.I64Type ->
-                  SI64 (Si64.of_high())
-                | _ -> failwith "not implemented float types"
-               )
-             in          
-
-             let num = Instance.next_num() in
-             let nv =
-               (match sz with
-                | None ->
-                   Eval_symbolic.eval_store ty newv sv
-                     (smemlen c'.frame.inst) num (Types.size ty)
-                | Some (sz) ->
-                   assert (packed_size sz <= Types.size ty);
-                   let n = packed_size sz in
-                   Eval_symbolic.eval_store ty newv sv
-                     (smemlen c'.frame.inst) num n 
-               )
-             in
-             let mem = smemory c'.frame.inst (0l @@ Source.no_region) in
-             let mem' = Smemory.store_sind_value num mem nv in
-
-             let nframe  = {c'.frame with inst = insert_smemory c'.frame.inst num mem'} 
-             in { c' with frame = nframe}
-     
-        | _, _ -> c'
-     in
 
      let c'' =
        if !Flags.end_of_ro_data >= 0 then (
@@ -92,12 +74,15 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
            | _ -> c'
        ) else c'
      in
-     havoc_vars lvs c'' (set_store_indexes stats indexes')
+     havoc_vars_i lvs c'' (set_store_indexes stats indexes')
   | GlobalVar (x, is_low, mo) :: lvs ->
-     let rec is_store_index indexes acc =
+     let rec is_store_index indexes nv acc =
        match indexes with
-       | ({it = GlobalGet x'; at},st)::indexes when x'.it = x.it -> (indexes @ acc, Some st, true)
-       | ind::indexes -> is_store_index indexes (ind::acc)
+       | ({it = GlobalGet x'; at},st,None)::indexes when x'.it = x.it -> 
+            let ind = ({it = GlobalGet x'; at}, st, Some nv) in
+            ((ind::indexes) @ acc, Some st, true)
+ 
+       | ind::indexes -> is_store_index indexes nv (ind::acc)
        | [] -> (acc, None, false)
      in
 
@@ -118,7 +103,7 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
      in
      
      let indexes = get_store_indexes stats in
-     let indexes', st, tf = is_store_index indexes [] in
+     let indexes', st, tf = is_store_index indexes newv [] in
      let c' = { c with frame = {c.frame with inst = update_sglobal c.frame.inst newg x } } in
 
      let c'' =
@@ -129,8 +114,8 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
           { c' with pc = (pcnum, pclet, PCAnd(SI32 (Si32.ge_u nv data), c'.pc)) }
        | _ -> c'
      in
-     havoc_vars lvs c'' (set_store_indexes stats indexes')
-  | StoreVar (SI32 addr' as addr, ty, sz, is_low, mo) :: lvs when Si32.is_int addr' ->
+     havoc_vars_i lvs c'' (set_store_indexes stats indexes')
+  | StoreVar (SI32 addr' as addr, ty, sz, is_low, mo, loc) :: lvs when Si32.is_int addr' ->
      let sv =
        (match ty with
         |Types.I32Type ->
@@ -142,7 +127,7 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
      in          
      if !Flags.debug then (
         print_endline "New val store:";
-        print_loopvar (StoreVar (addr, ty, sz, is_low, mo));
+        print_loopvar (StoreVar (addr, ty, sz, is_low, mo, loc));
         print_endline (svalue_to_string sv);
      );
      let num = Instance.next_num() in
@@ -164,8 +149,44 @@ let rec havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
      let nframe  = {c.frame with inst = insert_smemory c.frame.inst num mem'} in
      let c' = { c with frame = nframe} in
 
-     havoc_vars lvs c' stats
-  | StoreVar _ :: lvs -> havoc_vars lvs c stats
-  | StoreZeroVar _ :: lvs -> havoc_vars lvs c stats
+     havoc_vars_i lvs c' stats
+  (*| StoreVar (_, ty, sz, is_low, mo, loc) :: lvs  ->
+    (match has_index stats loc with
+     | Some addr, true ->
+         let sv =
+           (match ty with
+            |Types.I32Type ->
+              SI32 (if is_low then Si32.of_low() else Si32.of_high())
+            |Types.I64Type ->
+              SI64 (if is_low then Si64.of_low() else Si64.of_high())
+            | _ -> failwith "not implemented float types"
+           )
+         in          
+         let num = Instance.next_num() in
+         let nv =
+           (match sz with
+            | None ->
+               Eval_symbolic.eval_store ty addr sv
+                 (smemlen c.frame.inst) num (Types.size ty)
+            | Some (sz) ->
+               assert (packed_size sz <= Types.size ty);
+               let n = packed_size sz in
+               Eval_symbolic.eval_store ty addr sv
+                 (smemlen c.frame.inst) num n 
+           )
+         in
+         let mem = smemory c.frame.inst (0l @@ Source.no_region) in
+         let mem' = Smemory.store_sind_value num mem nv in
+
+         let nframe  = {c.frame with inst = insert_smemory c.frame.inst num mem'} in
+         let c' = { c with frame = nframe} in
+         havoc_vars_i lvs c' stats
+     | _, _ ->  havoc_vars_i lvs c stats
+     ) *)
+
+  | StoreVar _ :: lvs -> havoc_vars_i lvs c stats
+  | StoreZeroVar _ :: lvs -> havoc_vars_i lvs c stats
   | [] -> c
+ in
+ havoc_vars_i lv c stats 
                 

@@ -10,7 +10,7 @@ type stats_t = {
     number_ifs: int;
     number_mem_ops: int;
     stack_instructions: Ast.instr list;
-    possible_store_indexes: (Ast.instr * Ast.instr) list;
+    possible_store_indexes: (Ast.instr * Ast.instr * Svalues.svalue option) list;
   }
 
 let init_stats () =
@@ -58,7 +58,7 @@ let remove_three_instructions stats =
 
 let add_store_index st stats =
   match stats.stack_instructions with
-  | v1::v2::vs -> {stats with possible_store_indexes = (v2,st)::stats.possible_store_indexes}
+  | v1::v2::vs -> {stats with possible_store_indexes = (v2,st,None)::stats.possible_store_indexes}
   | _ -> stats
 
 let get_store_indexes stats =

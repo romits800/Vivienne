@@ -366,7 +366,7 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
            if (!Flags.debug) then (
              print_endline (string_of_bool is_low););
 
-           let lv = (StoreVar (final_addr, ty, sz, is_low, Nothing))::lv in
+           let lv = (StoreVar (final_addr, ty, sz, is_low, Nothing, e.at))::lv in
 
            let mem' = Smemory.store_sind_value num mem nv in
            let vs', es' = vs', [] in
@@ -667,7 +667,7 @@ let find_policy lvs c  =
        let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in                   
        let mo = Nothing in
        find_policy_i lvs' (GlobalVar (x,is_low,mo)::acc)
-    | (StoreVar (final_addr, ty, sz, is_low, mo)) :: lvs' ->
+    | (StoreVar (final_addr, ty, sz, is_low, mo, loc)) :: lvs' ->
        let vv =
          (match sz with
           | None ->
@@ -685,7 +685,7 @@ let find_policy lvs c  =
        let mem = get_mem_tripple c.frame in
        let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in                   
        let mo = Nothing in
-       find_policy_i lvs' (StoreVar (final_addr, ty, sz, is_low, mo)::acc)
+       find_policy_i lvs' (StoreVar (final_addr, ty, sz, is_low, mo, loc)::acc)
 
     | (StoreZeroVar (sv) as lh) :: lvs' ->
        find_policy_i lvs' (lh::acc)
@@ -708,14 +708,14 @@ let compare_policies lvs1 lvs2 =
     | (GlobalVar (_,il1,_)) :: lvs1', (GlobalVar (_,il2,_)) :: lvs2'
          when il1 = il2 ->
        compare_policies_i lvs1' lvs2'
-    | (StoreVar (_,_,_,il1,_)) :: lvs1', (StoreVar (_,_,_,il2,_)) :: lvs2'
+    | (StoreVar (_,_,_,il1,_,_)) :: lvs1', (StoreVar (_,_,_,il2,_,_)) :: lvs2'
          when il1 = il2 ->
        compare_policies_i lvs1' lvs2'
     | (LocalVar (_,il1,_)) :: lvs1', (LocalVar (_,il2,_)) :: lvs2' ->
        false
     | (GlobalVar (_,il1,_)) :: lvs1', (GlobalVar (_,il2,_)) :: lvs2' ->
        false
-    | (StoreVar (_,_,_,il1,_)) :: lvs1', (StoreVar (_,_,_,il2,_)) :: lvs2' ->
+    | (StoreVar (_,_,_,il1,_,_)) :: lvs1', (StoreVar (_,_,_,il2,_,_)) :: lvs2' ->
        false
     | [], [] -> true
     | _, _ -> failwith "Not matching variables."  

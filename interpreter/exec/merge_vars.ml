@@ -11,7 +11,7 @@ module LoopVarMap = Map.Make(struct
 let get_policy_loopvar = function
   | LocalVar (x,is_low,mo) -> is_low
   | GlobalVar (x,is_low,mo) -> is_low
-  | StoreVar (sv, ty, sz, is_low, mo) -> is_low
+  | StoreVar (sv, ty, sz, is_low, mo, loc) -> is_low
   | StoreZeroVar (_) -> true
     
 let is_int_addr sv =
@@ -62,7 +62,7 @@ let merge_vars (lv: loopvar_t list) : loopvar_t list =
        otherwise the local/global variables take care of it
        take care of it *)
     (*| _ :: lvs -> merge_vars_i lvs mp*)
-    | (StoreVar (sv, ty, sz, is_low, mo) as lvh) :: lvs ->
+    | (StoreVar (sv, ty, sz, is_low, mo, loc) as lvh) :: lvs ->
        (*if (!Flags.debug) then
          print_loopvar lvh;*)
        (* Todo(Romy) add a flag for this *)
@@ -81,7 +81,7 @@ let merge_vars (lv: loopvar_t list) : loopvar_t list =
               merge_vars_i lvs mp'
             )
             else (
-              let mp' = LoopVarMap.add str (StoreVar (sv, ty, sz, false, mo), num+1) mp in
+              let mp' = LoopVarMap.add str (StoreVar (sv, ty, sz, false, mo, loc), num+1) mp in
               merge_vars_i lvs mp'
             )
           with Not_found ->
@@ -94,7 +94,7 @@ let merge_vars (lv: loopvar_t list) : loopvar_t list =
     | (StoreZeroVar (sv)) :: lvs ->
             failwith "Not expected StoreZeroVar in merge_variables."
     | [] -> LoopVarMap.bindings mp |>
-              List.filter (fun (k,(v,num)) -> num > 1) |>
+              (*List.filter (fun (k,(v,num)) -> num > 1) |>*)
               List.map (fun (k,(v,num)) -> v) 
          
   in
