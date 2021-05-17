@@ -1,6 +1,7 @@
 open Ast
 open Source
 open Config
+open Eval
    
 type stats_t = {
     number_modified: int;
@@ -11,6 +12,7 @@ type stats_t = {
     number_mem_ops: int;
     stack_instructions: Ast.instr list;
     possible_store_indexes: (Ast.instr * Ast.instr * Svalues.svalue option) list;
+    modified_variables: loopvar_t list;
   }
 
 let init_stats () =
@@ -21,7 +23,8 @@ let init_stats () =
     number_ifs = 0;
     number_mem_ops = 0;
     stack_instructions = [];
-    possible_store_indexes = []}
+    possible_store_indexes = [];
+    modified_variables = []}
   
 let increase_instr stats =
   {stats with number_instructions = stats.number_instructions + 1} 
@@ -61,6 +64,17 @@ let add_store_index st stats =
   | v1::v2::vs -> {stats with possible_store_indexes = (v2,st,None)::stats.possible_store_indexes}
   | _ -> stats
 
+let get_store_index stats =
+  match stats.stack_instructions with
+  | v1::v2::vs -> Some v2
+  | _ -> None
+
+       
+       
+
+let add_mod_var var stats =
+  {stats with modified_variables = var::stats.modified_variables}
+       
 let get_store_indexes stats =
   stats.possible_store_indexes
 
@@ -161,18 +175,24 @@ let loop_stats (es : Ast.instr list ) (reg: Source.region) : stats_t =
          | LocalGet x ->
             loop_stats_i est (increase_instr stats |> add_instruction e') 
          | LocalSet x->
-            loop_stats_i est (stats |> increase_instr |> increase_mv |> remove_instruction)
+            loop_stats_i est (stats |> increase_instr |> increase_mv
+                              |> add_mod_var (LocalVar(x,false,Nothing,None))
+                              |> remove_instruction)
          | LocalTee x->
             loop_stats_i est (stats |> increase_instr |> increase_mv
+                              |> add_mod_var (LocalVar(x,false,Nothing,None))
                               |> remove_instruction |> add_instruction e')
          | GlobalGet x ->
             loop_stats_i est (increase_instr stats |> add_instruction e') 
          | GlobalSet x->
-            loop_stats_i est (stats |> increase_instr |> increase_mv |> remove_instruction)
+            loop_stats_i est (stats |> increase_instr |> increase_mv
+                              |> add_mod_var (GlobalVar(x,false,Nothing,None))
+                              |> remove_instruction)
          | Load {offset; ty; sz; _}->
             loop_stats_i est (increase_instr stats |> increase_mem |> add_instruction e') 
          | Store {offset; ty; sz; _}->
             loop_stats_i est (stats |> increase_instr |> increase_mv |> increase_mem
+                              |> add_mod_var (StoreVar(None,ty,sz,false,Nothing,e'.at))
                               |> add_store_index e' |> remove_two_instructions)
          | Const v ->
             loop_stats_i est (stats |> increase_instr |> increase_loop_iter v.it

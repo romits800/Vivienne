@@ -230,7 +230,7 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
                       
                       let mo = Nothing in (*compare_svalues v v in*)
                       (* print_loopvar (LocalVar (x, is_low)); *)
-                      (LocalVar (x, is_low, mo))::lv)
+                      (LocalVar (x, is_low, mo, Some v))::lv)
                     else lv
            in
            (* let v, c =
@@ -260,7 +260,7 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
                       let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc v mem in
                       let mo = Nothing in (*compare_svalues vv v in*)
                       
-                      (LocalVar (x, is_low, mo))::lv)
+                      (LocalVar (x, is_low, mo, Some v))::lv)
                     else lv
            in
            (* print_loopvar (LocalVar (x,is_low)); *)
@@ -279,7 +279,7 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
            let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc v mem in
            let mo = Nothing in (* compare_svalues vv v in *)
            
-           let lv = (GlobalVar (x, is_low, mo))::lv in
+           let lv = (GlobalVar (x, is_low, mo, Some v))::lv in
            let newg, vs', es' =
              (try Sglobal.store (sglobal frame.inst x) v, vs', []
               with Sglobal.NotMutable -> Crash.error e.at "write to immutable global"
@@ -366,7 +366,7 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
            if (!Flags.debug) then (
              print_endline (string_of_bool is_low););
 
-           let lv = (StoreVar (final_addr, ty, sz, is_low, Nothing, e.at))::lv in
+           let lv = (StoreVar (Some final_addr, ty, sz, is_low, Nothing, e.at))::lv in
 
            let mem' = Smemory.store_sind_value num mem nv in
            let vs', es' = vs', [] in
@@ -655,19 +655,19 @@ let find_policy lvs c  =
   );
   let rec find_policy_i lvs acc =
     match lvs with
-    | (LocalVar (x,_,mo)) :: lvs' ->
+    | (LocalVar (x,_,mo,v)) :: lvs' ->
        let vv = local c.frame x in
        let mem = get_mem_tripple c.frame in 
        let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in                   
        let mo = Nothing in
-       find_policy_i lvs' (LocalVar (x,is_low,mo)::acc)
-    | (GlobalVar (x,_,mo)) :: lvs' ->
+       find_policy_i lvs' (LocalVar (x,is_low,mo, v)::acc)
+    | (GlobalVar (x,_,mo,v)) :: lvs' ->
        let vv = Sglobal.load (sglobal c.frame.inst x) in
        let mem = get_mem_tripple c.frame in 
        let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in                   
        let mo = Nothing in
-       find_policy_i lvs' (GlobalVar (x,is_low,mo)::acc)
-    | (StoreVar (final_addr, ty, sz, is_low, mo, loc)) :: lvs' ->
+       find_policy_i lvs' (GlobalVar (x,is_low,mo, v)::acc)
+    | (StoreVar (Some final_addr, ty, sz, is_low, mo, loc)) :: lvs' ->
        let vv =
          (match sz with
           | None ->
@@ -685,9 +685,11 @@ let find_policy lvs c  =
        let mem = get_mem_tripple c.frame in
        let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in                   
        let mo = Nothing in
-       find_policy_i lvs' (StoreVar (final_addr, ty, sz, is_low, mo, loc)::acc)
+       find_policy_i lvs' (StoreVar (Some final_addr, ty, sz, is_low, mo, loc)::acc)
 
     | (StoreZeroVar (sv) as lh) :: lvs' ->
+       find_policy_i lvs' (lh::acc)
+    | lh :: lvs' -> (* TODO(Check this)*)
        find_policy_i lvs' (lh::acc)
     | [] -> List.rev acc
   in
@@ -702,18 +704,18 @@ let compare_policies lvs1 lvs2 =
   );
   let rec compare_policies_i lvs1 lvs2 = 
     match lvs1,lvs2 with
-    | (LocalVar (_,il1,_)) :: lvs1', (LocalVar (_,il2,_)) :: lvs2'
+    | (LocalVar (_,il1,_,_)) :: lvs1', (LocalVar (_,il2,_,_)) :: lvs2'
          when il1 = il2 ->
        compare_policies_i lvs1' lvs2'
-    | (GlobalVar (_,il1,_)) :: lvs1', (GlobalVar (_,il2,_)) :: lvs2'
+    | (GlobalVar (_,il1,_,_)) :: lvs1', (GlobalVar (_,il2,_,_)) :: lvs2'
          when il1 = il2 ->
        compare_policies_i lvs1' lvs2'
     | (StoreVar (_,_,_,il1,_,_)) :: lvs1', (StoreVar (_,_,_,il2,_,_)) :: lvs2'
          when il1 = il2 ->
        compare_policies_i lvs1' lvs2'
-    | (LocalVar (_,il1,_)) :: lvs1', (LocalVar (_,il2,_)) :: lvs2' ->
+    | (LocalVar (_,il1,_,_)) :: lvs1', (LocalVar (_,il2,_,_)) :: lvs2' ->
        false
-    | (GlobalVar (_,il1,_)) :: lvs1', (GlobalVar (_,il2,_)) :: lvs2' ->
+    | (GlobalVar (_,il1,_,_)) :: lvs1', (GlobalVar (_,il2,_,_)) :: lvs2' ->
        false
     | (StoreVar (_,_,_,il1,_,_)) :: lvs1', (StoreVar (_,_,_,il2,_,_)) :: lvs2' ->
        false

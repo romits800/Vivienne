@@ -9,11 +9,17 @@ module LoopVarMap = Map.Make(struct
 
 
 let get_policy_loopvar = function
-  | LocalVar (x,is_low,mo) -> is_low
-  | GlobalVar (x,is_low,mo) -> is_low
+  | LocalVar (x, is_low, mo, v) -> is_low
+  | GlobalVar (x, is_low, mo, v) -> is_low
   | StoreVar (sv, ty, sz, is_low, mo, loc) -> is_low
   | StoreZeroVar (_) -> true
-    
+
+let get_value_loopvar = function
+  | LocalVar (x, is_low, mo, v) -> v
+  | GlobalVar (x, is_low, mo, v) -> v
+  | _ -> None
+
+                      
 let is_int_addr sv =
     match sv with
     | Svalues.SI32 s32 -> Si32.is_int s32
@@ -24,35 +30,89 @@ let get_int_addr sv =
     | Svalues.SI32 s32 -> Si32.to_int_u s32
     | _ -> failwith "Address should be i32."
 
+
+let is_int sv =
+    match sv with
+    | Svalues.SI32 s32 -> Si32.is_int s32
+    | Svalues.SI64 s64 -> Si64.is_int s64
+    | _ -> failwith "No support for floats."
+
+let get_int sv =
+    match sv with
+    | Svalues.SI32 s32 -> Si32.to_int_u s32
+    | Svalues.SI64 s64 -> Si64.to_int_u s64
+    | _ -> failwith "No support for floats."
+
+         
 (* Merge new variables *)
 let merge_vars (lv: loopvar_t list) : loopvar_t list =
   let rec merge_vars_i (lv: loopvar_t list)
             (mp: (loopvar_t * int)  LoopVarMap.t) : loopvar_t list =
     match lv with
-    | (LocalVar (x,is_low,mo) as lvh) :: lvs ->
+    | (LocalVar (x,is_low,mo,v) as lvh) :: lvs ->
        let str = "Local" ^ string_of_int (Int32.to_int x.it) in 
        (try
-          let is_low_old = LoopVarMap.find str mp |> fst |> get_policy_loopvar in
-          if (is_low_old = is_low) then
-              merge_vars_i lvs mp
-          else (
-              let mp' = LoopVarMap.add str (LocalVar (x,false,mo), 2) mp in
-              merge_vars_i lvs mp'
+          let old_val = LoopVarMap.find str mp |> fst in
+          let is_low_old = old_val |> get_policy_loopvar in
+          let new_is_low = if is_low_old = is_low then is_low else false in
+          (match old_val |> get_value_loopvar,v with
+           | Some sv1, Some sv2  ->
+              if (is_int sv1 && is_int sv2 && get_int sv1 = get_int sv2) then (
+
+                let mp' = LoopVarMap.add str (LocalVar (x,new_is_low,mo,Some sv1), 1) mp in
+                merge_vars_i lvs mp'
+
+              ) else (
+                let mp' = LoopVarMap.add str (LocalVar (x,new_is_low,mo,None), 1) mp in
+                merge_vars_i lvs mp'
+              )
+           | _,_ ->
+              if (is_low_old = is_low) then
+                merge_vars_i lvs mp
+              else (
+                let mp' = LoopVarMap.add str (LocalVar (x,new_is_low,mo,None), 1) mp in
+                merge_vars_i lvs mp'
+              )
+
           )
         with Not_found ->
           let mp' = LoopVarMap.add str (lvh,2) mp in
           merge_vars_i lvs mp'
        )
-    | (GlobalVar (x,is_low,mo) as lvh) :: lvs ->
+    | (GlobalVar (x,is_low,mo,v) as lvh) :: lvs ->
        let str = "Global" ^ string_of_int (Int32.to_int x.it) in
        (try
+          let old_val = LoopVarMap.find str mp |> fst in
           let is_low_old = LoopVarMap.find str mp |> fst |> get_policy_loopvar in
-          if (is_low_old = is_low) then 
-              merge_vars_i lvs  mp
-          else (
-              let mp' = LoopVarMap.add str (GlobalVar (x,false,mo), 2) mp in
-              merge_vars_i lvs  mp'
+          let new_is_low = if is_low_old = is_low then is_low else false in
+
+          (match old_val |> get_value_loopvar,v with
+           | Some sv1, Some sv2  ->
+              if (is_int sv1 && is_int sv2 && get_int sv1 = get_int sv2) then (
+
+                let mp' = LoopVarMap.add str (GlobalVar (x,new_is_low,mo,Some sv1), 1) mp in
+                merge_vars_i lvs mp'
+
+              ) else (
+                let mp' = LoopVarMap.add str (GlobalVar (x,new_is_low,mo,None), 1) mp in
+                merge_vars_i lvs mp'
+              )
+           | _,_ ->
+              if (is_low_old = is_low) then
+                merge_vars_i lvs mp
+              else (
+                let mp' = LoopVarMap.add str (GlobalVar (x,new_is_low,mo,None), 1) mp in
+                merge_vars_i lvs mp'
+              )
+
           )
+
+          (* if (is_low_old = is_low) then 
+           *     merge_vars_i lvs  mp
+           * else (
+           *     let mp' = LoopVarMap.add str (GlobalVar (x,false,mo), 1) mp in
+           *     merge_vars_i lvs  mp'
+           * ) *)
         with Not_found ->
           let mp' = LoopVarMap.add str (lvh, 2) mp in
           merge_vars_i lvs mp'
@@ -62,7 +122,7 @@ let merge_vars (lv: loopvar_t list) : loopvar_t list =
        otherwise the local/global variables take care of it
        take care of it *)
     (*| _ :: lvs -> merge_vars_i lvs mp*)
-    | (StoreVar (sv, ty, sz, is_low, mo, loc) as lvh) :: lvs ->
+    | (StoreVar (Some sv, ty, sz, is_low, mo, loc) as lvh) :: lvs ->
        (*if (!Flags.debug) then
          print_loopvar lvh;*)
        (* Todo(Romy) add a flag for this *)
@@ -81,7 +141,7 @@ let merge_vars (lv: loopvar_t list) : loopvar_t list =
               merge_vars_i lvs mp'
             )
             else (
-              let mp' = LoopVarMap.add str (StoreVar (sv, ty, sz, false, mo, loc), num+1) mp in
+              let mp' = LoopVarMap.add str (StoreVar (Some sv, ty, sz, false, mo, loc), num+1) mp in
               merge_vars_i lvs mp'
             )
           with Not_found ->
@@ -90,7 +150,8 @@ let merge_vars (lv: loopvar_t list) : loopvar_t list =
             merge_vars_i lvs mp'
          )
        ) 
-
+    | StoreVar _ :: lvs ->
+       failwith "Not expected StoreZeroVar in merge_variables."
     | (StoreZeroVar (sv)) :: lvs ->
             failwith "Not expected StoreZeroVar in merge_variables."
     | [] -> LoopVarMap.bindings mp |>

@@ -73,9 +73,9 @@ type frame =
 
 type modifier = Increase of svalue | Decrease of svalue | Nothing
                                                        
-type loopvar_t = LocalVar of int32 Source.phrase * bool * modifier (* local x * is_sat *)
-               | GlobalVar of int32 Source.phrase * bool * modifier
-               | StoreVar of svalue * Types.value_type * Types.pack_size option * bool * modifier * region
+type loopvar_t = LocalVar of int32 Source.phrase * bool * modifier * svalue option
+               | GlobalVar of int32 Source.phrase * bool * modifier * svalue option
+               | StoreVar of svalue option * Types.value_type * Types.pack_size option * bool * modifier * region
                | StoreZeroVar of svalue
 
 
@@ -209,12 +209,24 @@ let modifier_to_string = function
   | Nothing -> "Nothing"
                      
 let print_loopvar = function
-  | LocalVar (i, tf, mo) ->
-     "Local " ^ (string_of_bool tf) ^ " " ^ (Int32.to_int i.it |> string_of_int) |> print_endline
-  | GlobalVar (i, tf, mo) ->
-     "Global " ^ (string_of_bool tf) ^ " " ^ (Int32.to_int i.it |> string_of_int) |> print_endline
-  | StoreVar (sv, ty, sz, tf, mo, loc) ->
+  | LocalVar (i, tf, mo, Some sv) ->
+     "Local " ^ (string_of_bool tf) ^ " " ^
+       (Int32.to_int i.it |> string_of_int) ^
+         (svalue_to_string sv) |> print_endline
+  | LocalVar (i, tf, mo, _) ->
+     "Local " ^ (string_of_bool tf) ^ " " ^
+       (Int32.to_int i.it |> string_of_int) |> print_endline
+  | GlobalVar (i, tf, mo, Some sv) ->
+     "Global " ^ (string_of_bool tf) ^ " " ^
+       (Int32.to_int i.it |> string_of_int) ^
+         (svalue_to_string sv) |> print_endline
+  | GlobalVar (i, tf, mo, _) ->
+     "Global " ^ (string_of_bool tf) ^ " " ^
+       (Int32.to_int i.it |> string_of_int) |> print_endline
+  | StoreVar (Some sv, ty, sz, tf, mo, loc) ->
      "Store " ^ (string_of_bool tf) ^ " " ^ (svalue_to_string sv) |> print_endline
+  | StoreVar (None, ty, sz, tf, mo, loc) ->
+     "Store " ^ (string_of_bool tf)  |> print_endline
   | StoreZeroVar (sv) ->
      "StoreZero: Prev Value " ^ (svalue_to_string sv) |> print_endline
      
@@ -410,7 +422,7 @@ let get_mem_tripple frame =
 let assert_invar (lv : loopvar_t list) (c : config) : bool =
  let rec assert_invar_i (lv : loopvar_t list) (c : config) : bool =
   match lv with
-  | LocalVar (x, (true as is_low), mo) :: lvs ->
+  | LocalVar (x, (true as is_low), mo, _) :: lvs ->
      (* print_endline "localvar"; *)
      
      if !Flags.debug then print_loopvar (List.hd lv);
@@ -424,7 +436,7 @@ let assert_invar (lv : loopvar_t list) (c : config) : bool =
        (*let _ = assert_invar_i lvs c in*)
        false )
 
-  | GlobalVar (x, (true as is_low), mo) :: lvs ->
+  | GlobalVar (x, (true as is_low), mo, _) :: lvs ->
      if !Flags.debug then print_loopvar (List.hd lv);
      (* print_endline "globalvar"; *)
      let v = Sglobal.load (sglobal c.frame.inst x) in
@@ -437,7 +449,7 @@ let assert_invar (lv : loopvar_t list) (c : config) : bool =
          false
      )
 
-  | StoreVar (SI32 addr' as addr, ty, sz, (true as is_low), mo, loc) :: lvs  when Si32.is_int addr' ->
+  | StoreVar (Some (SI32 addr' as addr), ty, sz, (true as is_low), mo, loc) :: lvs  when Si32.is_int addr' ->
      if !Flags.debug then print_loopvar (List.hd lv);
      (* print_endline "storevar"; *)
      let nv =
