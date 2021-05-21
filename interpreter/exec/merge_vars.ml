@@ -27,7 +27,7 @@ let get_value_loopvar = function
 
 
 let are_same_sv = function
-    | sv, Some sv' -> print_endline (Pc_type.svalue_to_string sv ^ " " ^ Pc_type.svalue_to_string sv' ^ " " ^ string_of_bool (sv = sv')); 
+    | sv, Some sv' -> 
                     sv = sv'
     | _ -> false
 
@@ -96,6 +96,7 @@ let merge_vars (lv: loopvar_t list) (lv_stats: loopvar_t list) :
        (* Todo(Romy) add a flag for this *)
        if (!Flags.exclude_zero_address && is_int_addr sv && get_int_addr sv = 0) then (
          if !Flags.debug then print_endline "Address is zero";
+         if !Flags.debug then print_endline (string_of_int loc.left.line);
          let locm' = IntMap.add loc.left.line true locm in
          merge_vars_i lvs mp locm'
        ) else (
@@ -107,7 +108,7 @@ let merge_vars (lv: loopvar_t list) (lv_stats: loopvar_t list) :
             let sv2 = lh |> get_index_loopvar in
             if (is_low_old = is_low && are_same_sv (sv,sv2)) then (
               (* Increase number of times we found this *)
-              print_endline "Are same";
+              if !Flags.debug then print_endline "Are same";
               let mp' = LoopVarMap.add str (lvh, num+1) mp in
               merge_vars_i lvs mp' locm
             )

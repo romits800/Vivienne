@@ -182,18 +182,19 @@ let loop_invariant e' bt frame e vs es es' pcext c stats =
         in
         (* modified_vars := ModifiedVarsMap.add index lvs !modified_vars; *)
         try (
-            let lvs',locs = ModifiedVarsMap.find index !modified_vars in
-            lvs, locs, compare_policies lvs lvs'
+            let lvs',locs' = ModifiedVarsMap.find index !modified_vars in
+            lvs, locs', compare_policies lvs lvs'
         ) with Not_found -> (
-            lvs, IntMap.empty, false
+            lvs, locs, false
         )
       (* ) *)
     in
+
     if !Flags.debug then (
       print_endline ("Printing loopvars.." ^ (string_of_int (Obj.magic e')));
       List.iter print_loopvar lvs;
     );
-
+ 
     (* HAVOC *)
     let havc = havoc_vars lvs c stats locs in
     (*print_pc havc.pc |> print_endline; *)
