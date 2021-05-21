@@ -214,14 +214,14 @@ let print_loopvar = function
   | LocalVar (i, tf, mo, Some (sv,simp)) ->
      "Local " ^ (string_of_bool tf) ^ " " ^
        (Int32.to_int i.it |> string_of_int) ^ " " ^
-         (simpl_to_string simp) |> print_endline
+         (svalue_to_string sv) |> print_endline
   | LocalVar (i, tf, mo, _) ->
      "Local " ^ (string_of_bool tf) ^ " " ^
        (Int32.to_int i.it |> string_of_int) |> print_endline
   | GlobalVar (i, tf, mo, Some (sv,simp)) ->
      "Global " ^ (string_of_bool tf) ^ " " ^
        (Int32.to_int i.it |> string_of_int) ^  " " ^
-         (simpl_to_string simp) |> print_endline
+         (svalue_to_string sv) |> print_endline
   | GlobalVar (i, tf, mo, _) ->
      "Global " ^ (string_of_bool tf) ^ " " ^
        (Int32.to_int i.it |> string_of_int) |> print_endline
@@ -512,7 +512,7 @@ let assert_invar (lv : loopvar_t list) (c : config) : bool =
      (* print_endline "localvar"; *)
      
      if !Flags.debug then print_loopvar lh;
-     if !Flags.debug then print_endline (simpl_to_string simp);
+     if !Flags.debug then print_endline (svalue_to_string nv);
      let v = local c.frame x in
      let memtuple = get_mem_tripple c.frame in
      if Z3_solver.are_same v nv c.pc memtuple then
@@ -535,7 +535,7 @@ let assert_invar (lv : loopvar_t list) (c : config) : bool =
 
   | GlobalVar (x, _, mo, Some (nv,simp)) as lh :: lvs ->     
      if !Flags.debug then print_loopvar lh;
-     if !Flags.debug then print_endline (simpl_to_string simp);
+     if !Flags.debug then print_endline (svalue_to_string nv);
      let v = Sglobal.load (sglobal c.frame.inst x) in
      let memtuple = get_mem_tripple c.frame in
      if Z3_solver.are_same v nv c.pc memtuple then

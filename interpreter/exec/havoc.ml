@@ -40,7 +40,7 @@ let havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
 
      if !Flags.debug then (
        print_endline "LocalVar constant";
-       print_endline (simpl_to_string simp);
+       (*print_endline (simpl_to_string simp);*)
      );
 
      (* let v = local c.frame x in *)
@@ -48,7 +48,7 @@ let havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
      (* let is_low = Z3_solver.is_v_ct_unsat c.pc v mem in *)
 
      if !Flags.debug then (
-        print_endline ("Local" ^ (string_of_int (Int32.to_int x.it)) ^ " newval:" ^ (simpl_to_string simp));
+        print_endline ("Local" ^ (string_of_int (Int32.to_int x.it)) ^ " newval:" ^ (svalue_to_string newv));
      );
     
      let indexes = get_store_indexes stats in
@@ -197,7 +197,7 @@ let havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
        | _ -> c'
      in
      havoc_vars_i lvs c'' (set_store_indexes stats indexes')
-  | StoreVar (Some (SI32 addr' as addr), ty, sz, is_low, mo, loc) :: lvs when Si32.is_int addr' ->
+  | StoreVar (Some (SI32 addr' as addr), ty, sz, is_low, mo, loc) :: lvs  ->
      let sv =
        (match ty with
         |Types.I32Type ->

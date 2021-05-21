@@ -14,10 +14,22 @@ let get_policy_loopvar = function
   | StoreVar (sv, ty, sz, is_low, mo, loc) -> is_low
   | StoreZeroVar (_) -> true
 
+let get_index_loopvar = function
+  | StoreVar (Some sv, ty, sz, is_low, mo, loc) -> Some sv
+  | _ -> None
+
+
+
 let get_value_loopvar = function
   | LocalVar (x, is_low, mo, v) -> v
   | GlobalVar (x, is_low, mo, v) -> v
   | _ -> None
+
+
+let are_same_sv = function
+    | sv, Some sv' -> print_endline (Pc_type.svalue_to_string sv ^ " " ^ Pc_type.svalue_to_string sv' ^ " " ^ string_of_bool (sv = sv')); 
+                    sv = sv'
+    | _ -> false
 
 (* Merge new variables *)
 let merge_vars (lv: loopvar_t list) (lv_stats: loopvar_t list) : loopvar_t list =
@@ -46,7 +58,6 @@ let merge_vars (lv: loopvar_t list) (lv_stats: loopvar_t list) : loopvar_t list 
                 merge_vars_i lvs mp'
            | _,_ ->
                 let mp' = LoopVarMap.add str (LocalVar (x,new_is_low,mo,None), num+1) mp in
-(* >>>>>>> 84fe834dc26dbfc0ee2bf01952c9afd9b3aea50e *)
                 merge_vars_i lvs mp'
           )
         with Not_found ->
@@ -90,13 +101,15 @@ let merge_vars (lv: loopvar_t list) (lv_stats: loopvar_t list) : loopvar_t list 
          (try
             let lh, num = LoopVarMap.find str mp in
             let is_low_old = lh |> get_policy_loopvar in
-            if (is_low_old = is_low) then (
+            let sv2 = lh |> get_index_loopvar in
+            if (is_low_old = is_low && are_same_sv (sv,sv2)) then (
               (* Increase number of times we found this *)
+              print_endline "Are same";
               let mp' = LoopVarMap.add str (lvh, num+1) mp in
               merge_vars_i lvs mp'
             )
             else (
-              let mp' = LoopVarMap.add str (StoreVar (Some sv, ty, sz, false, mo, loc), num+1) mp in
+              let mp' = LoopVarMap.add str (StoreVar (None, ty, sz, false, mo, loc), num+1) mp in
               merge_vars_i lvs mp'
             )
           with Not_found ->
