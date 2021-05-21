@@ -79,7 +79,7 @@ module SiMap = Map.Make(struct
                                                 
 let simap = ref SiMap.empty
 
-let cfg = [("model", "true"); ("proof", "false")]
+let cfg = [("model", "true"); ("proof", "false"); ("timeout", "200000")]
 
 let ctx = ref (mk_context cfg);;
 
@@ -1487,6 +1487,7 @@ let is_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv : s
           Stats.update_query_str "Z3_bindings");
        let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
        
+       try 
        match (Solver.check solver []) with
        | Solver.UNSATISFIABLE ->
           (if (!Flags.stats) then (
@@ -1507,6 +1508,14 @@ let is_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv : s
            *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
            * ); *)
           false
+       with _ ->
+          if !Flags.debug then print_endline "Z3 solver failed - Maybe timeout";
+          if (!Flags.stats) then (
+            Stats.update_query_time (Unix.gettimeofday () -. start);
+            Stats.print_last()
+          );
+          false
+ 
      ) else (
        if num_exprs > !Flags.magic_number_1 then (
 
@@ -1522,6 +1531,7 @@ let is_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv : s
          (if (!Flags.stats) then
             Stats.update_query_str "Z3_bindings");
          let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
+         try
          match (Solver.check solver []) with
          | Solver.UNSATISFIABLE ->
           if (!Flags.stats) then (
@@ -1534,7 +1544,13 @@ let is_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv : s
             Stats.update_query_time (Unix.gettimeofday () -. start);
             Stats.print_last());
           false
-
+         with _ ->
+          if !Flags.debug then print_endline "Z3 solver failed - Maybe timeout";
+          if (!Flags.stats) then (
+            Stats.update_query_time (Unix.gettimeofday () -. start);
+            Stats.print_last());
+          false
+ 
        )
      )
      
@@ -1583,7 +1599,10 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
       in
       Goal.add g [v'];
       Goal.add g [pcexp'];
-      let solver = Solver.mk_solver ctx None in
+
+      let tac = Tactic.mk_tactic ctx "default" in
+
+      let solver = Solver.mk_solver_t ctx tac in
 
       let num_exprs = Goal.get_num_exprs g in
 
@@ -1591,16 +1610,15 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
          Stats.add_new_query "Unknown" (num_exprs) 0.0);
       let params = Params.mk_params ctx in
       (*Params.add_bool params (Symbol.mk_string ctx "sort_store") true;*)
-
       let s_formulas = (List.map (fun e -> Expr.simplify e (Some params)) (Goal.get_formulas g)) in
 
-      List.iter (fun f -> Solver.add solver [f]) s_formulas;
+      List.iter (fun f -> Solver.add solver [f]) @@ List.rev s_formulas;
 
-      (* let stats = Solver.get_statistics solver in
-       * print_endline (Statistics.to_string stats); *)     
+      (*Solver.add solver s_formulas;*)
 
       (* Printf.printf "Solver v_ct: %s\n" (Solver.to_string solver); *)
       if !Flags.portfolio_only then (
+
         let filename = write_formula_to_file ~model:model solver in
         let res = 
             try (
@@ -1620,6 +1638,7 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
            Stats.update_query_str "Z3_bindings") ;
         let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
         (* print_endline "is_v_ct_unsat_before_solving"; *) 
+        try
         match (Solver.check solver []) with
         | Solver.UNSATISFIABLE ->
            if (!Flags.stats) then (
@@ -1638,6 +1657,12 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
             * ); *)
            false
         | _ ->
+          if (!Flags.stats) then (
+            Stats.update_query_time (Unix.gettimeofday () -. start);
+            Stats.print_last());
+          false
+        with _ -> 
+          if !Flags.debug then print_endline "Z3 solver failed - Maybe timeout";
           if (!Flags.stats) then (
             Stats.update_query_time (Unix.gettimeofday () -. start);
             Stats.print_last());
@@ -1666,6 +1691,7 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
              Stats.update_query_str "Z3_bindings") ;
           let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
           (* print_endline "is_v_ct_unsat_before_solving"; *) 
+          try
           match (Solver.check solver []) with
           | Solver.UNSATISFIABLE ->
              if (!Flags.stats) then (
@@ -1683,6 +1709,12 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
               * ); *)
              false
           | _ ->
+             if (!Flags.stats) then (
+               Stats.update_query_time (Unix.gettimeofday () -. start);
+               Stats.print_last());
+             false
+          with _ -> 
+             if !Flags.debug then print_endline "Z3 solver failed - Maybe timeout";
              if (!Flags.stats) then (
                Stats.update_query_time (Unix.gettimeofday () -. start);
                Stats.print_last());
@@ -1752,6 +1784,7 @@ let is_sat ?timeout:(timeout=30) (pc : pc_ext) (mem: Smemory.t list * int * int)
       (if (!Flags.stats) then
          Stats.add_new_query "Unknown" num_exprs 0.0);
 
+
       if !Flags.portfolio_only then (
         let filename = write_formula_to_file ~model:false solver in
         (* let timeout = 0 in *)
@@ -1772,6 +1805,7 @@ let is_sat ?timeout:(timeout=30) (pc : pc_ext) (mem: Smemory.t list * int * int)
            Stats.update_query_str "Z3_bindings") ;
         let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
 
+        try    
         let check_solver = Solver.check solver [] in
         match check_solver with
         | Solver.SATISFIABLE ->
@@ -1791,6 +1825,14 @@ let is_sat ?timeout:(timeout=30) (pc : pc_ext) (mem: Smemory.t list * int * int)
              Stats.print_last()
            );
            false
+        with _ -> 
+          if !Flags.debug then print_endline "Z3 solver failed - Maybe timeout";
+          if (!Flags.stats) then (
+            Stats.update_query_time (Unix.gettimeofday () -. start);
+            Stats.print_last()
+          );
+          false
+ 
       ) else (
         if  num_exprs > !Flags.magic_number_2  then (
           let filename = write_formula_to_file ~model:false solver in
@@ -1817,6 +1859,7 @@ let is_sat ?timeout:(timeout=30) (pc : pc_ext) (mem: Smemory.t list * int * int)
              Stats.update_query_str "Z3_bindings") ;
           let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
 
+          try
           let check_solver = Solver.check solver [] in
           match check_solver with
           | Solver.SATISFIABLE ->
@@ -1829,6 +1872,13 @@ let is_sat ?timeout:(timeout=30) (pc : pc_ext) (mem: Smemory.t list * int * int)
                Stats.update_query_time (Unix.gettimeofday () -. start);
                Stats.print_last());
              false
+          with _ -> 
+             if !Flags.debug then print_endline "Z3 solver failed - Maybe timeout";
+             if (!Flags.stats) then (
+               Stats.update_query_time (Unix.gettimeofday () -. start);
+               Stats.print_last());
+             false
+ 
         )
       )
   )
@@ -1909,6 +1959,7 @@ let optimize (f : Z3.Optimize.optimize -> Z3.Expr.expr -> Z3.Optimize.handle)
     ) in
 
   (* List.iter (fun f -> Optimize.add opt2 [f]) (Goal.get_formulas g2); *)
+  try
   match (Optimize.check opt1) with
    | Solver.SATISFIABLE ->
       let ex1 = Optimize.get_lower h in
@@ -1935,6 +1986,9 @@ let optimize (f : Z3.Optimize.optimize -> Z3.Expr.expr -> Z3.Optimize.handle)
         Some (i)
       else None
    | _ ->  None
+   with _ -> 
+        if !Flags.debug then print_endline "Z3 solver failed - Maybe timeout";
+        None
 
 
 
@@ -2089,6 +2143,7 @@ let are_same ?timeout:(timeout=30) ?model:(model=false) (sv1 : svalue) (sv2 : sv
           Stats.update_query_str "Z3_bindings") ;
        let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
        (* print_endline "is_v_ct_unsat_before_solving"; *) 
+       try
        match (Solver.check solver []) with
        | Solver.UNSATISFIABLE ->
           if (!Flags.stats) then (
@@ -2110,6 +2165,13 @@ let are_same ?timeout:(timeout=30) ?model:(model=false) (sv1 : svalue) (sv2 : sv
             Stats.update_query_time (Unix.gettimeofday () -. start);
             Stats.print_last());
           false
+       with _ -> 
+          if !Flags.debug then print_endline "Z3 solver failed - Maybe timeout";
+          if (!Flags.stats) then (
+            Stats.update_query_time (Unix.gettimeofday () -. start);
+            Stats.print_last());
+          false
+ 
      ) else (
        if num_exprs > !Flags.magic_number_1 then (
          if !Flags.debug then print_endline "Using portfolio solver..";
@@ -2134,6 +2196,7 @@ let are_same ?timeout:(timeout=30) ?model:(model=false) (sv1 : svalue) (sv2 : sv
             Stats.update_query_str "Z3_bindings") ;
          let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
          (* print_endline "is_v_ct_unsat_before_solving"; *) 
+         try
          match (Solver.check solver []) with
          | Solver.UNSATISFIABLE ->
             if (!Flags.stats) then (
@@ -2155,6 +2218,13 @@ let are_same ?timeout:(timeout=30) ?model:(model=false) (sv1 : svalue) (sv2 : sv
               Stats.update_query_time (Unix.gettimeofday () -. start);
               Stats.print_last());
             false
+         with _ ->
+            if !Flags.debug then print_endline "Z3 solver failed - Maybe timeout";
+            if (!Flags.stats) then (
+              Stats.update_query_time (Unix.gettimeofday () -. start);
+              Stats.print_last());
+            false
+ 
        )
      
      )

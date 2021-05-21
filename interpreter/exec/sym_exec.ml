@@ -45,12 +45,7 @@ let simplify_v frame (pc: pc_ext) v =
  *   ) else
  *     (pclet,pc) *)
 
-module ModifiedVarsMap = Map.Make(struct
-                              type t = int
-                              let compare = (-)
-                            end)
-let modified_vars = ref ModifiedVarsMap.empty 
-                       
+                      
 (* module AnalyzedLoopsMap = Map.Make(struct
  *                               type t = int
  *                               let compare = compare
@@ -59,19 +54,6 @@ let modified_vars = ref ModifiedVarsMap.empty
  * let analyzed_loops = ref AnalyzedLoopsMap.empty *) 
 
 
-
-module VulnerabilitiesMap = Map.Make(struct
-                                type t = int
-                                let compare = (-)
-                              end)
-(* Vulnerability types *)
-                        
-let cond_vuln = ref VulnerabilitiesMap.empty
-let noninter_vuln = ref VulnerabilitiesMap.empty
-
-let memindex_vuln = ref VulnerabilitiesMap.empty 
-
-                   
 
 
 let estimate_loop_size e' bt frame e vs pcext es' c es = 
@@ -197,7 +179,7 @@ let loop_invariant e' bt frame e vs es es' pcext c stats =
         );
 
         let lvs' = get_mod_var stats in
-        let lvs = merge_vars lvs lvs' in
+        let lvs = if List.length lvs > 0 then merge_vars lvs lvs' else lvs in
 
         let lvs = 
             if !Flags.exclude_zero_address then
@@ -267,6 +249,9 @@ let rec step (c : config) : config list =
   let {frame; code = vs, es; pc = pcnum, pclet, pc; _} = c in
   let e = List.hd es in
 
+    
+  if !Flags.stats then 
+    codelines := IntMap.add e.at.left.line true !codelines;
 
   let vs, (pcnum, pclet, pc) = 
       match vs with
@@ -2045,8 +2030,8 @@ let init (m : module_) (exts : extern list) : module_inst =
 
   List.iter (fun f -> f ()) init_elems;
   List.iter (fun f -> f ()) init_datas;
+  Random.init 1234;
   Lib.Option.app (fun x -> ignore (invoke (func inst x) [])) start;
 
-  Random.init 1234;
 
   inst

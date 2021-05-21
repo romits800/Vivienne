@@ -7,7 +7,7 @@ open Ast
 open Loop_stats
   
 let havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
-(* let has_index (stats: stats_t) loc = 
+ let has_index (stats: stats_t) loc = 
     let rec has_index_i indexes loc = 
        match indexes with
        | (lv,st,Some nv)::indexes when st.at = loc -> Some nv, true
@@ -17,7 +17,7 @@ let havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
     has_index_i (get_store_indexes stats) loc
     
  in
-*)
+
  let rec havoc_vars_i (lv: loopvar_t list) (c : config) (stats: stats_t) =
   if !Flags.debug then (
     print_endline "Havocing Variables..";
@@ -232,9 +232,14 @@ let havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
      let c' = { c with frame = nframe} in
 
      havoc_vars_i lvs c' stats
-  (*| StoreVar (_, ty, sz, is_low, mo, loc) :: lvs  ->
+  | StoreVar (_, ty, sz, is_low, mo, loc) :: lvs  ->
     (match has_index stats loc with
-     | Some addr, true ->
+     | Some addr, true when not (!Flags.exclude_zero_address && is_int_addr addr && get_int_addr addr = 0)->
+          if !Flags.debug then (
+            print_endline "Storing constant address..";
+            print_endline (svalue_to_string addr);
+          );
+     
          let sv =
            (match ty with
             |Types.I32Type ->
@@ -264,9 +269,9 @@ let havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
          let c' = { c with frame = nframe} in
          havoc_vars_i lvs c' stats
      | _, _ ->  havoc_vars_i lvs c stats
-     ) *)
+     ) 
 
-  | StoreVar _ :: lvs -> havoc_vars_i lvs c stats
+ (* | StoreVar _ :: lvs -> havoc_vars_i lvs c stats*)
   | StoreZeroVar _ :: lvs -> havoc_vars_i lvs c stats
   | [] -> c
  in

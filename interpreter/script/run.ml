@@ -343,6 +343,7 @@ let run_action act : Values.value list =
     Instance.init_num();
     Pc_type.init_pc_num();
     Loop_stats.init_statsmap();
+    Eval.init_maps();
     if (!Flags.stats) then
       Stats.init_stats();
     (match Instance.export inst name with
@@ -357,6 +358,7 @@ let run_action act : Values.value list =
              (* trace (Printf.sprintf "Solver statistics:"); *)
              (* Stats.print_stats(); *)
              print_endline ("Number solver queries: " ^ (string_of_int (Z3_solver.get_num_queries ())));
+             print_endline ("Codelines: " ^ (string_of_int (Eval.get_codelines())));
            );
          with e ->
            let stop = Unix.gettimeofday () in

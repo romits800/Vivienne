@@ -13,7 +13,7 @@ let init_stats () =
              bitwuzla = 0; queries = [] }
 
 let print_query q =
-  print_endline (q.solver ^ ": " ^ string_of_int q.num_exprs ^ ": " ^ string_of_float q.time)
+  print_endline @@ q.solver ^ ": " ^ string_of_int q.num_exprs ^ ": " ^ string_of_float q.time
   
 let print_stats () =
   print_endline @@ "Z3 : " ^ (string_of_int !stats.z3);
