@@ -24,7 +24,7 @@ let havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
     List.iter print_loopvar lv
   );
   match lv with
-  | LocalVar (x, is_low, mo, Some newv) :: lvs ->
+  | LocalVar (x, is_low, mo, Some (newv,simp)) :: lvs ->
  
      let rec is_store_index indexes nv acc =
        match indexes with
@@ -40,7 +40,7 @@ let havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
 
      if !Flags.debug then (
        print_endline "LocalVar constant";
-       print_endline (svalue_to_string newv);
+       print_endline (simpl_to_string simp);
      );
 
      (* let v = local c.frame x in *)
@@ -48,7 +48,7 @@ let havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
      (* let is_low = Z3_solver.is_v_ct_unsat c.pc v mem in *)
 
      if !Flags.debug then (
-        print_endline ("Local" ^ (string_of_int (Int32.to_int x.it)) ^ " newval:" ^ (svalue_to_string newv));
+        print_endline ("Local" ^ (string_of_int (Int32.to_int x.it)) ^ " newval:" ^ (simpl_to_string simp));
      );
     
      let indexes = get_store_indexes stats in
@@ -126,7 +126,7 @@ let havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
        ) else c'
      in
      havoc_vars_i lvs c'' (set_store_indexes stats indexes')
-  | GlobalVar (x, is_low, mo, Some newv) :: lvs ->
+  | GlobalVar (x, is_low, mo, Some (newv,simp)) :: lvs ->
      let rec is_store_index indexes nv acc =
        match indexes with
        | ({it = GlobalGet x'; at},st,None)::indexes when x'.it = x.it -> 

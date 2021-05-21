@@ -1550,10 +1550,14 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
    * svalue_to_string sv |> print_endline; *)
    (* svalue_to_string sv |> print_endline; *)
 
+
   let start_t = if !Flags.debug then Unix.gettimeofday() else 0.0 in
 
   let ctx = init_solver() in
-  
+
+  (* List.iter print_endline (Tactic.get_tactic_names ctx); *)
+  (* let tac = Tactic.mk_tactic ctx "default" in *)
+
   let g = Goal.mk_goal ctx true false false in
   (* print_endline "is_v_ct_unsat before sv"; *)
   let v = sv_to_expr pc sv ctx mem in
@@ -2013,8 +2017,6 @@ let are_same ?timeout:(timeout=30) ?model:(model=false) (sv1 : svalue) (sv2 : sv
     let dt = Unix.gettimeofday () -. start_t in
     "Checking same time: " ^ (string_of_float dt) |> print_endline;
   );
-
-
   
   match v1,v2 with
   | L v1, L v2 when Expr.equal v1 v2 -> true

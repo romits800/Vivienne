@@ -73,8 +73,8 @@ type frame =
 
 type modifier = Increase of svalue | Decrease of svalue | Nothing
                                                        
-type loopvar_t = LocalVar of int32 Source.phrase * bool * modifier * svalue option
-               | GlobalVar of int32 Source.phrase * bool * modifier * svalue option
+type loopvar_t = LocalVar of int32 Source.phrase * bool * modifier * (svalue * simpl) option
+               | GlobalVar of int32 Source.phrase * bool * modifier * (svalue * simpl) option
                | StoreVar of svalue option * Types.value_type * Types.pack_size option * bool * modifier * region
                | StoreZeroVar of svalue
 
@@ -209,17 +209,17 @@ let modifier_to_string = function
   | Nothing -> "Nothing"
                      
 let print_loopvar = function
-  | LocalVar (i, tf, mo, Some sv) ->
+  | LocalVar (i, tf, mo, Some (sv,simp)) ->
      "Local " ^ (string_of_bool tf) ^ " " ^
        (Int32.to_int i.it |> string_of_int) ^ " " ^
-         (svalue_to_string sv) |> print_endline
+         (simpl_to_string simp) |> print_endline
   | LocalVar (i, tf, mo, _) ->
      "Local " ^ (string_of_bool tf) ^ " " ^
        (Int32.to_int i.it |> string_of_int) |> print_endline
-  | GlobalVar (i, tf, mo, Some sv) ->
+  | GlobalVar (i, tf, mo, Some (sv,simp)) ->
      "Global " ^ (string_of_bool tf) ^ " " ^
        (Int32.to_int i.it |> string_of_int) ^  " " ^
-         (svalue_to_string sv) |> print_endline
+         (simpl_to_string simp) |> print_endline
   | GlobalVar (i, tf, mo, _) ->
      "Global " ^ (string_of_bool tf) ^ " " ^
        (Int32.to_int i.it |> string_of_int) |> print_endline
@@ -432,19 +432,35 @@ let get_int sv =
     | _ -> failwith "No support for floats."
 
          
+let rtype_equal r1 r2 =
+  match r1, r2 with
+  | L e1, L e2 -> Z3.Expr.equal e1 e2
+  | H (e11, e12), L e2
+    | L e2, H (e11, e12) -> Z3.Expr.equal e11 e2 && Z3.Expr.equal e12 e2
+   | H (e11, e12), H (e21, e22) -> Z3.Expr.equal e11 e21 && Z3.Expr.equal e12 e22 
 
-  
+let simpl_equal s1 s2 =
+  match s1, s2 with
+  | Sv sv1, Sv sv2 ->
+     is_int sv1 && is_int sv2 && get_int sv1 = get_int sv2
+  | Z3Expr32 e1, Z3Expr32 e2
+    | Z3Expr64 e1, Z3Expr64 e2 -> rtype_equal e1 e2
+  | _, _ -> false
+    
+     
 (* Assert invariant *)
 let assert_invar (lv : loopvar_t list) (c : config) : bool =
  let rec assert_invar_i (lv : loopvar_t list) (c : config) : bool =
   match lv with
-  | LocalVar (x, _, mo, Some nv) as lh :: lvs ->
+  | LocalVar (x, _, mo, Some (nv,simp)) as lh :: lvs ->
      (* print_endline "localvar"; *)
      
      if !Flags.debug then print_loopvar lh;
-     if !Flags.debug then print_endline (svalue_to_string nv);
+     if !Flags.debug then print_endline (simpl_to_string simp);
      let v = local c.frame x in
-     if (is_int v && get_int v = get_int nv) then assert_invar_i lvs c
+     let mem = get_mem_tripple c.frame in
+     let _, simpv = Z3_solver.simplify v c.pc mem in
+     if (simpl_equal simp simpv) then assert_invar_i lvs c
      else false
      
   | LocalVar (x, (true as is_low), mo, None) as lh :: lvs ->
@@ -461,11 +477,13 @@ let assert_invar (lv : loopvar_t list) (c : config) : bool =
        (*let _ = assert_invar_i lvs c in*)
        false )
 
-  | GlobalVar (x, _, mo, Some nv) as lh :: lvs ->     
+  | GlobalVar (x, _, mo, Some (nv,simp)) as lh :: lvs ->     
      if !Flags.debug then print_loopvar lh;
-     if !Flags.debug then print_endline (svalue_to_string nv);
+     if !Flags.debug then print_endline (simpl_to_string simp);
      let v = Sglobal.load (sglobal c.frame.inst x) in
-     if (is_int v && get_int v = get_int nv) then assert_invar_i lvs c
+     let mem = get_mem_tripple c.frame in
+     let _, simpv = Z3_solver.simplify v c.pc mem in
+     if (simpl_equal simp simpv) then assert_invar_i lvs c
      else false
 
   | GlobalVar (x, (true as is_low), mo, None) as lh :: lvs ->

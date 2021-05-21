@@ -229,8 +229,9 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
 
                       
                       let mo = Nothing in (*compare_svalues v v in*)
+                      let _,simp = Z3_solver.simplify v c.pc mem in
                       (* print_loopvar (LocalVar (x, is_low)); *)
-                      (LocalVar (x, is_low, mo, Some v))::lv)
+                      (LocalVar (x, is_low, mo, Some (v,simp)))::lv)
                     else lv
            in
            (* let v, c =
@@ -259,8 +260,8 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
                       let mem = get_mem_tripple frame in 
                       let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc v mem in
                       let mo = Nothing in (*compare_svalues vv v in*)
-                      
-                      (LocalVar (x, is_low, mo, Some v))::lv)
+                      let _,simp = Z3_solver.simplify v c.pc mem in
+                      (LocalVar (x, is_low, mo, Some (v,simp)))::lv)
                     else lv
            in
            (* print_loopvar (LocalVar (x,is_low)); *)
@@ -278,8 +279,8 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
            let mem = get_mem_tripple frame in 
            let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc v mem in
            let mo = Nothing in (* compare_svalues vv v in *)
-           
-           let lv = (GlobalVar (x, is_low, mo, Some v))::lv in
+           let _, simp = Z3_solver.simplify v c.pc mem in
+           let lv = (GlobalVar (x, is_low, mo, Some (v,simp)))::lv in
            let newg, vs', es' =
              (try Sglobal.store (sglobal frame.inst x) v, vs', []
               with Sglobal.NotMutable -> Crash.error e.at "write to immutable global"
@@ -365,7 +366,7 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
            (* let mo = compare_svalues lvn sv in *)
            if (!Flags.debug) then (
              print_endline (string_of_bool is_low););
-
+           (* let tf, simp = Z3_solver.simplify final_addr c.pc  memtuple in *) 
            let lv = (StoreVar (Some final_addr, ty, sz, is_low, Nothing, e.at))::lv in
 
            let mem' = Smemory.store_sind_value num mem nv in

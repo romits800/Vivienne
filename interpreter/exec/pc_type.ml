@@ -135,3 +135,16 @@ let merge_pcs (pc1 : pc_ext) (pc2 : pc_ext) : pc_ext =
   let pclet = Lets.union (fun k v1 v2 -> Some v1) pclet1 pclet2 in
   let pc' = disjunction_pcs pc1 pc2 in
   (pc_num, pclet, pc')
+
+
+let reltype_to_string (rt: rel_type) = 
+  match rt with
+   | L ex -> Z3.Expr.to_string ex
+   | H(ex1,ex2) -> "(" ^ Z3.Expr.to_string ex1 ^ ", "
+                   ^ Z3.Expr.to_string ex1 ^ ")"
+
+  
+let simpl_to_string (s: simpl) =
+  match s with
+  | Sv sv -> svalue_to_string sv
+  | Z3Expr32 rt | Z3Expr64 rt -> reltype_to_string rt

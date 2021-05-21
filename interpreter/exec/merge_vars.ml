@@ -19,16 +19,16 @@ let get_value_loopvar = function
   | GlobalVar (x, is_low, mo, v) -> v
   | _ -> None
 
-                      
+       
 let is_int_addr sv =
-    match sv with
-    | Svalues.SI32 s32 -> Si32.is_int s32
-    | _ -> failwith "Address should be i32."
+  match sv with
+  | Svalues.SI32 s32 -> Si32.is_int s32
+  | _ -> failwith "Address should be i32."
 
 let get_int_addr sv =
-    match sv with
-    | Svalues.SI32 s32 -> Si32.to_int_u s32
-    | _ -> failwith "Address should be i32."
+  match sv with
+  | Svalues.SI32 s32 -> Si32.to_int_u s32
+  | _ -> failwith "Address should be i32."
 
 
 (* Merge new variables *)
@@ -43,17 +43,17 @@ let merge_vars (lv: loopvar_t list) (lv_stats: loopvar_t list) : loopvar_t list 
           let is_low_old = old_val |> get_policy_loopvar in
           let new_is_low = if is_low_old = is_low then is_low else false in
           (match old_val |> get_value_loopvar,v with
-           | Some sv1, Some sv2  ->
-              if (is_int sv1 && is_int sv2 && get_int sv1 = get_int sv2) then (
+           | Some (sv1,simp1), Some (sv2,simp2)  ->
+              if (simpl_equal simp1 simp2) then (
 
-                let mp' = LoopVarMap.add str (LocalVar (x,new_is_low,mo,Some sv1), 1) mp in
+                let mp' = LoopVarMap.add str (LocalVar (x,new_is_low,mo,Some (sv1,simp1)), 1) mp in
                 merge_vars_i lvs mp'
 
               ) else (
                 let mp' = LoopVarMap.add str (LocalVar (x,new_is_low,mo,None), 1) mp in
                 merge_vars_i lvs mp'
               )
-           | _,_ ->
+           | _, _ ->
               if (is_low_old = is_low) then
                 merge_vars_i lvs mp
               else (
@@ -74,10 +74,10 @@ let merge_vars (lv: loopvar_t list) (lv_stats: loopvar_t list) : loopvar_t list 
           let new_is_low = if is_low_old = is_low then is_low else false in
 
           (match old_val |> get_value_loopvar,v with
-           | Some sv1, Some sv2  ->
-              if (is_int sv1 && is_int sv2 && get_int sv1 = get_int sv2) then (
+           | Some (sv1,simp1), Some (sv2,simp2)  ->
+              if (simpl_equal simp1 simp2) then (
 
-                let mp' = LoopVarMap.add str (GlobalVar (x,new_is_low,mo,Some sv1), 1) mp in
+                let mp' = LoopVarMap.add str (GlobalVar (x,new_is_low,mo,Some (sv1,simp2)), 1) mp in
                 merge_vars_i lvs mp'
 
               ) else (
