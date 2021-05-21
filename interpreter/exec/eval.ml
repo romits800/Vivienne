@@ -37,6 +37,8 @@ exception Exhaustion = Exhaustion.Error
    * | Memory.Type -> Crash.error at "type mismatch at memory access" *)
   (* | exn -> raise exn *)
 
+
+
 let numeric_error at = function
   | Numeric_error.IntegerOverflow -> "integer overflow"
   | Numeric_error.IntegerDivideByZero -> "integer divide by zero"
@@ -419,6 +421,18 @@ let get_mem_tripple frame =
   (frame.inst.smemories, smemlen frame.inst, smemnum frame.inst)
 
 
+
+let is_int_addr sv =
+    match sv with
+    | Svalues.SI32 s32 -> Si32.is_int s32
+    | _ -> failwith "Address should be i32."
+
+let get_int_addr sv =
+    match sv with
+    | Svalues.SI32 s32 -> Si32.to_int_u s32
+    | _ -> failwith "Address should be i32."
+
+
 let is_int sv =
     match sv with
     | Svalues.SI32 s32 -> Si32.is_int s32
@@ -432,6 +446,7 @@ let get_int sv =
     | _ -> failwith "No support for floats."
 
          
+
 let rtype_equal r1 r2 =
   match r1, r2 with
   | L e1, L e2 -> Z3.Expr.equal e1 e2
@@ -448,6 +463,47 @@ let simpl_equal s1 s2 =
   | _, _ -> false
     
      
+
+module VulnerabilitiesMap = Map.Make(struct
+                                type t = int
+                                let compare = (-)
+                              end)
+(* Vulnerability types *)
+
+module ModifiedVarsMap = Map.Make(struct
+                              type t = int
+                              let compare = (-)
+                            end)
+let modified_vars: loopvar_t list ModifiedVarsMap.t ref = ref ModifiedVarsMap.empty 
+type vuln_t = bool VulnerabilitiesMap.t         
+let cond_vuln:  vuln_t ref = ref VulnerabilitiesMap.empty
+let noninter_vuln: vuln_t ref = ref VulnerabilitiesMap.empty
+
+let memindex_vuln: vuln_t ref = ref VulnerabilitiesMap.empty 
+
+(* Todo(Romy): make only one IntMap *)
+module IntMap = Map.Make(struct
+                            type t = int
+                            let compare = (-)
+                          end)
+
+type cline_t = bool IntMap.t
+let codelines: cline_t ref = ref IntMap.empty
+
+let init_maps () = 
+    codelines := IntMap.empty;
+    cond_vuln := VulnerabilitiesMap.empty;
+    noninter_vuln := VulnerabilitiesMap.empty;
+    memindex_vuln := VulnerabilitiesMap.empty
+
+let get_codelines () = 
+    IntMap.bindings !codelines |> List.length
+
+let print_codelines () = 
+    IntMap.bindings !codelines |> List.iter (fun (k,v) -> print_endline (string_of_int k))
+
+
+  
 (* Assert invariant *)
 let assert_invar (lv : loopvar_t list) (c : config) : bool =
  let rec assert_invar_i (lv : loopvar_t list) (c : config) : bool =
@@ -458,9 +514,9 @@ let assert_invar (lv : loopvar_t list) (c : config) : bool =
      if !Flags.debug then print_loopvar lh;
      if !Flags.debug then print_endline (simpl_to_string simp);
      let v = local c.frame x in
-     let mem = get_mem_tripple c.frame in
-     let _, simpv = Z3_solver.simplify v c.pc mem in
-     if (simpl_equal simp simpv) then assert_invar_i lvs c
+     let memtuple = get_mem_tripple c.frame in
+     if Z3_solver.are_same v nv c.pc memtuple then
+       assert_invar_i lvs c
      else false
      
   | LocalVar (x, (true as is_low), mo, None) as lh :: lvs ->
@@ -481,10 +537,12 @@ let assert_invar (lv : loopvar_t list) (c : config) : bool =
      if !Flags.debug then print_loopvar lh;
      if !Flags.debug then print_endline (simpl_to_string simp);
      let v = Sglobal.load (sglobal c.frame.inst x) in
-     let mem = get_mem_tripple c.frame in
-     let _, simpv = Z3_solver.simplify v c.pc mem in
-     if (simpl_equal simp simpv) then assert_invar_i lvs c
+     let memtuple = get_mem_tripple c.frame in
+     if Z3_solver.are_same v nv c.pc memtuple then
+       assert_invar_i lvs c
      else false
+     (*if (is_int v && get_int v = get_int nv) then assert_invar_i lvs c
+     else false*)
 
   | GlobalVar (x, (true as is_low), mo, None) as lh :: lvs ->
      if !Flags.debug then print_loopvar lh;
