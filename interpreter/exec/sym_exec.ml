@@ -79,12 +79,12 @@ let estimate_loop_size e' bt frame e vs pcext es' c es =
     let args, vs' = take n1 vs e.at, drop n1 vs e.at in
 
     (* HAVOC *)
-    let lvs =
+    let lvs, locs =
       let index = (Obj.magic e') in
       try (
-        let lvs = ModifiedVarsMap.find index !modified_vars in
+        let lvs,locs = ModifiedVarsMap.find index !modified_vars in
         (* check if we have different initial policy *)
-        find_policy lvs c
+        find_policy lvs c, locs
       ) with Not_found -> (
         let vs'', es'' = vs', [Label (n1, [Plain e' @@ e.at],
                                       (args, List.map plain es'), (pcnum, pclet,pc),
@@ -92,9 +92,9 @@ let estimate_loop_size e' bt frame e vs pcext es' c es =
         (*let lvs, _ = find_modified_vars (Obj.magic e')*)
         let lvs = fv_eval (Obj.magic e')
                     {c with code = vs'', es''} in (* @ List.tl es;} in*)
-        let lvs = merge_vars lvs [] in
-        modified_vars := ModifiedVarsMap.add index lvs !modified_vars;
-        lvs
+        let lvs,locs = merge_vars lvs [] in
+        modified_vars := ModifiedVarsMap.add index (lvs,locs) !modified_vars;
+        lvs,locs
       )
     in
     
@@ -102,7 +102,7 @@ let estimate_loop_size e' bt frame e vs pcext es' c es =
       print_endline "printing loopvars..";
       List.iter print_loopvar lvs
     );
-    let havc = havoc_vars lvs c (Loop_stats.init_stats()) in
+    let havc = havoc_vars lvs c (Loop_stats.init_stats()) locs in
 
     (* FIND INDUCTION VARIABLES *)
     let vs'', es'' = vs', [Label (n1, [],
@@ -160,16 +160,8 @@ let loop_invariant e' bt frame e vs es es' pcext c stats =
       print_endline "Finding variables modified in loop..";
 
     (* print_endline "Finding vars"; *)
-    let lvs, analyzed =
+    let lvs, locs, analyzed =
       let index = (Obj.magic e') in 
-      (*try (
-        let lvs = ModifiedVarsMap.find index !modified_vars in
-        (* check if we have different initial policy *)
-        let lvs' = find_policy lvs c in
-        lvs', compare_policies lvs lvs'
-        
-      ) with Not_found -> ( *)
-        (*let lvs, _ = find_modified_vars (Obj.magic e')*)
         let lvs = fv_eval (Obj.magic e')
                     {c with code = vs'', es''} in (* @ List.tl es;} in*)
 
@@ -179,7 +171,8 @@ let loop_invariant e' bt frame e vs es es' pcext c stats =
         );
 
         let lvs' = get_mod_var stats in
-        let lvs = if List.length lvs > 0 then merge_vars lvs lvs' else lvs in
+        let lvs, locs = if List.length lvs > 0 then
+                          merge_vars lvs lvs' else lvs, IntMap.empty in
 
         let lvs = 
             if !Flags.exclude_zero_address then
@@ -189,10 +182,10 @@ let loop_invariant e' bt frame e vs es es' pcext c stats =
         in
         (* modified_vars := ModifiedVarsMap.add index lvs !modified_vars; *)
         try (
-            let lvs' = ModifiedVarsMap.find index !modified_vars in
-            lvs, compare_policies lvs lvs'
+            let lvs',locs = ModifiedVarsMap.find index !modified_vars in
+            lvs, locs, compare_policies lvs lvs'
         ) with Not_found -> (
-            lvs, false
+            lvs, IntMap.empty, false
         )
       (* ) *)
     in
@@ -202,7 +195,7 @@ let loop_invariant e' bt frame e vs es es' pcext c stats =
     );
 
     (* HAVOC *)
-    let havc = havoc_vars lvs c stats in
+    let havc = havoc_vars lvs c stats locs in
     (*print_pc havc.pc |> print_endline; *)
     if !Flags.elim_induction_variables then (
       let vs'', es'' = vs', [Label (n1, [], (*Plain e' @@ e.at],*)
@@ -1157,7 +1150,7 @@ let rec step (c : config) : config list =
         * let is_low = Z3_solver.is_v_ct_unsat c.pc vv mem in
         * print_endline (string_of_bool is_low); *)
        let args, vs' = take n vs e.at, drop n vs e.at in
-       let lvs, analyzed =
+       let lvs, locs, analyzed =
          let index = (Obj.magic l) in
          (*try (
            let lvs = ModifiedVarsMap.find index !modified_vars in
@@ -1172,9 +1165,9 @@ let rec step (c : config) : config list =
            let lvs = fv_eval (Obj.magic l)
                           {c with code = vs'', es''} in (* @ List.tl es;} in*)
 
-           let lvs = merge_vars lvs [] in
-           modified_vars := ModifiedVarsMap.add index lvs !modified_vars;
-           lvs, false
+           let lvs,locs = merge_vars lvs [] in
+           modified_vars := ModifiedVarsMap.add index (lvs, locs) !modified_vars;
+           lvs, locs, false
          (* ) *)
        in
        if !Flags.debug then (
@@ -1184,7 +1177,7 @@ let rec step (c : config) : config list =
 
        let stats = loop_stats es' loc in
        (* HAVOC *)
-       let havc = havoc_vars lvs c stats in
+       let havc = havoc_vars lvs c stats locs in
         (* print_endline ("Number memories" ^ string_of_int (List.length havc.frame.inst.smemories));
                   let stores = Smemory.get_stores (List.hd havc.frame.inst.smemories) in
         List.iter (fun st -> print_endline (svalue_to_string st)) stores;

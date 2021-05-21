@@ -6,7 +6,7 @@ open Pc_type
 open Ast
 open Loop_stats
   
-let havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
+let havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) (locs: bool IntMap.t) =
  let has_index (stats: stats_t) loc = 
     let rec has_index_i indexes loc = 
        match indexes with
@@ -18,6 +18,16 @@ let havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
     
  in
 
+ let is_index_in_locs st locs =
+   match st with
+   | Some st' -> 
+      (try
+        let _ = IntMap.find st'.at.left.line locs in
+        true
+      with Not_found ->
+            false)
+   |  None -> false
+ in
  let rec havoc_vars_i (lv: loopvar_t list) (c : config) (stats: stats_t) =
   if !Flags.debug then (
     print_endline "Havocing Variables..";
@@ -25,34 +35,26 @@ let havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
   );
   match lv with
   | LocalVar (x, is_low, mo, Some (newv,simp)) :: lvs ->
- 
-     let rec is_store_index indexes nv acc =
+     let rec update_store_index indexes nv acc =
        match indexes with
        | ({it = LocalGet x'; at},st,None)::indexes when x'.it = x.it -> 
             let ind = ({it = LocalGet x'; at}, st, Some nv) in 
-            ((ind::indexes) @ acc, Some st, true)
+            (ind::indexes) @ acc, true
        | ({it = LocalTee x'; at},st,None)::indexes when x'.it = x.it ->
             let ind = ({it = LocalTee x'; at}, st, Some nv) in
-            ((ind::indexes) @ acc, Some st, true)
-       | ind::indexes -> is_store_index indexes nv (ind::acc)
-       | [] -> (acc, None, false)
+            (ind::indexes) @ acc, true
+       | ind::indexes -> update_store_index indexes nv (ind::acc)
+       | [] -> acc, false
      in
 
      if !Flags.debug then (
        print_endline "LocalVar constant";
        (*print_endline (simpl_to_string simp);*)
-     );
-
-     (* let v = local c.frame x in *)
-     (* let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in *)
-     (* let is_low = Z3_solver.is_v_ct_unsat c.pc v mem in *)
-
-     if !Flags.debug then (
-        print_endline ("Local" ^ (string_of_int (Int32.to_int x.it)) ^ " newval:" ^ (svalue_to_string newv));
+       print_endline ("Local" ^ (string_of_int (Int32.to_int x.it)) ^ " newval:" ^ (svalue_to_string newv));
      );
     
      let indexes = get_store_indexes stats in
-     let indexes', st, tf = is_store_index indexes newv [] in
+     let indexes', tf = update_store_index indexes newv [] in
     
      let c' = { c with frame = update_local c.frame x newv } in 
 
@@ -77,35 +79,52 @@ let havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
 
   | LocalVar (x, is_low, mo, None) :: lvs ->
  
-     let rec is_store_index indexes nv acc =
+     let rec is_store_index indexes =
+       match indexes with
+       | ({it = LocalGet x'; at},st,None)::indexes when x'.it = x.it ->
+          Some st
+       | ({it = LocalTee x'; at},st,None)::indexes when x'.it = x.it ->
+          Some st
+       | ind::indexes -> is_store_index indexes 
+       | [] -> None
+     in
+
+     let rec update_store_index indexes nv acc =
        match indexes with
        | ({it = LocalGet x'; at},st,None)::indexes when x'.it = x.it -> 
             let ind = ({it = LocalGet x'; at}, st, Some nv) in 
-            ((ind::indexes) @ acc, Some st, true)
+            (ind::indexes) @ acc, true
        | ({it = LocalTee x'; at},st,None)::indexes when x'.it = x.it ->
             let ind = ({it = LocalTee x'; at}, st, Some nv) in
-            ((ind::indexes) @ acc, Some st, true)
-       | ind::indexes -> is_store_index indexes nv (ind::acc)
-       | [] -> (acc, None, false)
+            (ind::indexes) @ acc, true
+       | ind::indexes -> update_store_index indexes nv (ind::acc)
+       | [] -> acc, false
      in
-          
+
      let v = local c.frame x in
      (* let mem = (c.frame.inst.smemories, smemlen c.frame.inst) in *)
      (* let is_low = Z3_solver.is_v_ct_unsat c.pc v mem in *)
-     let newv =
-       (match v with
-        | SI32 _ -> SI32 (if is_low then Si32.of_low() else Si32.of_high())
-        | SI64 _ -> SI64 (if is_low then Si64.of_low() else Si64.of_high())
-        | _ -> failwith "not implemented floated numbers"
-       )
-     in
-     if !Flags.debug then (
-        print_endline ("Local" ^ (string_of_int (Int32.to_int x.it)) ^ " newval:" ^ (svalue_to_string newv));
-     );
     
      let indexes = get_store_indexes stats in
-     let indexes', st, tf = is_store_index indexes newv [] in
-    
+     let  st = is_store_index indexes in
+
+     let newv =
+       if !Flags.exclude_zero_address && is_index_in_locs st locs then (
+         if !Flags.debug then print_endline "Index is in locs";
+         SI32 (Si32.of_int_u 0)
+       ) else 
+         (match v with
+          | SI32 _ -> SI32 (if is_low then Si32.of_low() else Si32.of_high())
+          | SI64 _ -> SI64 (if is_low then Si64.of_low() else Si64.of_high())
+          | _ -> failwith "not implemented floated numbers"
+         )
+     in
+     if !Flags.debug then (
+       print_endline ("Local" ^ (string_of_int (Int32.to_int x.it)) ^ " newval:" ^ (svalue_to_string newv));
+     );
+
+     let indexes',tf = update_store_index indexes newv [] in
+     
      let c' = { c with frame = update_local c.frame x newv } in 
 
      if !Flags.debug then (
@@ -127,14 +146,14 @@ let havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
      in
      havoc_vars_i lvs c'' (set_store_indexes stats indexes')
   | GlobalVar (x, is_low, mo, Some (newv,simp)) :: lvs ->
-     let rec is_store_index indexes nv acc =
+     let rec update_store_index indexes nv acc =
        match indexes with
        | ({it = GlobalGet x'; at},st,None)::indexes when x'.it = x.it -> 
             let ind = ({it = GlobalGet x'; at}, st, Some nv) in
-            ((ind::indexes) @ acc, Some st, true)
+            ((ind::indexes) @ acc,  true)
  
-       | ind::indexes -> is_store_index indexes nv (ind::acc)
-       | [] -> (acc, None, false)
+       | ind::indexes -> update_store_index indexes nv (ind::acc)
+       | [] -> (acc, false)
      in
 
      let newg = 
@@ -144,7 +163,7 @@ let havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
      in
      
      let indexes = get_store_indexes stats in
-     let indexes', st, tf = is_store_index indexes newv [] in
+     let indexes', tf = update_store_index indexes newv [] in
      let c' = { c with frame = {c.frame with inst = update_sglobal c.frame.inst newg x } } in
 
      let c'' =
@@ -158,34 +177,50 @@ let havoc_vars (lv: loopvar_t list) (c : config) (stats: stats_t) =
      havoc_vars_i lvs c'' (set_store_indexes stats indexes')
 
   | GlobalVar (x, is_low, mo, None) :: lvs ->
-     let rec is_store_index indexes nv acc =
+     let rec is_store_index indexes =
+       match indexes with
+       | ({it = GlobalGet x'; at},st,None)::indexes when x'.it = x.it -> 
+            Some st
+       | _::indexes -> is_store_index indexes 
+       | [] -> None
+     in
+
+     let rec update_store_index indexes nv acc =
        match indexes with
        | ({it = GlobalGet x'; at},st,None)::indexes when x'.it = x.it -> 
             let ind = ({it = GlobalGet x'; at}, st, Some nv) in
-            ((ind::indexes) @ acc, Some st, true)
+            ((ind::indexes) @ acc, true)
  
-       | ind::indexes -> is_store_index indexes nv (ind::acc)
-       | [] -> (acc, None, false)
+       | ind::indexes -> update_store_index indexes nv (ind::acc)
+       | [] -> (acc, false)
      in
 
      let v = Sglobal.load (sglobal c.frame.inst x) in
      (* let mem = (c..inst.smemories, smemlen c.frame.inst) in *)
      (* let is_low = Z3_solver.is_v_ct_unsat c.pc v mem in *)
+
+     let indexes = get_store_indexes stats in
+     let st = is_store_index indexes  in
+
      let newv =
-       (match v with
-        | SI32 _ -> SI32 (if is_low then Si32.of_low() else Si32.of_high())
-        | SI64 _ -> SI64 (if is_low then Si64.of_low() else Si64.of_high())
-        | _ -> failwith "not implemented floated numbers"
-       )
+       if !Flags.exclude_zero_address && is_index_in_locs st locs then (
+         if !Flags.debug then print_endline "Index is in locs";
+         SI32 (Si32.of_int_u 0)
+       ) else 
+         (match v with
+          | SI32 _ -> SI32 (if is_low then Si32.of_low() else Si32.of_high())
+          | SI64 _ -> SI64 (if is_low then Si64.of_low() else Si64.of_high())
+          | _ -> failwith "not implemented floated numbers"
+         )
      in
+
+     let indexes', tf = update_store_index indexes newv [] in     
+     (* Updating configuration *)
      let newg = 
        (try Sglobal.store (sglobal c.frame.inst x) newv
         with Sglobal.NotMutable -> Crash.error x.at "write to immutable global"
            | Sglobal.Type -> Crash.error x.at "type mismatch at global write")
      in
-     
-     let indexes = get_store_indexes stats in
-     let indexes', st, tf = is_store_index indexes newv [] in
      let c' = { c with frame = {c.frame with inst = update_sglobal c.frame.inst newg x } } in
 
      let c'' =

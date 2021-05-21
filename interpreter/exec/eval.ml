@@ -469,18 +469,6 @@ module VulnerabilitiesMap = Map.Make(struct
                                 let compare = (-)
                               end)
 (* Vulnerability types *)
-
-module ModifiedVarsMap = Map.Make(struct
-                              type t = int
-                              let compare = (-)
-                            end)
-let modified_vars: loopvar_t list ModifiedVarsMap.t ref = ref ModifiedVarsMap.empty 
-type vuln_t = bool VulnerabilitiesMap.t         
-let cond_vuln:  vuln_t ref = ref VulnerabilitiesMap.empty
-let noninter_vuln: vuln_t ref = ref VulnerabilitiesMap.empty
-
-let memindex_vuln: vuln_t ref = ref VulnerabilitiesMap.empty 
-
 (* Todo(Romy): make only one IntMap *)
 module IntMap = Map.Make(struct
                             type t = int
@@ -489,6 +477,19 @@ module IntMap = Map.Make(struct
 
 type cline_t = bool IntMap.t
 let codelines: cline_t ref = ref IntMap.empty
+
+                          
+module ModifiedVarsMap = Map.Make(struct
+                              type t = int
+                              let compare = (-)
+                            end)
+let modified_vars: (loopvar_t list * bool IntMap.t) ModifiedVarsMap.t ref = ref ModifiedVarsMap.empty 
+type vuln_t = bool VulnerabilitiesMap.t         
+let cond_vuln:  vuln_t ref = ref VulnerabilitiesMap.empty
+let noninter_vuln: vuln_t ref = ref VulnerabilitiesMap.empty
+
+let memindex_vuln: vuln_t ref = ref VulnerabilitiesMap.empty 
+
 
 let init_maps () = 
     codelines := IntMap.empty;

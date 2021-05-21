@@ -32,7 +32,8 @@ let are_same_sv = function
     | _ -> false
 
 (* Merge new variables *)
-let merge_vars (lv: loopvar_t list) (lv_stats: loopvar_t list) : loopvar_t list =
+let merge_vars (lv: loopvar_t list) (lv_stats: loopvar_t list) :
+      loopvar_t list * bool IntMap.t =
   let remove_values = function
     | _, (LocalVar (x,is_low,mo,v), 1) -> LocalVar(x, is_low, mo, None)
     | _, (GlobalVar (x,is_low,mo,v), 1) -> GlobalVar(x, is_low, mo, None)
@@ -42,7 +43,8 @@ let merge_vars (lv: loopvar_t list) (lv_stats: loopvar_t list) : loopvar_t list 
   in
 
   let rec merge_vars_i (lv: loopvar_t list)
-            (mp: (loopvar_t * int)  LoopVarMap.t) : (loopvar_t * int)  LoopVarMap.t = 
+            (mp: (loopvar_t * int)  LoopVarMap.t) (locm: bool  IntMap.t):
+            (loopvar_t * int)  LoopVarMap.t * bool IntMap.t = 
     match lv with
     | (LocalVar (x,is_low,mo,v) as lvh) :: lvs ->
        let str = "Local" ^ string_of_int (Int32.to_int x.it) in 
@@ -55,14 +57,14 @@ let merge_vars (lv: loopvar_t list) (lv_stats: loopvar_t list) : loopvar_t list 
            | Some (sv1,simp1), Some (sv2,simp2) when simpl_equal simp1 simp2 ->
 
                 let mp' = LoopVarMap.add str (LocalVar (x,new_is_low,mo,Some (sv1,simp1)), num + 1) mp in
-                merge_vars_i lvs mp'
+                merge_vars_i lvs mp' locm
            | _,_ ->
                 let mp' = LoopVarMap.add str (LocalVar (x,new_is_low,mo,None), num+1) mp in
-                merge_vars_i lvs mp'
+                merge_vars_i lvs mp' locm
           )
         with Not_found ->
           let mp' = LoopVarMap.add str (lvh,1) mp in
-          merge_vars_i lvs mp'
+          merge_vars_i lvs mp' locm
        )
     | (GlobalVar (x,is_low,mo,v) as lvh) :: lvs ->
        let str = "Global" ^ string_of_int (Int32.to_int x.it) in
@@ -76,15 +78,15 @@ let merge_vars (lv: loopvar_t list) (lv_stats: loopvar_t list) : loopvar_t list 
            | Some (sv1,simp1), Some (sv2,simp2)  when simpl_equal simp1 simp2  ->
 
               let mp' = LoopVarMap.add str (GlobalVar (x,new_is_low,mo,Some (sv1,simp1)), num+1) mp in
-              merge_vars_i lvs mp'
+              merge_vars_i lvs mp' locm
            | _,_ ->
               let mp' = LoopVarMap.add str (GlobalVar (x,new_is_low,mo,None), num+1) mp in
-              merge_vars_i lvs mp'
+              merge_vars_i lvs mp' locm
           )
 
         with Not_found ->
           let mp' = LoopVarMap.add str (lvh, 1) mp in
-          merge_vars_i lvs mp'
+          merge_vars_i lvs mp' locm
        )
 
     (* merge store only when they happen in consecutive loops - 
@@ -94,7 +96,8 @@ let merge_vars (lv: loopvar_t list) (lv_stats: loopvar_t list) : loopvar_t list 
        (* Todo(Romy) add a flag for this *)
        if (!Flags.exclude_zero_address && is_int_addr sv && get_int_addr sv = 0) then (
          if !Flags.debug then print_endline "Address is zero";
-         merge_vars_i lvs mp
+         let locm' = IntMap.add loc.left.line true locm in
+         merge_vars_i lvs mp locm'
        ) else (
          
          let str = "Store" ^ string_of_region loc in
@@ -106,23 +109,23 @@ let merge_vars (lv: loopvar_t list) (lv_stats: loopvar_t list) : loopvar_t list 
               (* Increase number of times we found this *)
               print_endline "Are same";
               let mp' = LoopVarMap.add str (lvh, num+1) mp in
-              merge_vars_i lvs mp'
+              merge_vars_i lvs mp' locm
             )
             else (
               let mp' = LoopVarMap.add str (StoreVar (None, ty, sz, false, mo, loc), num+1) mp in
-              merge_vars_i lvs mp'
+              merge_vars_i lvs mp' locm
             )
           with Not_found ->
             let mp' = LoopVarMap.add str (lvh, 1) mp in
             (* merge_vars_i lvs (lvh::acc) mp' *)
-            merge_vars_i lvs mp'
+            merge_vars_i lvs mp' locm
          )
        ) 
     | StoreVar _ :: lvs ->
        failwith "Not expected StoreZeroVar in merge_variables."
     | (StoreZeroVar (sv)) :: lvs ->
        failwith "Not expected StoreZeroVar in merge_variables."
-    | [] -> mp
+    | [] -> mp, locm
   in
 
   let rec merge_stats_vars_i (lv: loopvar_t list)
@@ -172,8 +175,9 @@ let merge_vars (lv: loopvar_t list) (lv_stats: loopvar_t list) : loopvar_t list 
   if (!Flags.debug) then 
     print_endline "Merging variables";
   let mp = LoopVarMap.empty in
-  let mp' = merge_vars_i lv mp in
-  merge_stats_vars_i lv_stats mp'
+  let locm = IntMap.empty in
+  let mp', locm' = merge_vars_i lv mp locm in
+  merge_stats_vars_i lv_stats mp', locm'
 
 
 
