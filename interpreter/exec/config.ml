@@ -8,6 +8,6 @@ let magic_number_max_loop = 1000
 
 (* Select invariants *)
 let magic_number_si_loop_iter = 40
-let magic_number_si_mod_vars  = 30
+let magic_number_si_mod_vars  = 35
 let magic_number_si_instr     = 50
 let magic_number_si_mems      = 10

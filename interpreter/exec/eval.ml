@@ -504,7 +504,14 @@ let print_codelines () =
     IntMap.bindings !codelines |> List.iter (fun (k,v) -> print_endline (string_of_int k))
 
 
-  
+let are_same_sv_simpl v simp c = 
+    let memtuple = get_mem_tripple c.frame in
+    match simp with
+    | Sv nv -> 
+        Z3_solver.are_same v nv c.pc memtuple 
+    | Z3Expr32 ex | Z3Expr64 ex ->
+        Z3_solver.are_same_e v ex c.pc memtuple 
+
 (* Assert invariant *)
 let assert_invar (lv : loopvar_t list) (c : config) : bool =
  let rec assert_invar_i (lv : loopvar_t list) (c : config) : bool =
@@ -515,8 +522,7 @@ let assert_invar (lv : loopvar_t list) (c : config) : bool =
      if !Flags.debug then print_loopvar lh;
      if !Flags.debug then print_endline (svalue_to_string nv);
      let v = local c.frame x in
-     let memtuple = get_mem_tripple c.frame in
-     if Z3_solver.are_same v nv c.pc memtuple then
+     if are_same_sv_simpl v simp c then
        assert_invar_i lvs c
      else false
      
@@ -538,8 +544,7 @@ let assert_invar (lv : loopvar_t list) (c : config) : bool =
      if !Flags.debug then print_loopvar lh;
      if !Flags.debug then print_endline (svalue_to_string nv);
      let v = Sglobal.load (sglobal c.frame.inst x) in
-     let memtuple = get_mem_tripple c.frame in
-     if Z3_solver.are_same v nv c.pc memtuple then
+     if are_same_sv_simpl v simp c then
        assert_invar_i lvs c
      else false
      (*if (is_int v && get_int v = get_int nv) then assert_invar_i lvs c

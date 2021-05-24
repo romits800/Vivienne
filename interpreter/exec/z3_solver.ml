@@ -2047,31 +2047,14 @@ let get_num_exprs_pc (pc : pc_ext) (mem: Smemory.t list * int * int) : int =
   num_exprs
 
 
-let are_same ?timeout:(timeout=30) ?model:(model=false) (sv1 : svalue) (sv2 : svalue)
-      (pc : pc_ext) (mem: Smemory.t list * int * int) : bool =
-  if !Flags.debug then (
-    print_endline "Checking if values are same..";
-  );
-  let start_t = if !Flags.debug then Unix.gettimeofday() else 0.0 in
-  
-  (* print_endline "is_v_ct_unsat"; *) 
-  (* Pc_type.print_pc (snd pc) |> print_endline;
-   * svalue_to_string sv |> print_endline; *)
-  (* svalue_to_string sv |> print_endline; *)
 
-  let ctx = init_solver() in
+let are_same_i ?timeout:(timeout=30) ?model:(model=false) (v1 : rel_type) (v2 : rel_type)
+      (pc : pc_ext) (mem: Smemory.t list * int * int) (ctx: Z3.context) : bool =
+  if !Flags.debug then (
+    print_endline "Checking if values are same internal..";
+  );
   
   let g = Goal.mk_goal ctx true false false in
-  (* print_endline "is_v_ct_unsat before sv"; *)
-  let v1 = sv_to_expr pc sv1 ctx mem in
-  let v2 = sv_to_expr pc sv2 ctx mem in
-
-
-  if !Flags.debug then (
-    let dt = Unix.gettimeofday () -. start_t in
-    "Checking same time: " ^ (string_of_float dt) |> print_endline;
-  );
-  
   match v1,v2 with
   | L v1, L v2 when Expr.equal v1 v2 -> true
   | H (v11, v12), H (v21, v22) when Expr.equal v11 v21 && Expr.equal v12 v22 -> true
@@ -2230,4 +2213,52 @@ let are_same ?timeout:(timeout=30) ?model:(model=false) (sv1 : svalue) (sv2 : sv
        )
      
      )
+
+
+
+
+
+
+
+
+(* Check if two svalues are the same *)
+
+let are_same ?timeout:(timeout=30) ?model:(model=false) (sv1 : svalue) (sv2 : svalue)
+      (pc : pc_ext) (mem: Smemory.t list * int * int) : bool =
+  if !Flags.debug then (
+    print_endline "Checking if values are same..";
+  );
+  let start_t = if !Flags.debug then Unix.gettimeofday() else 0.0 in
+  
+  let ctx = init_solver() in
+  
+  (* print_endline "is_v_ct_unsat before sv"; *)
+  let v1 = sv_to_expr pc sv1 ctx mem in
+  let v2 = sv_to_expr pc sv2 ctx mem in
+
+
+  if !Flags.debug then (
+    let dt = Unix.gettimeofday () -. start_t in
+    "Checking same time: " ^ (string_of_float dt) |> print_endline;
+  );
+ 
+  are_same_i ~timeout:timeout ~model:model v1 v2 pc mem ctx 
+
+let are_same_e ?timeout:(timeout=30) ?model:(model=false) (sv1 : svalue) (ex2 : rel_type)
+      (pc : pc_ext) (mem: Smemory.t list * int * int) : bool =
+  if !Flags.debug then (
+    print_endline "Checking if values are same expression..";
+  );
+  let start_t = if !Flags.debug then Unix.gettimeofday() else 0.0 in
+  
+  let ctx = init_solver() in
+  
+  let v1 = sv_to_expr pc sv1 ctx mem in
+
+  if !Flags.debug then (
+    let dt = Unix.gettimeofday () -. start_t in
+    "Checking same time: " ^ (string_of_float dt) |> print_endline;
+  );
+  
+  are_same_i ~timeout:timeout ~model:model v1 ex2 pc mem ctx 
 
