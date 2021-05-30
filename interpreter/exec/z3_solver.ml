@@ -1748,15 +1748,6 @@ let is_sat ?timeout:(timeout=30) (pc : pc_ext) (mem: Smemory.t list * int * int)
     "Checking sat time: " ^ (string_of_float dt) |> print_endline;
   );
 
-  (* print_endline (Expr.get_simplify_help ctx); *)
-  (* print_endline "After pc_calc"; *)
-  (* print_exp v; *)
-  (* (match pc with
-   * | (pclet, PCAnd (v',pc)) ->
-   *    let sv = sv_to_expr (pclet,pc) v' ctx mem in
-   *    print_endline "this";
-   *    print_exp sv;              (\*  *\)
-   * | _ -> print_endline "other"); *)
   let g = Goal.mk_goal ctx true false false in
   (match v with
    | L v when Boolean.is_true v -> true
@@ -1764,27 +1755,24 @@ let is_sat ?timeout:(timeout=30) (pc : pc_ext) (mem: Smemory.t list * int * int)
    | H (v1,v2) when Boolean.is_false v1 && Boolean.is_false v2 -> false
    | H (v1,v2) when Boolean.is_true v1 && Boolean.is_true v2 -> true
    | _ ->
-      let params = Params.mk_params ctx in
-      Params.add_bool params (Symbol.mk_string ctx "sort_store") true;
       (match v with
        | L v -> 
-            let v' = Expr.simplify v (Some params) in
-            Goal.add g [v']
+          Goal.add g [v]
        | H (v1,v2) -> 
-            let v1' = Expr.simplify v1 (Some params) in
-            let v2' = Expr.simplify v2 (Some params) in
-            Goal.add g [v1';v2']
+          Goal.add g [v1;v2]
       );
-      (* Printf.printf "Goal: %s\n" (Goal.to_string g); *)
-      (* if !Flags.debug then
-       *   Printf.printf "Solver is_sat: %s\n" (Solver.to_string solver); *)
-      (*let s_formulas = (List.map (fun e -> Expr.simplify e (Some params)) (Goal.get_formulas g)) in*)
+      let tac = Tactic.mk_tactic ctx "default" in
+      let solver = Solver.mk_solver_t ctx tac in
 
-      let solver = Solver.mk_solver ctx None in
+      (* let solver = Solver.mk_solver ctx None in *)
       List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
 
       let num_exprs = Goal.get_num_exprs g in
       
+      (if (!Flags.debug) then
+         print_endline "Done init");
+
+
       (if (!Flags.stats) then
          Stats.add_new_query "Unknown" num_exprs 0.0);
 
