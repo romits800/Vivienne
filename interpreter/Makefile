@@ -18,7 +18,7 @@ JSLIB =		wast.js
 WINMAKE =	winmake.bat
 
 #PACKAGE =       
-PACKAGE =       -package z3 -package unix -package num
+PACKAGE =       -package Z3 -package unix -package num
 DIRS =		util syntax binary text valid smtlib runtime exec script host main
 LIBS =		bigarray
 #FLAGS = 	-lexflags -ml -cflags '-w +a-4-27-42-44-45 -warn-error +a-3'
