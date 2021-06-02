@@ -29,8 +29,6 @@ done
 
 #wait $z3_pic || wait $cvc4_pid || wait $boolector_pid
 
-rm ${filename}.bool
-
 for i in $z3_pid $boolector_pid $yices_pid $cvc4_pid $bitwuzla_pid
 do
     pkill -9 -P $i &
