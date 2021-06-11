@@ -16,15 +16,6 @@ let si_expr_counter = ref 0
 exception Timeout (*of string*)
 
 
-(* let compare_tuple v1 v2 =
- *   match v1, v2 with 
- *     (i1,m1), (i2,m2) when i1 = i2 -> m1 - m2
- *   | (i1,m1), (i2,m2) -> i1 - i2 *)
-        
-(* module ExprMem = Map.Make(struct
- *                      type t = int * int
- *                      let compare = compare_tuple
- *                    end) *)
 
 module ExprMem = Map.Make(struct
                      type t = int 
@@ -207,8 +198,6 @@ let pcmap_index pc mem =
   let _, _, num = mem in
   let pcnum, _, _ = pc in 
   PC (pcnum, num ) (*pcnum,num)*)
-(* let str = Printf.sprintf "%020d%020d" (Obj.magic v) (Obj.magic mem) in
-   * str *)
 
 let get_size e =
   match e with
@@ -329,24 +318,9 @@ and si_to_expr pc size ctx mem si: rel_type  =
              def
           )
        | App (f, ts) ->
-          (* print_endline "app"; *)
-           (*let index = simap_index si mem in
-           (try
-             SiMap.find index !simap
-            with Not_found -> *)
              let res = app_to_expr pc ts size ctx mem f in
-             (*let simp = propagate_policy_one (fun x -> Expr.simplify x None) res in
-             (* print_endline "simplify_after"; *)
-             (* print_exp simp; *)
-             simap := SiMap.add (simap_index si mem) simp !simap;
- 
-             simp
-           ) *)
              res
        | Let (i) ->
-          (*print_endline "let z3_solver"; 
-                print_endline (string_of_int i);
- *)
           (try
              let f = LetMap.find i !letmap in
              f
@@ -363,23 +337,14 @@ and si_to_expr pc size ctx mem si: rel_type  =
                 e
           )
        | Load (i, memi, num, sz, _) ->
-          (*print_endline "load z3_solver"; 
-          print_endline (string_of_int memi);
-          print_endline (term_to_string i);*)
           let rec get_stores tmem newmem mem optstores = 
             let index = Smemory.get_num tmem in
-            (*print_endline ("memory: " ^ (string_of_int index)); *)
             (try
                let nm = ExprMem.find index !memmap in
-                (*print_endline "Found";*)
                nm
              with Not_found ->
-                (*print_endline "Not Found";*)
                let stores = Smemory.get_stores tmem in
 
-                (*  List.iter (fun st -> print_endline (svalue_to_string st)) stores;*)
-               (* let optstores', noexists = List.fold_left check_if_store_exists
-                *                              optstores stores in *)
                let optstores', stores' =
                  List.fold_left
                    (fun (mi,acc) st ->
@@ -389,9 +354,6 @@ and si_to_expr pc size ctx mem si: rel_type  =
                      | None -> (mi', acc)
                    )
                    (optstores,[]) stores in
-
-            (*print_endline ("memory': " ^ (string_of_int index));*)
-                 (* List.iter (fun (s,ind,v,sz) -> print_exp ind) stores';*)
 
                let prev_mem = Smemory.get_prev_mem tmem in
                
@@ -406,10 +368,6 @@ and si_to_expr pc size ctx mem si: rel_type  =
                     List.fold_left (create_array pc ctx)
                       newmem stores'
                in
-(*      let params = Params.mk_params ctx in
-      Params.add_bool params (Symbol.mk_string ctx "sort_store") true;
-
-*)
                let simp = propagate_policy_one (fun x -> Expr.simplify x None) mem' in
                memmap := ExprMem.add index simp !memmap;
                simp
@@ -417,86 +375,27 @@ and si_to_expr pc size ctx mem si: rel_type  =
           in
           (try
              let index = simap_index si mem in
-             (* if !Flags.debug then print_endline ("lloc:" ^ index); *)
              let f = SiMap.find index !simap in
-             (* if !Flags.debug then (print_endline "found load";); *)
              f
            with Not_found ->
-             (* if !Flags.debug then (print_endline "not found load";); *)
              let smem, memlen, _ = mem in
-             (*let index = Obj.magic smem in*)
-             (* let index = (num,memi) in *)
              let arr =
-               (* (try
-                *    let nm = ExprMem.find index !memmap in
-                *    (\* if !Flags.debug then (print_endline "found mem";);
-                *     * print_endline (term_to_string si);
-                *     * print_endline (string_of_int memi);
-                *     * print_endline (string_of_int (num)); *\)
-                *    (\* raise Not_found; *\)
-                *    nm *)
-                (* with Not_found -> *)
-                  (* if !Flags.debug then (print_endline "not found mem";); *)
-                  let bva = BitVector.mk_sort ctx 32 in
-                  let bvd = BitVector.mk_sort ctx 8 in
-                  let arr1 = Z3Array.mk_const_s ctx "mem1" bva bvd in
-                  let arr2 = Z3Array.mk_const_s ctx "mem2" bva bvd in
-                  let newmem = H (arr1, arr2) in
-                  let tmem = Lib.List32.nth smem (Int32.of_int (memlen - memi)) in
-                    (*print_endline "nth_end";*)
-                  (*let stores = Smemory.get_stores tmem in*)
-                  (*print_endline ("number stores: " ^ (string_of_int (List.length stores)));*)
-                  (*List.iter (fun st -> print_endline (svalue_to_string st)) stores;*)
-                  (* * if (List.length stores > 0) then (
-                   *   print_endline (term_to_string si);
-                   *   print_endline (string_of_int memi);
-                   *   print_endline (string_of_int (num));
-                   * ); *)
-                  let fmem = get_stores tmem newmem mem (ExprMem.empty) in
-                
-                  (* let stores = Smemory.get_stores tmem in
-                   * let fmem = List.fold_left (update_mem pc ctx mem)
-                   *              newmem (List.rev stores) in
-                   * memmap := ExprMem.add index fmem !memmap; *)
-                  (* memmap := ExprMem.add (num,memi) fmem !memmap; *)
-                  fmem
-               (* ) *)
+               let bva = BitVector.mk_sort ctx 32 in
+               let bvd = BitVector.mk_sort ctx 8 in
+               let arr1 = Z3Array.mk_const_s ctx "mem1" bva bvd in
+               let arr2 = Z3Array.mk_const_s ctx "mem2" bva bvd in
+               let newmem = H (arr1, arr2) in
+               let tmem = Lib.List32.nth smem (Int32.of_int (memlen - memi)) in
+               let fmem = get_stores tmem newmem mem (ExprMem.empty) in               
+               fmem
              in
-             (*if !Flags.debug then (print_endline "getting index";);*)
              let index = si_to_expr pc size ctx mem i in
-             (*if !Flags.debug then (print_endline "after"; print_exp index;);*)
              let v' = merge_bytes ctx arr index sz in
-             (* print_endline "simplify"; *)
              let simp = propagate_policy_one (fun x -> Expr.simplify x None) v' in
-             (* print_endline "simplify_after"; *)
-             (* print_exp simp; *)
              simap := SiMap.add (simap_index si mem) simp !simap;
              simp )
-         
-       (* let v'' = extend ctx size v' ext in *)
-          (* let v''' = (match v'' with
-           *             | L v'' 
-           *             | H (v'',_) -> v'') in
-           * let bv = Expr.get_sort v''' in
-           * let s = BitVector.get_size bv in
-           * print_endline "z3_solver: load";
-           * term_to_string i |> print_endline;
-           * print_endline (string_of_int sz);
-           * print_endline (string_of_int size);
-           * (match ext with
-           *  | None -> print_endline "None";
-           *  | Some Types.SX -> print_endline "sx";
-           *  | Some Types.ZX -> print_endline "zx";
-           * );
-           * print_endline "final size";
-           * print_endline (string_of_int s);
-           * v'' *)
-       (* propagate_policy (Z3Array.mk_select ctx) fmem index *)
-       (* index *)
        | _ -> failwith "String, Int, Float, Let, Multi are not implemented yet."
       ) in
-    (* simap := SiMap.add (Obj.magic si) si' !simap; *)
-    (* print_endline "end_of_si_expr"; *)
     si'
   
 and app_to_expr pc ts size ctx mem f =
@@ -608,7 +507,6 @@ and app_to_expr pc ts size ctx mem f =
      let e2 = si_to_expr pc size ctx mem t2 in
      propagate_policy (BitVector.mk_add ctx) e1 e2
   | BvAdd, ts ->
-     (* List.iter (fun t -> print_endline (Smt_type.term_to_string t)) ts; *) 
      failwith "Not valid bitwise addition." 
 
   | BvSub, t1::t2::[] ->
@@ -618,32 +516,9 @@ and app_to_expr pc ts size ctx mem f =
   | BvSub, _ -> failwith "Not valid bitwise subtraction."
 
   | BvMul, t1::t2::[] ->
-     (* print_endline "mk_mul"; *)
      let e1 = si_to_expr pc size ctx mem t1 in
      let e2 = si_to_expr pc size ctx mem t2 in
-     (* let e1' = match e1 with
-      *   | L e1' -> e1'
-      *   | H (e1',_) -> e1'
-      * in
-      * let e2' = match e2 with
-      *   | L e2' -> e2'
-      *   | H (e2',_) -> e2'
-      * in
-      * (try
-      *      let e1s = Expr.get_sort e1' in 
-      *      BitVector.get_size e1s |> string_of_int |> print_endline;
-      *      let e2s = Expr.get_sort e2' in 
-      *      BitVector.get_size e2s |> string_of_int |> print_endline;
-      * with _ -> print_endline "try failed"); *)
-     (* (try *)
      propagate_policy (BitVector.mk_mul ctx) e1 e2
-      (* with _ ->
-      *    print_endline "failure";
-      *    print_endline (string_of_int size);
-      *    term_to_string t1 |> print_endline;
-      *    term_to_string t2 |> print_endline;
-      *    failwith "failure";
-      * ) *)
   | BvMul, _ -> failwith "Not valid bitwise multiplication."
 
   | BvURem, t1::t2::[] ->
@@ -717,10 +592,8 @@ and app_to_expr pc ts size ctx mem f =
      propagate_policy_one (BitVector.mk_zero_ext ctx (i-size)) e
   | ExtendU _, _ -> failwith "Not valid bitwise extul."
 
-  (* Should be *)
   | Wrap(i), t::[] ->
      let e = si_to_expr pc size ctx mem t in
-     (* let size = get_size e in   (\*  *\) *)
      propagate_policy_one (BitVector.mk_extract ctx 31 0) e
   | Wrap _, _ -> failwith "Not valid bitwise rotl."
 
@@ -747,12 +620,6 @@ and app_to_expr pc ts size ctx mem f =
      propagate_policy_one (Boolean.mk_not ctx) e
   | Not, _ -> failwith "Not valid boolean not."
 
-  (* | RedOr, t::[] ->
-   *    let e = si_to_expr pc size ctx mem t in
-   *    propagate_policy_one (Boolean.mk_redor ctx) e
-   * | RedOr, _ -> failwith "Not valid boolean redor." *)
-
-
   | And, ts ->
      let es = List.map (si_to_expr pc size ctx mem) ts in
      propagate_list (Boolean.mk_and ctx) es 
@@ -762,8 +629,6 @@ and app_to_expr pc ts size ctx mem f =
   | _ -> failwith "App_to_expr: Not implemented yet."
 
 and sv_to_expr pc sv ctx mem =
-  (*print_endline "sv_to_expr";
-  print_endline (svalue_to_string sv);*)
   let v,n =
     match sv with
     | SI32 si32 -> si32,32
@@ -771,28 +636,8 @@ and sv_to_expr pc sv ctx mem =
   (*TODO(Romy): Not implemented*)
   | _ -> failwith "Float not implemented."
   in
-  (* (try
-     let index = simap_index v mem in
-     (* if !Flags.debug then print_endline ("svloc:" ^ index); *)
-     let f =  SiMap.find index !simap in
-     (*if !Flags.debug then print_endline "found sv_to_expr"; *)
-     (* print_exp f; *)
-     (* raise Not_found; *)
-     f 
-   with Not_found ->
-     (*if !Flags.debug then print_endline "not found sv_to_expr"; *)
-         (* if !Flags.debug then (
-          *   print_endline "notfound sv_to_expr";
-          *   (\* print_endline (svalue_to_string sv); *\)
-          * ); *)*)
-         let v' = si_to_expr pc n ctx mem v in
-         (* print_endline "sv_to_expr before simp"; *)
-         (*let simp = propagate_policy_one (fun x -> Expr.simplify x None) v' in
-         (* print_endline "sv_to_expr after simp"; *)
-         simap := SiMap.add (simap_index v mem) simp !simap;
-         (* print_endline "sv_to_expr simp end"; *)
-         simp)*)
-    v'
+  let v' = si_to_expr pc n ctx mem v in
+  v'
 
 
 
@@ -873,10 +718,6 @@ let find_sv cmds solver =
        (match cd with
         | Smtlib.CmdDefineFun fd ->
            let FunDef (symb, sort_option, sorted_vars, sort, term) = fd.fun_def_desc in
-           (* Smtlib_pp.pp_symbol Format.std_formatter symb;
-            * Smtlib_pp.pp_term Format.std_formatter term;
-            * print_endline "done"; *)
-
            if (match symb.symbol_desc with
                | SimpleSymbol s when s = "sv" -> true
                | _ -> false)
@@ -908,16 +749,11 @@ let find_sv cmds solver =
        );
     | [] -> failwith "Not found"
   in
-  (* if !Flags.debug then
-   *   print_endline solver; *)
   find_command cmds
         
 let read_cvc4 fname =
-  (* print_endline "read_cvc4"; *)
   let tmp_file = fname ^ ".cvc4.out" in
-  (* let _ = Sys.command @@ "cvc4-1.8-x86_64-linux-opt -m /tmp/out.smt2 > " ^ tmp_file in *)
   let chan = open_in tmp_file in
-  (* let ch = input_char chan in *)
   match input_line chan with
   | "unsat" -> 
         close_in chan;
@@ -969,7 +805,6 @@ let read_boolector fname =
     | _ -> failwith @@ "Error output of file " ^ tmp_file
 
 let read_bitwuzla fname =
-  (* print_endline "read_boolector"; *)
   let tmp_file = fname ^ ".bitwuzla.out" in
   let chan = open_in tmp_file in
   match input_line chan with
@@ -998,9 +833,7 @@ let read_bitwuzla fname =
          
          
 let read_z3 fname =
-  (* print_endline "read_z3"; *)
   let tmp_file = fname ^ ".z3.out" in
-  (* let _ = Sys.command @@ "z3 -smt2 MODEL=true /tmp/out.smt2 > " ^ tmp_file in *)
   let chan = open_in tmp_file in
   match input_line chan with
   | "unsat" -> 
@@ -1014,23 +847,18 @@ let read_z3 fname =
      let c =
        (try
           let m = Smtlib_parser.model Smtlib_lexer.token lexbuf in
-          (* print_endline "parser"; *)
           let mc = m.model_commands in
-          (* print_endline "before close_in"; *)
           close_in chan;
-          (* print_endline "after close_in"; *)
           find_sv mc tmp_file
         with e ->
           close_in chan;
           print_endline "failed z3"; 
           raise e
        ) in
-     (* close_in chan; *)
      Some c
   | _ -> failwith @@ "Error output of file " ^ tmp_file
 
 let read_yices fname =
-  (* print_endline "read_yices"; *)
   let rec find_sv_solution lst =
     match lst with
     | ("sv",v)::lst -> v
@@ -1039,7 +867,6 @@ let read_yices fname =
             failwith "Not foujnd sv"
   in
   let tmp_file = fname ^ ".yices.out" in
-  (* let _ = Sys.command @@ "yices-smt2 /tmp/out.smt2 > " ^ tmp_file in *)
   let chan = open_in tmp_file in
   match input_line chan with
   | "unsat" 
@@ -1047,18 +874,14 @@ let read_yices fname =
      close_in chan;
      None
   | "sat" ->
-     (*print_endline (input_line chan);*)
      let lexbuf = Lexing.from_channel chan in
      (try
         let parse = Smt2_parser.model Smt2_lexer.token lexbuf in
         match  parse with
         | Smtlib.Sat lst ->
-           (* print_endline "test binary to string sat"; *)
            let strnum = find_sv_solution lst in
            let num = bin_of_string ("0b" ^ strnum) in
-           (* print_endline "after binary to string sat"; *)
            close_in chan;
-           (* print_endline "after close chan"; *)
            Some num
       with e ->
         close_in chan;
@@ -1066,8 +889,6 @@ let read_yices fname =
         raise e
      )
   | _ -> failwith @@ "Error output of file " ^ tmp_file
-  (* print_endline "returning"; *)
-  (* exit 0 *)
 
 let read_sat solver_name fname =
   let tmp_file = fname ^ "." ^ solver_name ^ ".out" in
@@ -1099,7 +920,6 @@ let run_solvers ?model:(model=true) input_file yices z3 cvc4 boolector bitwuzla 
     let portfolio_script = if model then  "run_solvers.sh" else "run_solvers_no_model.sh" in
     let rc = Sys.command @@ timeout_str ^ " bash " ^  !path ^ portfolio_script ^ " " ^
                              input_file ^ " 1> " ^ out_file ^ " 2> " ^ err_file in
-    (*if (rc == 137) then (*for SIGKILL*) *)
     if (rc == 124) then (
       if !Flags.debug then
           print_endline "Time out";
@@ -1169,49 +989,11 @@ let run_solvers ?model:(model=true) input_file yices z3 cvc4 boolector bitwuzla 
     if !Flags.debug then 
         print_endline "failed";
     raise e
-  (* match fork() with
-   * | 0 -> run_cvc4()
-   * | pid_yices ->
-   *    (
-   *      (\* match fork() with
-   *       * | 0 -> run_cvc4()
-   *       * | pid_cvc4 -> *\)
-   * 
-   *         (match fork() with
-   *          | 0 -> run_z3()
-   *          | pid_z3 ->
-   *             (match wait () with
-   *              | (pid, WEXITED retcode) when pid = pid_yices->
-   *                 print_endline "yices";
-   *                 string_of_int retcode |> print_endline;
-   *                 print_endline @@ "Killing z3 " ^ string_of_int pid_z3;
-   *                 kill_children pid_z3 sigkill;
-   *              | (pid, WEXITED retcode) when pid = pid_z3->
-   *                 print_endline "z3 terminated";
-   *                 string_of_int retcode |> print_endline;
-   *                 print_endline "Killing yices";
-   *                 kill_children pid_yices sigkill;
-   *              | (pid, _) when pid = pid_z3 ->
-   *                 print_endline "failed z3";
-   *                 kill_children pid_yices sigkill;
-   *                 kill_children pid_z3 sigkill;
-   *              | (pid, _) when pid = pid_yices ->
-   *                 print_endline "failed yices";
-   *                 kill_children pid_yices sigkill;
-   *                 kill_children pid_z3 sigkill;
-   *              | _ ->
-   *                 print_endline "failed all";
-   *                 kill_children pid_yices sigkill;
-   *                 kill_children pid_z3 sigkill;
-   *             )
-   *         )
-   *    ) *)
-(*4513*)
+
 let write_formula_to_file ?model:(model=true) solver =
   let filename = Filename.temp_file "wasm_" ".smt2" in
   let oc = open_out filename in
   Printf.fprintf oc "(set-logic QF_ABV)\n";
-  (*let _ = Solver.to_string solver in*)
   let st = Solver.to_string solver in
   Printf.fprintf oc "%s\n" st;
   Printf.fprintf oc "(check-sat)\n";
@@ -1228,11 +1010,8 @@ let find_solutions (sv: svalue) (pc : pc_ext)
     print_endline "Finding solutions...";
 
   let start_t = if !Flags.debug then Unix.gettimeofday() else 0.0 in
-  (* svalue_to_string sv |> print_endline; *)
   let ctx = init_solver() in
-  (* print_endline "before sv_to_expr"; *)
   let v = sv_to_expr pc sv ctx mem in
-  (* print_endline "after sv_to_expr"; *)
 
   if !Flags.debug then (
     let dt = Unix.gettimeofday () -. start_t in
@@ -1256,7 +1035,6 @@ let find_solutions (sv: svalue) (pc : pc_ext)
 
     let g = Goal.mk_goal ctx true false false in
 
-    (* print_endline "find_solutions_i"; *)
     Goal.add g [vrec];
     let previous_values = List.map (fun i ->
                               let bv = Expr.get_sort v'  in
@@ -1264,7 +1042,7 @@ let find_solutions (sv: svalue) (pc : pc_ext)
                               let eq = Boolean.mk_eq ctx old_val v' in
                               Boolean.mk_not ctx eq) acc in
     Goal.add g previous_values;
-   (* print_endline "find_solutions_i_ after pc_to_expr"; *)
+
     (match pcex with
      | L v ->
         Goal.add g [v]
@@ -1278,13 +1056,13 @@ let find_solutions (sv: svalue) (pc : pc_ext)
     if (!Flags.stats) then
        Stats.add_new_query "Unknown" (num_exprs) 0.0;
  
-    (* Printf.printf "Goal: %s\n" (Goal.to_string g); *)
+
     let solver = Solver.mk_solver ctx None in
     List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
 
-    (* print_endline "creating filename"; *)
+
     let filename = write_formula_to_file solver in
-    (* print_endline @@ "after writing formula to filename" ^ filename; *)
+
     let timeout = 0 in
     let ret = match run_solvers filename read_yices read_z3
                       read_cvc4 read_boolector read_bitwuzla timeout with
@@ -1308,19 +1086,17 @@ let simplify (sv: svalue) (pc : pc_ext)
       (mem: Smemory.t list * int * int) : bool * simpl =
   if !Flags.debug then
         print_endline "Simplifying...";
-  (* print_endline "simplify"; *)
-  (* svalue_to_string sv |> print_endline; *)
   let ctx = init_solver() in
 
   let v = sv_to_expr pc sv ctx mem in
-  (* print_endline (Expr.get_simplify_help ctx); *)
+
   let params = Params.mk_params ctx in
-  (* print_endline (Params.to_string params); *)
+
   try
     match v with
     | L v ->
        let simp = Expr.simplify v (Some params) in
-       (* Expr.to_string simp |> print_endline; *)
+
        if (BitVector.is_bv simp && Expr.is_numeral simp) then (
          let bvs = Expr.get_sort simp in
          let size = BitVector.get_size bvs in
@@ -1332,10 +1108,6 @@ let simplify (sv: svalue) (pc : pc_ext)
          else
            failwith ("Simplify: unknown size" ^ string_of_int size);
        ) else ( 
-         (* print_endline "fail simplify L";
-          * Expr.to_string v |> print_endline;
-          * Expr.to_string simp |> print_endline;
-          * svalue_to_string sv |> print_endline; *)
          (match sv with
          | SI32 _ -> (true, Z3Expr32 (L simp))
          | SI64 _ -> (true, Z3Expr64 (L simp))
@@ -1357,10 +1129,6 @@ let simplify (sv: svalue) (pc : pc_ext)
          else
            failwith ("Simplify: unknown size" ^ string_of_int size);
        ) else (
-         (* print_endline "fail simplify H";
-          * Expr.to_string v1 |> print_endline;
-          * Expr.to_string simp1 |> print_endline;
-          * svalue_to_string sv |> print_endline; *)
          (match sv with
          | SI32 _ -> (true, Z3Expr32 (H (simp1,simp2)))
          | SI64 _ -> (true, Z3Expr64 (H (simp1,simp2)))
@@ -1380,8 +1148,6 @@ let simplify_pc (pc : pc_ext)
   let pc_exp = pc_to_expr pc ctx mem in
   let params = Params.mk_params ctx in
   let pcnum,pclet, _ = pc in
-  (* Params.add_int params (Symbol.mk_string ctx "max_steps") 10000000; *)
-  (* print_endline (Params.to_string params); *)
   try
     match pc_exp with
     | L pce ->
@@ -1393,46 +1159,7 @@ let simplify_pc (pc : pc_ext)
        (true, (pcnum, pclet, PCExpr (H (simp1, simp2))))
   with _ -> (false, pc)
 
-          
-(* Not Used currently
-let is_unsat (pc : pc_ext) (mem: Smemory.t list * int) =
-  (* print_endline "is_unsat"; *)
-  let ctx = init_solver() in
-
-  let pc = pc_to_expr pc ctx mem in
-
-  let g = Goal.mk_goal ctx true false false in
-  
-  (match pc with
-   | L p ->  Goal.add g [p ]
-   | H (pc1,pc2) ->  Goal.add g [pc1 ]
-  );
-  (* Printf.printf "Goal: %s\n" (Goal.to_string g); *)
-  let solver = Solver.mk_solver ctx None in
-  List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
-
-  if !Flags.portfolio_only then (
-    let filename = write_formula_to_file solver in
-    let res = not (run_solvers filename (read_sat "yices")
-                     (read_sat "z3") (read_sat "cvc4")
-                     (read_sat "boolector")) in
-    remove filename;
-    res
-  )
-  else
-    ( match (Solver.check solver []) with
-      | Solver.UNSATISFIABLE ->
-         true
-      | _ ->
-         (* let model = Solver.get_model solver in
-          * (match model with
-          *  | None -> print_endline "None"
-          *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
-          * ); *)
-         false
-    )
- *)
-  
+            
 let is_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int * int) =
   if !Flags.debug then (
        print_endline "Checking if conditional is CT..";
@@ -1501,12 +1228,6 @@ let is_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv : s
             Stats.update_query_time (Unix.gettimeofday () -. start);
             Stats.print_last()
           );
-          (* Printf.printf "Goal v_ct: %s\n" (Goal.to_string g); *)
-          (* let model = Solver.get_model solver in *)
-          (* (match model with
-           *  | None -> print_endline "None"
-           *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
-           * ); *)
           false
        with _ ->
           if !Flags.debug then print_endline "Z3 solver failed - Maybe timeout";
@@ -1561,21 +1282,13 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
       print_endline ("Model: " ^ (string_of_bool model));
    );
  
-  (* print_endline "is_v_ct_unsat"; *) 
-  (* Pc_type.print_pc (snd pc) |> print_endline;
-   * svalue_to_string sv |> print_endline; *)
-   (* svalue_to_string sv |> print_endline; *)
-
 
   let start_t = if !Flags.debug then Unix.gettimeofday() else 0.0 in
 
   let ctx = init_solver() in
 
-  (* List.iter print_endline (Tactic.get_tactic_names ctx); *)
-  (* let tac = Tactic.mk_tactic ctx "default" in *)
-
   let g = Goal.mk_goal ctx true false false in
-  (* print_endline "is_v_ct_unsat before sv"; *)
+
   let v = sv_to_expr pc sv ctx mem in
 
   if !Flags.debug then (
@@ -1584,11 +1297,6 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
   );
 
 
-  (* let _,_,mnum = mem in
-   * print_endline "is_v_ct_unsat after  sv";
-   * (\* print_exp v; *\)
-   * print_endline (string_of_int mnum); *)
- 
   match v with
   | L v -> true
   | H (v1, v2) when Expr.equal v1 v2 -> true
@@ -1613,14 +1321,10 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
       if (!Flags.stats) then (
          Stats.add_new_query "Unknown" (num_exprs) 0.0);
       let params = Params.mk_params ctx in
-      (*Params.add_bool params (Symbol.mk_string ctx "sort_store") true;*)
       let s_formulas = (List.map (fun e -> Expr.simplify e (Some params)) (Goal.get_formulas g)) in
 
       List.iter (fun f -> Solver.add solver [f]) @@ List.rev s_formulas;
 
-      (*Solver.add solver s_formulas;*)
-
-      (* Printf.printf "Solver v_ct: %s\n" (Solver.to_string solver); *)
       if !Flags.portfolio_only then (
 
         let filename = write_formula_to_file ~model:model solver in
@@ -1641,7 +1345,7 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
         (if (!Flags.stats) then
            Stats.update_query_str "Z3_bindings") ;
         let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
-        (* print_endline "is_v_ct_unsat_before_solving"; *) 
+
         try
         match (Solver.check solver []) with
         | Solver.UNSATISFIABLE ->
@@ -1654,11 +1358,6 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
              Stats.update_query_time (Unix.gettimeofday () -. start);
              Stats.print_last()
            );
-           (* let model = Solver.get_model solver in
-            * (match model with
-            *  | None -> print_endline "None"
-            *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
-            * ); *)
            false
         | _ ->
           if (!Flags.stats) then (
@@ -1676,7 +1375,7 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
           if !Flags.debug then print_endline "Using portfolio solver..";
  
           let filename = write_formula_to_file ~model:model solver in
-          (* print_endline ("is_v_ct_unsat after write formula " ^ filename); *)
+
           let res = 
             try (
                 not (run_solvers ~model:model filename (read_sat "yices") (read_sat "z3")
@@ -1694,7 +1393,7 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
           (if (!Flags.stats) then 
              Stats.update_query_str "Z3_bindings") ;
           let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
-          (* print_endline "is_v_ct_unsat_before_solving"; *) 
+
           try
           match (Solver.check solver []) with
           | Solver.UNSATISFIABLE ->
@@ -1706,11 +1405,6 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
              if (!Flags.stats) then (
                Stats.update_query_time (Unix.gettimeofday () -. start);
                Stats.print_last());
-             (* let model = Solver.get_model solver in
-              * (match model with
-              *  | None -> print_endline "None"
-              *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
-              * ); *)
              false
           | _ ->
              if (!Flags.stats) then (
@@ -1737,9 +1431,6 @@ let is_sat ?timeout:(timeout=30) (pc : pc_ext) (mem: Smemory.t list * int * int)
 
 
   let start_t = if !Flags.debug then Unix.gettimeofday() else 0.0 in
-  
-  (* check only satisfiability *)
-  (* print_endline "is_sat"; *)
   let ctx = init_solver() in
   let v = pc_to_expr pc ctx mem in
 
@@ -1764,7 +1455,6 @@ let is_sat ?timeout:(timeout=30) (pc : pc_ext) (mem: Smemory.t list * int * int)
       let tac = Tactic.mk_tactic ctx "default" in
       let solver = Solver.mk_solver_t ctx tac in
 
-      (* let solver = Solver.mk_solver ctx None in *)
       List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
 
       let num_exprs = Goal.get_num_exprs g in
@@ -1779,7 +1469,7 @@ let is_sat ?timeout:(timeout=30) (pc : pc_ext) (mem: Smemory.t list * int * int)
 
       if !Flags.portfolio_only then (
         let filename = write_formula_to_file ~model:false solver in
-        (* let timeout = 0 in *)
+
         let res =
           try ( 
             run_solvers ~model:false filename (read_sat "yices") (read_sat "z3")
@@ -1805,11 +1495,6 @@ let is_sat ?timeout:(timeout=30) (pc : pc_ext) (mem: Smemory.t list * int * int)
              Stats.update_query_time (Unix.gettimeofday () -. start);
              Stats.print_last()
            );
-           (* let model = Solver.get_model solver in
-            * (match model with
-            *  | None -> print_endline "None"
-            *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
-            * ); *)
            true
         | _ ->
            if (!Flags.stats) then (
@@ -1831,8 +1516,6 @@ let is_sat ?timeout:(timeout=30) (pc : pc_ext) (mem: Smemory.t list * int * int)
           if !Flags.debug then
             print_endline ("is_sat after write formula " ^ filename); 
           
-          (* print_endline ("mnumber" ^ (string_of_int num_exprs) ^ "," ^ filename); *)
-          (* let timeout = 0 in *)
           let res = 
             try ( 
               run_solvers ~model:false filename (read_sat "yices") (read_sat "z3")
@@ -1841,12 +1524,10 @@ let is_sat ?timeout:(timeout=30) (pc : pc_ext) (mem: Smemory.t list * int * int)
             )
             with Timeout -> true
           in
-          (* let res = run_solvers filename (read_sat "yices") (read_sat "z3")
-           *             (read_sat "cvc4") (read_sat "boolector") (read_sat "bitwuzla") timeout in *)
           remove filename;
           res
         ) else (
-          (* print_endline ("Z3 bindings" ^ (string_of_int num_exprs)); *)
+
           (if (!Flags.stats) then
              Stats.update_query_str "Z3_bindings") ;
           let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
@@ -1874,24 +1555,6 @@ let is_sat ?timeout:(timeout=30) (pc : pc_ext) (mem: Smemory.t list * int * int)
         )
       )
   )
-  (* )
-   * else (
-   *   if num_exprs > magic_number then (
-   *     let filename = write_formula_to_file solver in
-   *     let res = run_solvers filename (read_sat "yices") (read_sat "z3")
-   *                 (read_sat "cvc4") (read_sat "boolector") in
-   *     remove filename;
-   *     res
-   *   ) else  (
-   *     (if (!Flags.stats) then
-   *        Stats.update_query_str "Z3_bindings") ;
-   * 
-   *     let check_solver = Solver.check solver [] in
-   *     match check_solver with
-   *     | Solver.SATISFIABLE -> true
-   *     | _ -> false
-   *   )
-   * ) *)
 
        
 
@@ -1905,10 +1568,6 @@ let optimize (f : Z3.Optimize.optimize -> Z3.Expr.expr -> Z3.Optimize.handle)
       (pc : pc_ext) (mem: Smemory.t list * int * int) (sv : svalue)  =
   if !Flags.debug then
         print_endline "Optimizing...";
-  (* print_endline "optimize"; *)
-  (* svalue_to_string sv |> print_endline; *)
-  (* let cfg = [("model", "true"); ("proof", "false")] in
-   * let ctx = mk_context cfg in *)
   let ctx = init_solver() in
   let g1 = Goal.mk_goal ctx true false false in
 
@@ -1919,7 +1578,6 @@ let optimize (f : Z3.Optimize.optimize -> Z3.Expr.expr -> Z3.Optimize.handle)
   (match pcexp with
    | L pcv -> Goal.add g1 [pcv] 
    | H (pcv1, pcv2) -> Goal.add g1 [pcv1]
-                       (* Goal.add g2 [pcv2] *) 
   );
   
   List.iter (fun f -> Optimize.add opt1 [f]) (Goal.get_formulas g1);
@@ -1950,31 +1608,18 @@ let optimize (f : Z3.Optimize.optimize -> Z3.Expr.expr -> Z3.Optimize.handle)
         f opt1 v'
     ) in
 
-  (* List.iter (fun f -> Optimize.add opt2 [f]) (Goal.get_formulas g2); *)
   try
   match (Optimize.check opt1) with
    | Solver.SATISFIABLE ->
       let ex1 = Optimize.get_lower h in
       let ex2 = Optimize.get_upper h in
-      (*print_endline ("Maxl" ^ (Expr.to_string ex1) ^ "upper:" ^ (Expr.to_string ex2));*)
       if Expr.equal ex1 ex2 then
-        (* let i = Arithmetic.Integer.mk_const_s ctx "2147483648" in *)
         let bi = BitVector.mk_numeral ctx "2147483648" 64 in
-        (* let sb = Expr.mk_sub ctx ex1 i in
-         * let exp' = Expr.mk_sub *)
         let istr = Arithmetic.Integer.numeral_to_string ex1 in
         let bi1 = BitVector.mk_numeral ctx istr 64 in
         let sb = BitVector.mk_sub ctx bi1 bi in
         let si = Expr.simplify sb None in
         let i = int_of_string (BitVector.numeral_to_string si) in
-        (*print_endline (string_of_int i);*) 
-        
-        (* print_endline (Arithmetic.Integer.numeral_to_string ex1); *)
-        (* let bi = Big_int.sub_big_int i (Big_int.big_int_of_int64 2147483648L) in *)
-        (* let i = Big_int.int_of_big_int bi in *)
-        (* print_endline "max/min sat"; *)
-        (* Printf.printf "Optimize: %s\n" (Optimize.to_string opt1); *)
-        (* string_of_int i |> print_endline; *)
         Some (i)
       else None
    | _ ->  None
@@ -1993,10 +1638,7 @@ let get_num_exprs (pc : pc_ext) (sv : svalue) (mem: Smemory.t list * int * int) 
   let ctx = init_solver() in
   
   let g = Goal.mk_goal ctx true false false in
-  (* print_endline "is_v_ct_unsat before sv"; *)
   let v = sv_to_expr pc sv ctx mem in
-  (* print_endline "is_v_ct_unsat after  sv"; *)
-  (* print_exp v; *)
   match v with
   | L v -> 0
   | H (v1, v2) ->
@@ -2022,7 +1664,6 @@ let get_num_exprs_pc (pc : pc_ext) (mem: Smemory.t list * int * int) : int =
   let ctx = init_solver() in
   
   let g = Goal.mk_goal ctx true false false in
-  (* print_endline "is_v_ct_unsat before sv"; *)
   let pcexp = pc_to_expr pc ctx mem in
   let pcexp' = 
     match pcexp with
@@ -2090,10 +1731,6 @@ let are_same_i ?timeout:(timeout=30) ?model:(model=false) (v1 : rel_type) (v2 : 
 
      List.iter (fun f -> Solver.add solver [f]) s_formulas;
 
-     (* let stats = Solver.get_statistics solver in
-      * print_endline (Statistics.to_string stats); *)     
-
-     (* Printf.printf "Solver v_ct: %s\n" (Solver.to_string solver); *)
      if !Flags.portfolio_only then (
        let filename = write_formula_to_file ~model:model solver in
        if !Flags.debug then
@@ -2115,7 +1752,7 @@ let are_same_i ?timeout:(timeout=30) ?model:(model=false) (v1 : rel_type) (v2 : 
        (if (!Flags.stats) then
           Stats.update_query_str "Z3_bindings") ;
        let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
-       (* print_endline "is_v_ct_unsat_before_solving"; *) 
+
        try
        match (Solver.check solver []) with
        | Solver.UNSATISFIABLE ->
@@ -2150,7 +1787,7 @@ let are_same_i ?timeout:(timeout=30) ?model:(model=false) (v1 : rel_type) (v2 : 
          if !Flags.debug then print_endline "Using portfolio solver..";
          
          let filename = write_formula_to_file ~model:model solver in
-         (* print_endline ("is_v_ct_unsat after write formula " ^ filename); *)
+
          let res = 
            try (
              not (run_solvers ~model:model filename (read_sat "yices") (read_sat "z3")
@@ -2168,7 +1805,7 @@ let are_same_i ?timeout:(timeout=30) ?model:(model=false) (v1 : rel_type) (v2 : 
          (if (!Flags.stats) then
             Stats.update_query_str "Z3_bindings") ;
          let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
-         (* print_endline "is_v_ct_unsat_before_solving"; *) 
+
          try
          match (Solver.check solver []) with
          | Solver.UNSATISFIABLE ->
@@ -2180,11 +1817,6 @@ let are_same_i ?timeout:(timeout=30) ?model:(model=false) (v1 : rel_type) (v2 : 
             if (!Flags.stats) then (
               Stats.update_query_time (Unix.gettimeofday () -. start);
               Stats.print_last());
-            (* let model = Solver.get_model solver in
-             * (match model with
-             *  | None -> print_endline "None"
-             *  | Some m -> print_endline "Model"; print_endline (Model.to_string m)
-             * ); *)
             false
          | _ ->
             if (!Flags.stats) then (
@@ -2203,12 +1835,6 @@ let are_same_i ?timeout:(timeout=30) ?model:(model=false) (v1 : rel_type) (v2 : 
      )
 
 
-
-
-
-
-
-
 (* Check if two svalues are the same *)
 
 let are_same ?timeout:(timeout=30) ?model:(model=false) (sv1 : svalue) (sv2 : svalue)
@@ -2220,7 +1846,6 @@ let are_same ?timeout:(timeout=30) ?model:(model=false) (sv1 : svalue) (sv2 : sv
   
   let ctx = init_solver() in
   
-  (* print_endline "is_v_ct_unsat before sv"; *)
   let v1 = sv_to_expr pc sv1 ctx mem in
   let v2 = sv_to_expr pc sv2 ctx mem in
 
