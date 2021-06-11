@@ -14,3 +14,5 @@ A formatted version of the spec is available here:
 # citing
 
 For citing WebAssembly in LaTeX, use [this bibtex file](wasm-specs.bib).
+
+For citing Vivienne in LaTeX, the reference will follow.

@@ -1,3 +1,34 @@
+# Vivienne: WebAssembly Relational Symbolic Execution
+
+This implementation if based on the reference WebAssembly interpreter. The instructions
+for the interpreter are still valid.
+
+
+Vivienne requires additionally the installation of z3 OCaml bindings:
+
+```bash
+$ opam install z3
+```
+
+Or compile from [source](https://github.com/Z3Prover/z3) using:
+
+```bash
+python scripts/mk_make.py --ml
+```
+
+Vivienne requires the following solvers to be available in the $PATH:
+
+- z3
+- boolector
+- yices-smt2
+- cvc4
+
+Vivienne expects this path in environmental variable $VIV_PATH:
+
+```bash
+export VIV_PATH=/bash/to/path/interpreter/
+```
+
 # WebAssembly Reference Interpreter
 
 This repository implements a interpreter for WebAssembly. It is written for clarity and simplicity, _not_ speed. It is intended as a playground for trying out ideas and a device for nailing down the exact semantics, and as a proxy for the (yet to be produced) formal specification of WebAssembly. For that purpose, the code is written in a fairly declarative, "speccy" way.

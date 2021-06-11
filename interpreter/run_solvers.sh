@@ -17,11 +17,6 @@ boolector_pid=$!
 yices_pid=$!
 
 
-# wait for the solver and the printing
-#wait -n
-#wait -n
-#sleep 1
-#{ wait $yices_pid && test $? -eq 0; } || 
 
 ret=1
 until [ $ret -eq 0 ]; do
@@ -29,14 +24,12 @@ until [ $ret -eq 0 ]; do
     ret=$?
 done
 
-#wait $z3_pic || wait $cvc4_pid || wait $boolector_pid
 
 rm ${filename}.bool
 
 for i in $z3_pid $boolector_pid $yices_pid $cvc4_pid $bitwuzla_pid
 do
     pkill -9 -P $i &
-    #    kill -9 $i
 done
 
 pkill -9 -P $$ &
