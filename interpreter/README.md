@@ -59,7 +59,7 @@ Vivienne requires the following solvers (binaries) to be available in the $PATH:
 Vivienne expects this path in environmental variable $VIV_PATH:
 
 ```bash
-$ export VIV_PATH=/bash/to/path/interpreter/
+$ export VIV_PATH=/path/to/interpreter/directory/
 ```
 
 ## Install
