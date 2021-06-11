@@ -67,10 +67,10 @@ $ make test-symb
 ### Run
 To run a program with loop unrolling, run:
 ```bash
-$ ./wasm -t -i 
+$ ./wasm -t -i ../test/symb/script_tea_pass.wast
 ```
 To run a program with the automatic invariant, run:
 ```bash
-$ ./wasm -t -i -l
+$ ./wasm -t -l -i ../test/symb/script_tea_pass.wast
 ```
 
