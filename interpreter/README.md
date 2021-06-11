@@ -50,5 +50,27 @@ Vivienne requires the following solvers to be available in the $PATH:
 Vivienne expects this path in environmental variable $VIV_PATH:
 
 ```bash
-export VIV_PATH=/bash/to/path/interpreter/
+$ export VIV_PATH=/bash/to/path/interpreter/
 ```
+
+## Install
+To install Vivienne run:
+```bash
+$ make
+```
+### Test
+To test Vivienne run:
+```bash
+$ make test-symb
+```
+
+### Run
+To run a program with loop unrolling, run:
+```bash
+$ ./wasm -t -i 
+```
+To run a program with the automatic invariant, run:
+```bash
+$ ./wasm -t -i -l
+```
+
