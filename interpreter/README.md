@@ -13,14 +13,21 @@ To install the OCaml build system using opam run:
 ```bash
 $ sudo apt-get install opam
 ```
-Install OCaml version 4.06.0:
+To initialize opam and install OCaml version 4.06.0 run:
 
 ```bash
+$ opam init 
 $ opam switch 4.06.0
 ```
-Install the following packages with opam:
+
+Install the following dependencies:
 ```bash
-$ opam install z3 num unix menhir
+$ sudo apt-get install libgmp-dev python2.7
+```
+
+Then, install the following packages with opam:
+```bash
+$ opam install ocamlbuild z3 menhir num
 ```
 
 ### Z3 OCaml bindings
@@ -58,6 +65,20 @@ To install Vivienne run:
 ```bash
 $ make
 ```
+If you get the following error:
+> ocamlopt.opt: unknown option '-cclib -lstdc++'.
+
+You need to modify the META file of z3 (${HOME}/.opam/4.06.0/lib/z3/META)
+and replace:
+```
+linkopts = '-cclib -lstdc++'
+```
+with
+```
+linkopts = '-cclib -lstdc++'
+```
+
+
 ### Test
 To test Vivienne run:
 ```bash
