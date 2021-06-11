@@ -53,7 +53,7 @@ Vivienne requires the following solvers (binaries) to be available in the $PATH:
 - [z3](https://github.com/Z3Prover/z3) 
 - [boolector](https://github.com/Boolector/boolector/releases) 
 - [yices-smt2](https://github.com/SRI-CSL/yices2)
-- [cvc4](https://cvc4.github.io/downloads.html)
+- [cvc4-1.8-x86_64-linux-opt](https://cvc4.github.io/downloads.html)
 
 ### Environmental Variables
 Vivienne expects this path in environmental variable $VIV_PATH:
