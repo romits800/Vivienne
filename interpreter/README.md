@@ -42,16 +42,18 @@ Or compile from [source](https://github.com/Z3Prover/z3) using:
 
 ```bash
 $ python scripts/mk_make.py --ml
+$ cd build
+$ make -j 8
 ```
 
 ### Z3 OCaml bindings
 
-Vivienne requires the following solvers to be available in the $PATH:
+Vivienne requires the following solvers (binaries) to be available in the $PATH:
 
-- z3
-- boolector
-- yices-smt2
-- cvc4
+- [z3](https://github.com/Z3Prover/z3) 
+- [boolector](https://github.com/Boolector/boolector/releases) 
+- [yices-smt2](https://github.com/SRI-CSL/yices2)
+- [cvc4](https://cvc4.github.io/downloads.html)
 
 ### Environmental Variables
 Vivienne expects this path in environmental variable $VIV_PATH:
@@ -68,14 +70,14 @@ $ make
 If you get the following error:
 > ocamlopt.opt: unknown option '-cclib -lstdc++'.
 
-You need to modify the META file of z3 (${HOME}/.opam/4.06.0/lib/z3/META)
+You need to modify the META file of z3 (e.g. in `${HOME}/.opam/4.06.0/lib/z3/META`)
 and replace:
 ```
 linkopts = '-cclib -lstdc++'
 ```
 with
 ```
-linkopts = '-cclib -lstdc++'
+linkopts = ''
 ```
 
 
