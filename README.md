@@ -11,7 +11,8 @@ A formatted version of the spec is available here:
 
 # Vivienne
 
-To compile Vivienne, move to directory "interpreter" and run make. To compile and run Vivienne, there is a number of prerequisites described in interpreter/README.md.
+To compile Vivienne, move to directory "interpreter" and run `make`. 
+To compile and run Vivienne, there is a number of prerequisites described in interpreter/README.md.
 
 ```bash
 cd interpreter
