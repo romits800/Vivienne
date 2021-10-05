@@ -8,10 +8,10 @@ sed "s/(get-model)//" $filename > ${filename}.bool
 bitwuzla -m ${filename}.bool 1> $filename.bitwuzla.out 2> $filename.bitwuzla.err
 ret=$?
 
-if [ $ret -eq 0 ]; then
-    echo "bitwuzla"
-else
+if [ $ret -eq 1 ]; then
     echo "failed"
+else
+    echo "bitwuzla"
 fi
 
 rm ${filename}.bool

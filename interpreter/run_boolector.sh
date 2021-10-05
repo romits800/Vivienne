@@ -5,14 +5,15 @@ rm -f /tmp/*bitwuzla.err /tmp/*bitwuzla.out /tmp/*boolector.err /tmp/*boolector.
 
 sed "s/(get-model)//" $filename > ${filename}.bool
 
-boolector -m ${filename}.bool 1> $filename.boolector.out 2> $filename.boolector.err ;
+boolector -m ${filename}.bool 1> $filename.boolector.out 2> $filename.boolector.err 
 ret=$?
 
 
-if [ $ret -eq 0 ]; then
-    echo "boolector"
-else
+if [ $ret -eq 1 ]; then
     echo "failed"
+else
+    # TODO: Investigate some weird (10,20) return values upon completion
+    echo "boolector"
 fi
 
 rm ${filename}.bool

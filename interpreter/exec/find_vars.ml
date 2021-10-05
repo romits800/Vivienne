@@ -223,7 +223,8 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
 
            let lv = if c.ct_check then (
                       let mem = get_mem_tripple frame in 
-                      let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc v mem in
+                      (* let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc v mem in *)
+                      let is_low = Z3_solver.is_v_ct_unsat ~timeout:300 c.pc v mem in
                       if (!Flags.debug) then (
                         print_endline (string_of_bool is_low););
 
@@ -258,7 +259,8 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
            (* let vv = local frame x in *)
            let lv = if c.ct_check then (
                       let mem = get_mem_tripple frame in 
-                      let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc v mem in
+                      (* let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc v mem in *)
+                      let is_low = Z3_solver.is_v_ct_unsat ~timeout:300 c.pc v mem in
                       let mo = Nothing in (*compare_svalues vv v in*)
                       let _,simp = Z3_solver.simplify v c.pc mem in
                       (LocalVar (x, is_low, mo, Some (v,simp)))::lv)
@@ -277,7 +279,8 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
 
            (* let vv = Sglobal.load (sglobal c.frame.inst x) in *)
            let mem = get_mem_tripple frame in 
-           let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc v mem in
+           let is_low = Z3_solver.is_v_ct_unsat ~timeout:300 c.pc v mem in
+           (* let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc v mem in *)
            let mo = Nothing in (* compare_svalues vv v in *)
            let _, simp = Z3_solver.simplify v c.pc mem in
            let lv = (GlobalVar (x, is_low, mo, Some (v,simp)))::lv in
@@ -362,7 +365,8 @@ let rec fv_step (analyzed_loop : int ) (lv : loopvar_t list)
            (* Check store variable only if they have constant index *)
            (* We might for example be storing the loop index in memory *)
            let memtuple = get_mem_tripple frame in 
-           let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc sv memtuple in 
+           (* let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc sv memtuple in *)
+           let is_low = Z3_solver.is_v_ct_unsat ~timeout:300 c.pc sv memtuple in 
            (* let mo = compare_svalues lvn sv in *)
            if (!Flags.debug) then (
              print_endline (string_of_bool is_low););
@@ -659,13 +663,15 @@ let find_policy lvs c  =
     | (LocalVar (x,_,mo,v)) :: lvs' ->
        let vv = local c.frame x in
        let mem = get_mem_tripple c.frame in 
-       let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in                   
+       let is_low = Z3_solver.is_v_ct_unsat ~timeout:300 c.pc vv mem in
+       (* let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in *)
        let mo = Nothing in
        find_policy_i lvs' (LocalVar (x,is_low,mo, v)::acc)
     | (GlobalVar (x,_,mo,v)) :: lvs' ->
        let vv = Sglobal.load (sglobal c.frame.inst x) in
        let mem = get_mem_tripple c.frame in 
-       let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in                   
+       let is_low = Z3_solver.is_v_ct_unsat ~timeout:300 c.pc vv mem in
+       (* let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in *)
        let mo = Nothing in
        find_policy_i lvs' (GlobalVar (x,is_low,mo, v)::acc)
     | (StoreVar (Some final_addr, ty, sz, is_low, mo, loc)) :: lvs' ->
@@ -684,7 +690,8 @@ let find_policy lvs c  =
              lvn)
        in
        let mem = get_mem_tripple c.frame in
-       let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in                   
+       let is_low = Z3_solver.is_v_ct_unsat ~timeout:300 c.pc vv mem in
+       (* let is_low = Z3_solver.is_v_ct_unsat ~timeout:30 c.pc vv mem in *)
        let mo = Nothing in
        find_policy_i lvs' (StoreVar (Some final_addr, ty, sz, is_low, mo, loc)::acc)
 

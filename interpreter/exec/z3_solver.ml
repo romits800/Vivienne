@@ -1002,7 +1002,6 @@ let run_solvers ?model:(model=true) input_file yices z3 cvc4 boolector bitwuzla 
 
 
 let run_solver ?model:(model=true) input_file yices z3 cvc4 boolector bitwuzla timeout =
-  
   let solver_str, solver_func = 
     match !Flags.solver with
     | Flags.CVC4      -> "cvc4", cvc4
@@ -1283,7 +1282,7 @@ let simplify_pc (pc : pc_ext)
   with _ -> (false, pc)
 
             
-let is_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext)
+let is_ct_unsat ?timeout:(timeout=300) ?model:(model=false) (pc : pc_ext)
       (sv : svalue) (mem: Smemory.t list * int * int) =
   if !Flags.debug then (
        print_endline "Checking if conditional is CT..";
@@ -1406,7 +1405,7 @@ let is_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext)
         remove filename;
         res
      
-let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv : svalue)
+let is_v_ct_unsat ?timeout:(timeout=300) ?model:(model=false) (pc : pc_ext) (sv : svalue)
       (mem: Smemory.t list * int * int) : bool =
   if !Flags.debug then (
     print_endline "Checking if value is CT..";
@@ -1572,7 +1571,7 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
       
 
 
-let is_sat ?timeout:(timeout=30) (pc : pc_ext) (mem: Smemory.t list * int * int) : bool =
+let is_sat ?timeout:(timeout=300) (pc : pc_ext) (mem: Smemory.t list * int * int) : bool =
   if !Flags.debug then 
     print_endline "Checking satisfiability..";
 
@@ -1835,7 +1834,7 @@ let get_num_exprs_pc (pc : pc_ext) (mem: Smemory.t list * int * int) : int =
 
 
 
-let are_same_i ?timeout:(timeout=30) ?model:(model=false) (v1 : rel_type) (v2 : rel_type)
+let are_same_i ?timeout:(timeout=300) ?model:(model=false) (v1 : rel_type) (v2 : rel_type)
       (pc : pc_ext) (mem: Smemory.t list * int * int) (ctx: Z3.context) : bool =
   if !Flags.debug then (
     print_endline "Checking if values are same internal..";
@@ -2012,7 +2011,7 @@ let are_same_i ?timeout:(timeout=30) ?model:(model=false) (v1 : rel_type) (v2 : 
 
 (* Check if two svalues are the same *)
 
-let are_same ?timeout:(timeout=30) ?model:(model=false) (sv1 : svalue) (sv2 : svalue)
+let are_same ?timeout:(timeout=300) ?model:(model=false) (sv1 : svalue) (sv2 : svalue)
       (pc : pc_ext) (mem: Smemory.t list * int * int) : bool =
   if !Flags.debug then (
     print_endline "Checking if values are same..";
@@ -2032,7 +2031,7 @@ let are_same ?timeout:(timeout=30) ?model:(model=false) (sv1 : svalue) (sv2 : sv
  
   are_same_i ~timeout:timeout ~model:model v1 v2 pc mem ctx 
 
-let are_same_e ?timeout:(timeout=30) ?model:(model=false) (sv1 : svalue) (ex2 : rel_type)
+let are_same_e ?timeout:(timeout=300) ?model:(model=false) (sv1 : svalue) (ex2 : rel_type)
       (pc : pc_ext) (mem: Smemory.t list * int * int) : bool =
   if !Flags.debug then (
     print_endline "Checking if values are same expression..";

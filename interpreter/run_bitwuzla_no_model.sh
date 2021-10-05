@@ -6,9 +6,9 @@ rm -f /tmp/*bitwuzla.err /tmp/*bitwuzla.out /tmp/*boolector.err /tmp/*boolector.
 bitwuzla ${filename} 1> $filename.bitwuzla.out 2> $filename.bitwuzla.err
 ret=$?
 
-if [ $ret -eq 0 ]; then
-    echo "bitwuzla"
-else
+if [ $ret -eq 1 ]; then
     echo "failed"
+else
+    echo "bitwuzla"
 fi
 

@@ -36,5 +36,6 @@ let set_solver = function
   | "z3"          -> solver := Z3
   | "cvc4"        -> solver := CVC4
   | "boolector"   -> solver := BOOLECTOR
+  | "bitwuzla"    -> solver := BITWUZLA
   | "yices2"      -> solver := YICES2                 
   | _             -> solver := MIXED

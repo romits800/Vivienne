@@ -262,7 +262,8 @@ let rec step (c : config) : config list =
            );
 
            let v = 
-             if (num_exprs > magic_number_num_exprs_max) || not (Z3_solver.is_v_ct_unsat ~timeout:60 (pcnum, pclet, pc) v mem) 
+             if (num_exprs > magic_number_num_exprs_max) || not (Z3_solver.is_v_ct_unsat ~timeout:300 (pcnum, pclet, pc) v mem)
+             (* if (num_exprs > magic_number_num_exprs_max) || not (Z3_solver.is_v_ct_unsat ~timeout:60 (pcnum, pclet, pc) v mem) *) 
              then (
                match v with
                | SI32 v -> (SI32 (Si32.of_high()))
@@ -389,7 +390,8 @@ let rec step (c : config) : config list =
                  let index =  (Obj.magic e') in
                  (try let _ = VulnerabilitiesMap.find index !cond_vuln in ()
                   with Not_found ->
-                    let solv = Z3_solver.is_ct_unsat ~timeout:60 ~model:(!Flags.generate_model) (pcnum, pclet, pc) v mem in
+                    let solv = Z3_solver.is_ct_unsat ~timeout:300 ~model:(!Flags.generate_model) (pcnum, pclet, pc) v mem in
+                    (* let solv = Z3_solver.is_ct_unsat ~timeout:60 ~model:(!Flags.generate_model) (pcnum, pclet, pc) v mem in *)
                     if solv then () else (
                       cond_vuln := VulnerabilitiesMap.add index solv !cond_vuln;
                       ConstantTime.warn e.at "If: Constant-time Violation"
@@ -447,7 +449,8 @@ let rec step (c : config) : config list =
                  let index =  (Obj.magic e') in
                  (try let _ = VulnerabilitiesMap.find index !cond_vuln in ()
                   with Not_found ->
-                    let solv = Z3_solver.is_ct_unsat ~timeout:60 ~model:(!Flags.generate_model) (pcnum, pclet, pc) v mem in
+                    let solv = Z3_solver.is_ct_unsat ~timeout:300 ~model:(!Flags.generate_model) (pcnum, pclet, pc) v mem in
+                    (* let solv = Z3_solver.is_ct_unsat ~timeout:60 ~model:(!Flags.generate_model) (pcnum, pclet, pc) v mem in *)
                     if solv then () else (
                       cond_vuln := VulnerabilitiesMap.add index solv !cond_vuln;
                       ConstantTime.warn e.at "Br_if: Constant-time Violation"
@@ -508,7 +511,8 @@ let rec step (c : config) : config list =
            ); 
            (* Check Constant-time violation *)
            let mem = get_mem_tripple frame in
-           if (Z3_solver.is_v_ct_unsat ~timeout:60 ~model:(!Flags.generate_model)  (pcnum, pclet, pc) (SI32 i) mem) then ()
+           if (Z3_solver.is_v_ct_unsat ~timeout:300 ~model:(!Flags.generate_model)  (pcnum, pclet, pc) (SI32 i) mem) then ()
+                                                                                                                   (* if (Z3_solver.is_v_ct_unsat ~timeout:60 ~model:(!Flags.generate_model)  (pcnum, pclet, pc) (SI32 i) mem) then () *)
            else ConstantTime.warn e.at "CallIndirect: Constant-time Violation";
 
            let i_sol = Z3_solver.find_solutions (SI32 i) (pcnum, pclet, pc) mem  in
@@ -540,7 +544,8 @@ let rec step (c : config) : config list =
            let res = [{c with code = vs', es' @ List.tl es; progc = Obj.magic e'}] in
            if (!Flags.select_unsafe) then (
              let mem = get_mem_tripple frame in
-             if Z3_solver.is_ct_unsat ~timeout:60 ~model:(!Flags.generate_model) (pcnum, pclet, pc) v0 mem then res
+             (* if Z3_solver.is_ct_unsat ~timeout:60 ~model:(!Flags.generate_model) (pcnum, pclet, pc) v0 mem then res *)
+             if Z3_solver.is_ct_unsat ~timeout:300 ~model:(!Flags.generate_model) (pcnum, pclet, pc) v0 mem then res
              else (
                ConstantTime.warn e.at "Select: Constant-time Violation";
                res
@@ -683,8 +688,11 @@ let rec step (c : config) : config list =
                try
                  VulnerabilitiesMap.find index !memindex_vuln, true 
                with Not_found ->
-                     let solv = Z3_solver.is_v_ct_unsat ~timeout:60 ~model:(!Flags.generate_model)
+                     let solv = Z3_solver.is_v_ct_unsat ~timeout:300 ~model:(!Flags.generate_model)
                                   (pcnum, pclet, pc) final_addr mem in
+
+                     (* let solv = Z3_solver.is_v_ct_unsat ~timeout:60 ~model:(!Flags.generate_model)
+                      *              (pcnum, pclet, pc) final_addr mem in *)
                      if not solv then (
                        memindex_vuln := VulnerabilitiesMap.add index solv !memindex_vuln
                      );
@@ -731,8 +739,10 @@ let rec step (c : config) : config list =
                try
                  VulnerabilitiesMap.find index !memindex_vuln, true 
                with Not_found ->
-                     let solv = Z3_solver.is_v_ct_unsat ~timeout:60 ~model:(!Flags.generate_model)
+                     let solv = Z3_solver.is_v_ct_unsat ~timeout:300 ~model:(!Flags.generate_model)
                                   (pcnum, pclet, pc) final_addr mems in
+                     (* let solv = Z3_solver.is_v_ct_unsat ~timeout:60 ~model:(!Flags.generate_model)
+                      *              (pcnum, pclet, pc) final_addr mems in *)
                      if not solv then ( 
                        memindex_vuln := VulnerabilitiesMap.add index solv !memindex_vuln;
                      );
@@ -781,7 +791,8 @@ let rec step (c : config) : config list =
                    let index =  (Obj.magic e') in
                    try VulnerabilitiesMap.find index !noninter_vuln, true 
                    with Not_found ->
-                         let solv = Z3_solver.is_v_ct_unsat ~timeout:60 ~model:(!Flags.generate_model) (pcnum'', pclet, pc'') sv mems in
+                         let solv = Z3_solver.is_v_ct_unsat ~timeout:300 ~model:(!Flags.generate_model) (pcnum'', pclet, pc'') sv mems in
+                         (* let solv = Z3_solver.is_v_ct_unsat ~timeout:60 ~model:(!Flags.generate_model) (pcnum'', pclet, pc'') sv mems in *)
                          if not solv then  
                            noninter_vuln := VulnerabilitiesMap.add index solv !noninter_vuln;
                          solv, false)
@@ -1209,8 +1220,11 @@ let merge_globals c1 c2 =
         | g1', g2' ->
            let mem1 = (c1.frame.inst.smemories, smemlen c1.frame.inst, smemnum c1.frame.inst) in
            let mem2 = (c2.frame.inst.smemories, smemlen c2.frame.inst, smemnum c2.frame.inst) in
-           let is_low1 = Z3_solver.is_v_ct_unsat ~timeout:30 c1.pc g1' mem1 in
-           let is_low2 = Z3_solver.is_v_ct_unsat ~timeout:30 c2.pc g2' mem2 in
+           let is_low1 = Z3_solver.is_v_ct_unsat c1.pc g1' mem1 in
+           let is_low2 = Z3_solver.is_v_ct_unsat c2.pc g2' mem2 in
+
+           (* let is_low1 = Z3_solver.is_v_ct_unsat ~timeout:30 c1.pc g1' mem1 in
+            * let is_low2 = Z3_solver.is_v_ct_unsat ~timeout:30 c2.pc g2' mem2 in *)
            let newg' =
              (match is_low1,is_low2 with
                 true,true ->
@@ -1241,8 +1255,11 @@ let merge_memories c1 c2 =
     | s1::st1, s2::st2 ->
        let mem1 = get_mem_tripple c1.frame in
        let mem2 = get_mem_tripple c2.frame in
-       let is_low1 = Z3_solver.is_v_ct_unsat ~timeout:30 c1.pc s1 mem1 in
-       let is_low2 = Z3_solver.is_v_ct_unsat ~timeout:30 c2.pc s2 mem2 in
+       let is_low1 = Z3_solver.is_v_ct_unsat  c1.pc s1 mem1 in
+       let is_low2 = Z3_solver.is_v_ct_unsat  c2.pc s2 mem2 in
+       (* let is_low1 = Z3_solver.is_v_ct_unsat ~timeout:30 c1.pc s1 mem1 in
+        * let is_low2 = Z3_solver.is_v_ct_unsat ~timeout:30 c2.pc s2 mem2 in *)
+
        let news =
          (match is_low1,is_low2 with
             true,true ->
@@ -1313,8 +1330,10 @@ let merge_locals c1 c2 =
         | l1', l2' ->
            let mem1 = get_mem_tripple c1.frame in
            let mem2 = get_mem_tripple c2.frame in
-           let is_low1 = Z3_solver.is_v_ct_unsat ~timeout:30 c1.pc l1' mem1 in
-           let is_low2 = Z3_solver.is_v_ct_unsat ~timeout:30 c2.pc l2' mem2 in
+           let is_low1 = Z3_solver.is_v_ct_unsat c1.pc l1' mem1 in
+           let is_low2 = Z3_solver.is_v_ct_unsat c2.pc l2' mem2 in
+           (* let is_low1 = Z3_solver.is_v_ct_unsat ~timeout:30 c1.pc l1' mem1 in
+            * let is_low2 = Z3_solver.is_v_ct_unsat ~timeout:30 c2.pc l2' mem2 in *)
            let newl' =
              (match is_low1,is_low2 with
                 true,true ->
