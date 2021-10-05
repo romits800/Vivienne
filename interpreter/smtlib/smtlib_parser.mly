@@ -145,9 +145,11 @@
 %type  <Smtlib.model>  model
 /* output of get-value */
 %type  <Smtlib.term * Smtlib.constant> value
+%type  <Smtlib.model>  z3_model
 
 %start script
 %start model
+%start z3_model
 %start value
 %%
 
@@ -166,6 +168,16 @@ model :
    }
 ;
 
+z3_model :
+| commands=delimited(LPAREN,
+     list(delimited(LPAREN,command,RPAREN)),
+     RPAREN); EOF
+  { let loc = mk_loc $startpos $endpos in
+    mk_model commands loc
+   }
+;
+
+  
 value :
 | LPAREN LPAREN t=term v=spec_constant RPAREN RPAREN EOF
   { t, v }

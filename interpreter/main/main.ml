@@ -37,8 +37,11 @@ let argspec = Arg.align
   "--simplify", Arg.Set Flags.simplify, " enable simplify from Z3";
   "-p", Arg.Set Flags.pfs, " run pfs instead of default DFS";
   "-S", Arg.Set Flags.select_unsafe, " set \"select\" instruction as unsafe";
-  "--z3-only", Arg.Set Flags.z3_only, " run using the z3 bindings";
-  "--portfolio-only", Arg.Set Flags.portfolio_only, " run using the portfolio solver";
+  (* "--z3-only", Arg.Set Flags.z3_only, " run using the z3 bindings";
+   * "--portfolio-only", Arg.Set Flags.portfolio_only, " run using the portfolio solver"; *)
+
+  "--solver", Arg.String (fun str -> Flags.set_solver str), " run using the portfolio solver"; 
+
   "--elim-indvar", Arg.Set Flags.elim_induction_variables, " perform induction variable elimination";
   "--unroll-one", Arg.Set Flags.unroll_one, " use with -l to unroll the first iteration of each loop";
   "--no-clean", Arg.Set Flags.no_clean, " don't clean the solver tmp files from the /tmp fs";
