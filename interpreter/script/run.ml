@@ -362,7 +362,7 @@ let run_action act : Values.value list =
            );
          with e ->
            let stop = Unix.gettimeofday () in
-           trace (Printf.sprintf "Execution time: %fs" (stop -. start));
+           trace (Printf.sprintf "Failed Execution time: %fs" (stop -. start));
            raise e
         ) ; 
         []

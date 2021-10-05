@@ -6,6 +6,7 @@ open Sys
 (* open Unix *)
 open Smtlib
 open Stats  
+
    
 let path = ref (getenv "VIV_PATH")
 
@@ -224,16 +225,20 @@ let get_size e =
         
 
 let to_int rt =
-  match rt with
-  | L v  when BitVector.is_bv_numeral v ->
+  try
+    match rt with
+    | L v  when  BitVector.is_bv_numeral v ->
+       if !Flags.debug then (print_endline "to_int: in numeral");
        let str = BitVector.numeral_to_string v in
-        print_endline str;
        Some (int_of_string str)
-  | H (v1,v2) when v1 = v2  && BitVector.is_bv_numeral v1 -> 
+    | H (v1,v2) when v1 = v2  && BitVector.is_bv_numeral v1 ->
        let str = BitVector.numeral_to_string v1 in
        Some (int_of_string str)
-  | _ -> None
-
+    | _ ->
+       None
+  with _ ->
+        if !Flags.debug then (print_endline "to_int: Failed");
+        None
 
 
 let rec create_array pc ctx a s =
@@ -242,43 +247,47 @@ let rec create_array pc ctx a s =
   split_to_bytes ctx a index value sz 0 7
 
 and mem_get_stores mi pc ctx mem s =
-  (*print_endline "update_mem";*)
-    (match s with
-     | SI32 Store (ad, v, i, num, sz) ->
-        let size = 32 in
-        let index = si_to_expr pc size ctx mem ad in
-        let value = si_to_expr pc size ctx mem v in
-        (match to_int index with
-         | Some i -> 
-            (try
-               let _ = ExprMem.find i mi in
-               None, mi
-             with Not_found ->
-               let mi' = ExprMem.add i true mi in
-               (Some (size,index, value, sz), mi')
-            )
-         | None ->
-            (Some (size, index, value, sz), mi)
-        )
-     | SI64 Store (ad, v, i, num, sz) ->
-        let size = 64 in
-        let index = si_to_expr pc size ctx mem ad in
-        let value = si_to_expr pc size ctx mem v in
-        (match to_int index with
-         | Some i -> 
-            (try
-               let _ = ExprMem.find i mi in
-               None, mi
-             with Not_found ->
-               let mi' = ExprMem.add i true mi in
-               (Some (size,index, value, sz), mi')
-            )
-         | None ->
-            (Some (size, index, value, sz), mi)
-        )
+  (*print_endline "mem_get_stores";*)
+  (match s with
+   | SI32 Store (ad, v, i, num, sz) ->
+      let size = 32 in
+      let index = si_to_expr pc size ctx mem ad in
+      let value = si_to_expr pc size ctx mem v in
+      (* Optimization: If a store was overwritten then we don't need 
+         to write the previous write *)
+      (match to_int index with
+       | Some i -> 
+          (try
+             let _ = ExprMem.find i mi in
+             None, mi
+           with Not_found ->
+             let mi' = ExprMem.add i true mi in
+             (Some (size,index, value, sz), mi')
+          )
+       | None ->
+          (Some (size, index, value, sz), mi)
+      )
+   | SI64 Store (ad, v, i, num, sz) ->
+      let size = 64 in
+      let index = si_to_expr pc size ctx mem ad in
+      let value = si_to_expr pc size ctx mem v in
+      (* Optimization: If a store was overwritten then we don't need 
+         to write the previous write *)
+      (match to_int index with
+       | Some i -> 
+          (try
+             let _ = ExprMem.find i mi in
+             None, mi
+           with Not_found ->
+             let mi' = ExprMem.add i true mi in
+             (Some (size,index, value, sz), mi')
+          )
+       | None ->
+          (Some (size, index, value, sz), mi)
+      )
 
-     | _ -> failwith "Unexpected store - not implemented f64/32"
-    )
+   | _ -> failwith "Unexpected store - not implemented f64/32"
+  )
 
 and update_mem pc ctx mem a s =
   (*print_endline "update_mem";*)
@@ -293,23 +302,24 @@ and update_mem pc ctx mem a s =
      let index = si_to_expr pc size ctx mem ad in
      let value = si_to_expr pc size ctx mem v in
      split_to_bytes ctx a index value sz 0 7
-   | _ -> failwith "Unexpected store - not implemented f64/32"
-        
+  | _ -> failwith "Unexpected store - not implemented f64/32"
+       
 and si_to_expr pc size ctx mem si: rel_type  = 
   let si' = 
-      (match si with
-       | BitVec (i,n) ->
-          L (BitVector.mk_numeral ctx (Int64.to_string i) n)
-       | Const (High i, size) ->
-          (try
-             DefMap.find i !defmap
-           with Not_found -> 
-             let def = H (BitVector.mk_const_s ctx ("h1_" ^ string_of_int i) size,
-                          BitVector.mk_const_s ctx ("h2_" ^ string_of_int i) size) in
-             defmap := DefMap.add i def !defmap;
-             def
-          )
-       | Const (Low i, size) ->
+    (match si with
+     | BitVec (i,n) ->
+        L (BitVector.mk_numeral ctx (Int64.to_string i) n)
+     | Const (High i, size) ->
+        (try
+           DefMap.find i !defmap
+         with Not_found -> 
+           let def = H (BitVector.mk_const_s ctx ("h1_" ^ string_of_int i) size,
+                        BitVector.mk_const_s ctx ("h2_" ^ string_of_int i) size) in
+           defmap := DefMap.add i def !defmap;
+           def
+        )
+     | Const (Low i, size) ->
+        let res =
           (try
              DefMap.find i !defmap
            with Not_found -> 
@@ -317,324 +327,333 @@ and si_to_expr pc size ctx mem si: rel_type  =
              defmap := DefMap.add i def !defmap;
              def
           )
-       | App (f, ts) ->
-             let res = app_to_expr pc ts size ctx mem f in
-             res
-       | Let (i) ->
+        in
+        res
+     | App (f, ts) ->
+        let res = app_to_expr pc ts size ctx mem f in
+        res
+     | Let (i) ->
+        (try
+           let f = LetMap.find i !letmap in
+           f
+         with Not_found ->
+               let get_let = Pc_type.find_let pc i in
+               match get_let with
+               | Sv sv' ->
+                  let sv' = sv_to_expr pc sv' ctx mem in
+                  letmap := LetMap.add i sv' !letmap;
+                  sv'
+               | Z3Expr32 e
+                 | Z3Expr64 e ->
+                  letmap := LetMap.add i e !letmap;
+                  e
+        )
+     | Load (i, memi, num, sz, _) ->
+        let rec get_stores tmem newmem mem optstores = 
+          let index = Smemory.get_num tmem in
           (try
-             let f = LetMap.find i !letmap in
-             f
-           with Not_found -> 
-             match Pc_type.find_let pc i with
-             | Sv sv' ->
-                (*print_endline "not found let";*)
-                let sv' = sv_to_expr pc sv' ctx mem in
-                letmap := LetMap.add i sv' !letmap;
-                sv'
-             | Z3Expr32 e
-               | Z3Expr64 e ->
-                letmap := LetMap.add i e !letmap;
-                e
-          )
-       | Load (i, memi, num, sz, _) ->
-          let rec get_stores tmem newmem mem optstores = 
-            let index = Smemory.get_num tmem in
-            (try
-               let nm = ExprMem.find index !memmap in
-               nm
-             with Not_found ->
-               let stores = Smemory.get_stores tmem in
-
-               let optstores', stores' =
-                 List.fold_left
-                   (fun (mi,acc) st ->
-                     let si,mi' = mem_get_stores mi pc ctx mem st in
-                     match si with
-                     | Some si -> (mi', si::acc)
-                     | None -> (mi', acc)
-                   )
-                   (optstores,[]) stores in
-
-               let prev_mem = Smemory.get_prev_mem tmem in
-               
-               let mem' =
-                 match prev_mem with
-                 | Some pmem ->
-                    let newmem' = get_stores pmem newmem mem optstores' in
-                    List.fold_left (create_array pc ctx)
-                      newmem' stores'
-                    
-                 | None -> 
-                    List.fold_left (create_array pc ctx)
-                      newmem stores'
-               in
-               let simp = propagate_policy_one (fun x -> Expr.simplify x None) mem' in
-               memmap := ExprMem.add index simp !memmap;
-               simp
-            )
-          in
-          (try
-             let index = simap_index si mem in
-             let f = SiMap.find index !simap in
-             f
+             let nm = ExprMem.find index !memmap in
+             nm
            with Not_found ->
-             let smem, memlen, _ = mem in
-             let arr =
-               let bva = BitVector.mk_sort ctx 32 in
-               let bvd = BitVector.mk_sort ctx 8 in
-               let arr1 = Z3Array.mk_const_s ctx "mem1" bva bvd in
-               let arr2 = Z3Array.mk_const_s ctx "mem2" bva bvd in
-               let newmem = H (arr1, arr2) in
-               let tmem = Lib.List32.nth smem (Int32.of_int (memlen - memi)) in
-               let fmem = get_stores tmem newmem mem (ExprMem.empty) in               
-               fmem
+             (* Take stores from most recent to the oldest *)
+
+             let stores = Smemory.get_stores tmem in
+
+             (* stores' is reversed - from the oldest to the most
+                recent *)
+             let optstores', stores' =
+               List.fold_left
+                 (fun (mi,acc) st ->
+                   let si,mi' = mem_get_stores mi pc ctx mem st in
+                   match si with
+                   | Some si -> (mi', si::acc)
+                   | None -> (mi', acc)
+                 )
+                 (optstores,[]) stores in
+
+             let prev_mem = Smemory.get_prev_mem tmem in
+             
+             let mem' =
+               match prev_mem with
+               | Some pmem ->
+                  let newmem' = get_stores pmem newmem mem optstores' in
+                  List.fold_left (create_array pc ctx)
+                    newmem' stores'
+                  
+               | None -> 
+                  List.fold_left (create_array pc ctx)
+                    newmem stores'
              in
-             let index = si_to_expr pc size ctx mem i in
-             let v' = merge_bytes ctx arr index sz in
-             let simp = propagate_policy_one (fun x -> Expr.simplify x None) v' in
-             simap := SiMap.add (simap_index si mem) simp !simap;
-             simp )
-       | _ -> failwith "String, Int, Float, Let, Multi are not implemented yet."
-      ) in
-    si'
+             let simp = propagate_policy_one (fun x -> Expr.simplify x None) mem' in
+             memmap := ExprMem.add index simp !memmap;
+             simp
+          )
+        in
+        (try
+           let index = simap_index si mem in
+           let f = SiMap.find index !simap in
+           f
+         with Not_found ->
+           let smem, memlen, _ = mem in
+           let arr =
+             let bva = BitVector.mk_sort ctx 32 in
+             let bvd = BitVector.mk_sort ctx 8 in
+             let arr1 = Z3Array.mk_const_s ctx "mem1" bva bvd in
+             let arr2 = Z3Array.mk_const_s ctx "mem2" bva bvd in
+             let newmem = H (arr1, arr2) in
+             let tmem = Lib.List32.nth smem (Int32.of_int (memlen - memi)) in
+             let fmem = get_stores tmem newmem mem (ExprMem.empty) in               
+             fmem
+           in
+           let index = si_to_expr pc size ctx mem i in
+           let v' = merge_bytes ctx arr index sz in
+           let simp = propagate_policy_one (fun x -> Expr.simplify x None) v' in
+           simap := SiMap.add (simap_index si mem) simp !simap;
+           simp )
+     | _ -> failwith "String, Int, Float, Let, Multi are not implemented yet."
+    ) in
+  si'
   
 and app_to_expr pc ts size ctx mem f =
-  (* print_endline "app_to_expr"; *)
-  match f, ts with
-  | Ite, t1::t2::t3::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     let e3 = si_to_expr pc size ctx mem t3 in
-     propagate_policy_three (Boolean.mk_ite ctx) e1 e2 e3
-  | Ite, _ -> failwith "Not valid ite."
+  let res =
+    (match f, ts with
+     | Ite, t1::t2::t3::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        let e3 = si_to_expr pc size ctx mem t3 in
+        propagate_policy_three (Boolean.mk_ite ctx) e1 e2 e3
+     | Ite, _ -> failwith "Not valid ite."
 
-  | BvSlt, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_slt ctx) e1 e2
-  | BvSlt, _ -> failwith "Not valid slt."
+     | BvSlt, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_slt ctx) e1 e2
+     | BvSlt, _ -> failwith "Not valid slt."
 
-  | BvSle, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_sle ctx) e1 e2
-  | BvSle, _ -> failwith "Not valid sle."
+     | BvSle, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_sle ctx) e1 e2
+     | BvSle, _ -> failwith "Not valid sle."
 
-  | BvSgt, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_sgt ctx) e1 e2
-  | BvSgt, _ -> failwith "Not valid sgt."
+     | BvSgt, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_sgt ctx) e1 e2
+     | BvSgt, _ -> failwith "Not valid sgt."
 
-  | BvSge, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_sge ctx) e1 e2
-  | BvSge, _ -> failwith "Not valid sge."
+     | BvSge, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_sge ctx) e1 e2
+     | BvSge, _ -> failwith "Not valid sge."
 
-  | BvUlt, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_ult ctx) e1 e2
-  | BvUlt, _ -> failwith "Not valid ult."
+     | BvUlt, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_ult ctx) e1 e2
+     | BvUlt, _ -> failwith "Not valid ult."
 
-  | BvUle, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_ule ctx) e1 e2
-  | BvUle, _ -> failwith "Not valid ule."
+     | BvUle, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_ule ctx) e1 e2
+     | BvUle, _ -> failwith "Not valid ule."
 
-  | BvUgt, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_ugt ctx) e1 e2
-  | BvUgt, _ -> failwith "Not valid ugt."
+     | BvUgt, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_ugt ctx) e1 e2
+     | BvUgt, _ -> failwith "Not valid ugt."
 
-  | BvUge, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_uge ctx) e1 e2
-  | BvUge, _ -> failwith "Not valid uge."
+     | BvUge, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_uge ctx) e1 e2
+     | BvUge, _ -> failwith "Not valid uge."
 
-  | BvNot, t::[] ->
-     let e = si_to_expr pc size ctx mem t in
-     propagate_policy_one (BitVector.mk_not ctx) e
-  | BvNot, _ -> failwith "Not valid not."
+     | BvNot, t::[] ->
+        let e = si_to_expr pc size ctx mem t in
+        propagate_policy_one (BitVector.mk_not ctx) e
+     | BvNot, _ -> failwith "Not valid not."
 
-  | BvNeg, t::[] ->
-     let e = si_to_expr pc size ctx mem t in
-     propagate_policy_one (BitVector.mk_neg ctx) e
-  | BvNeg, _ -> failwith "Not valid neg."
+     | BvNeg, t::[] ->
+        let e = si_to_expr pc size ctx mem t in
+        propagate_policy_one (BitVector.mk_neg ctx) e
+     | BvNeg, _ -> failwith "Not valid neg."
 
-  | BvAnd, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_and ctx) e1 e2
-  | BvAnd, _ -> failwith "Not valid bitwise and."
+     | BvAnd, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_and ctx) e1 e2
+     | BvAnd, _ -> failwith "Not valid bitwise and."
 
-  | BvOr, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_or ctx) e1 e2
-  | BvOr, _ -> failwith "Not valid bitwise or."
+     | BvOr, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_or ctx) e1 e2
+     | BvOr, _ -> failwith "Not valid bitwise or."
 
-  | BvNand, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_nand ctx) e1 e2
-  | BvNand, _ -> failwith "Not valid bitwise nand."
+     | BvNand, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_nand ctx) e1 e2
+     | BvNand, _ -> failwith "Not valid bitwise nand."
 
-  | BvNor, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_nor ctx) e1 e2
-  | BvNor, _ -> failwith "Not valid bitwise nor."
+     | BvNor, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_nor ctx) e1 e2
+     | BvNor, _ -> failwith "Not valid bitwise nor."
 
-  | BvXNor, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_xnor ctx) e1 e2
-  | BvXNor, _ -> failwith "Not valid bitwise xnor."
+     | BvXNor, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_xnor ctx) e1 e2
+     | BvXNor, _ -> failwith "Not valid bitwise xnor."
 
-  | BvXor, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_xor ctx) e1 e2
-  | BvXor, _ -> failwith "Not valid bitwise xor."
-               
-  | BvAdd, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_add ctx) e1 e2
-  | BvAdd, ts ->
-     failwith "Not valid bitwise addition." 
+     | BvXor, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_xor ctx) e1 e2
+     | BvXor, _ -> failwith "Not valid bitwise xor."
+                 
+     | BvAdd, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_add ctx) e1 e2
+     | BvAdd, ts ->
+        failwith "Not valid bitwise addition." 
 
-  | BvSub, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_sub ctx) e1 e2
-  | BvSub, _ -> failwith "Not valid bitwise subtraction."
+     | BvSub, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_sub ctx) e1 e2
+     | BvSub, _ -> failwith "Not valid bitwise subtraction."
 
-  | BvMul, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_mul ctx) e1 e2
-  | BvMul, _ -> failwith "Not valid bitwise multiplication."
+     | BvMul, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_mul ctx) e1 e2
+     | BvMul, _ -> failwith "Not valid bitwise multiplication."
 
-  | BvURem, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_urem ctx) e1 e2
-  | BvURem, _ -> failwith "Not valid bitwise uremainder."
+     | BvURem, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_urem ctx) e1 e2
+     | BvURem, _ -> failwith "Not valid bitwise uremainder."
 
-  | BvSRem, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_srem ctx) e1 e2
-  | BvSRem, _ -> failwith "Not valid bitwise sremainder."
+     | BvSRem, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_srem ctx) e1 e2
+     | BvSRem, _ -> failwith "Not valid bitwise sremainder."
 
-  | BvSMod, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_smod ctx) e1 e2
-  | BvSMod, _ -> failwith "Not valid bitwise s modulo."
+     | BvSMod, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_smod ctx) e1 e2
+     | BvSMod, _ -> failwith "Not valid bitwise s modulo."
 
-  | BvShl, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_shl ctx) e1 e2
-  | BvShl, _ -> failwith "Not valid bitwise sremainder."
+     | BvShl, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_shl ctx) e1 e2
+     | BvShl, _ -> failwith "Not valid bitwise sremainder."
 
-  | BvLShr, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_lshr ctx) e1 e2
-  | BvLShr, _ -> failwith "Not valid bitwise sremainder."
+     | BvLShr, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_lshr ctx) e1 e2
+     | BvLShr, _ -> failwith "Not valid bitwise sremainder."
 
-  | BvAShr, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_ashr ctx) e1 e2
-  | BvAShr, _ -> failwith "Not valid bitwise sremainder."
+     | BvAShr, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_ashr ctx) e1 e2
+     | BvAShr, _ -> failwith "Not valid bitwise sremainder."
 
-  (*TODO(Romy): special cases for constant shift *)
-  | Rotl, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_ext_rotate_left ctx) e1 e2
-  | Rotl, _ -> failwith "Not valid bitwise rotl."
+     (*TODO(Romy): special cases for constant shift *)
+     | Rotl, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_ext_rotate_left ctx) e1 e2
+     | Rotl, _ -> failwith "Not valid bitwise rotl."
 
-  | Rotr, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_ext_rotate_right ctx) e1 e2
-  | Rotr, _ -> failwith "Not valid bitwise rotr."
+     | Rotr, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_ext_rotate_right ctx) e1 e2
+     | Rotr, _ -> failwith "Not valid bitwise rotr."
 
-  | Rotli(i), t::[] ->
-     let e = si_to_expr pc size ctx mem t in
-     propagate_policy_one (BitVector.mk_rotate_left ctx i) e
-  | Rotli _, _ -> failwith "Not valid bitwise rotl."
+     | Rotli(i), t::[] ->
+        let e = si_to_expr pc size ctx mem t in
+        propagate_policy_one (BitVector.mk_rotate_left ctx i) e
+     | Rotli _, _ -> failwith "Not valid bitwise rotl."
 
-  | Rotri(i), t::[] ->
-     let e = si_to_expr pc size ctx mem t in
-     propagate_policy_one (BitVector.mk_rotate_right ctx i) e
-  | Rotri _, _ -> failwith "Not valid bitwise rotl."
+     | Rotri(i), t::[] ->
+        let e = si_to_expr pc size ctx mem t in
+        propagate_policy_one (BitVector.mk_rotate_right ctx i) e
+     | Rotri _, _ -> failwith "Not valid bitwise rotl."
 
-  | ExtendS(i), t::[] ->
-     let e = si_to_expr pc size ctx mem t in
-     let size = get_size e in
-     propagate_policy_one (BitVector.mk_sign_ext ctx (i-size)) e
-  | ExtendS _, _ -> failwith "Not valid bitwise extsl."
+     | ExtendS(i), t::[] ->
+        let e = si_to_expr pc size ctx mem t in
+        let size = get_size e in
+        propagate_policy_one (BitVector.mk_sign_ext ctx (i-size)) e
+     | ExtendS _, _ -> failwith "Not valid bitwise extsl."
 
-  | ExtendU(i), t::[] ->
-     let e = si_to_expr pc size ctx mem t in
-     let size = get_size e in
-     propagate_policy_one (BitVector.mk_zero_ext ctx (i-size)) e
-  | ExtendU _, _ -> failwith "Not valid bitwise extul."
+     | ExtendU(i), t::[] ->
+        let e = si_to_expr pc size ctx mem t in
+        let size = get_size e in
+        let res = propagate_policy_one (BitVector.mk_zero_ext ctx (i-size)) e in
+        res
+     | ExtendU _, _ -> failwith "Not valid bitwise extul."
 
-  | Wrap(i), t::[] ->
-     let e = si_to_expr pc size ctx mem t in
-     propagate_policy_one (BitVector.mk_extract ctx 31 0) e
-  | Wrap _, _ -> failwith "Not valid bitwise rotl."
+     | Wrap(i), t::[] ->
+        let e = si_to_expr pc size ctx mem t in
+        propagate_policy_one (BitVector.mk_extract ctx 31 0) e
+     | Wrap _, _ -> failwith "Not valid bitwise rotl."
 
-  | BvUDiv, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_udiv ctx) e1 e2
-  | BvUDiv, _ -> failwith "Not valid bitwise sremainder."
+     | BvUDiv, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_udiv ctx) e1 e2
+     | BvUDiv, _ -> failwith "Not valid bitwise sremainder."
 
-  | BvSDiv, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (BitVector.mk_sdiv ctx) e1 e2
-  | BvSDiv, _ -> failwith "Not valid bitwise sremainder."
+     | BvSDiv, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (BitVector.mk_sdiv ctx) e1 e2
+     | BvSDiv, _ -> failwith "Not valid bitwise sremainder."
 
-  | Eq, t1::t2::[] ->
-     let e1 = si_to_expr pc size ctx mem t1 in
-     let e2 = si_to_expr pc size ctx mem t2 in
-     propagate_policy (Boolean.mk_eq ctx) e1 e2
-  | Eq, _ -> failwith "Not valid equation."
+     | Eq, t1::t2::[] ->
+        let e1 = si_to_expr pc size ctx mem t1 in
+        let e2 = si_to_expr pc size ctx mem t2 in
+        propagate_policy (Boolean.mk_eq ctx) e1 e2
+     | Eq, _ -> failwith "Not valid equation."
 
-  | Not, t::[] ->
-     let e = si_to_expr pc size ctx mem t in
-     propagate_policy_one (Boolean.mk_not ctx) e
-  | Not, _ -> failwith "Not valid boolean not."
+     | Not, t::[] ->
+        let e = si_to_expr pc size ctx mem t in
+        propagate_policy_one (Boolean.mk_not ctx) e
+     | Not, _ -> failwith "Not valid boolean not."
 
-  | And, ts ->
-     let es = List.map (si_to_expr pc size ctx mem) ts in
-     propagate_list (Boolean.mk_and ctx) es 
-  | Or, ts ->
-     let es = List.map (si_to_expr pc size ctx mem) ts in
-     propagate_list (Boolean.mk_or ctx) es 
-  | _ -> failwith "App_to_expr: Not implemented yet."
-
+     | And, ts ->
+        let es = List.map (si_to_expr pc size ctx mem) ts in
+        propagate_list (Boolean.mk_and ctx) es 
+     | Or, ts ->
+        let es = List.map (si_to_expr pc size ctx mem) ts in
+        propagate_list (Boolean.mk_or ctx) es 
+     | _ -> failwith "App_to_expr: Not implemented yet."
+    ) in
+  res
+  
 and sv_to_expr pc sv ctx mem =
   let v,n =
     match sv with
     | SI32 si32 -> si32,32
     | SI64 si64 -> si64,64 
-  (*TODO(Romy): Not implemented*)
-  | _ -> failwith "Float not implemented."
+    (*TODO(Romy): Not implemented*)
+    | _ -> failwith "Float not implemented."
   in
   let v' = si_to_expr pc n ctx mem v in
   v'
@@ -643,21 +662,11 @@ and sv_to_expr pc sv ctx mem =
 
 let rec pc_to_expr pcext ctx mem: rel_type =
   (* print_endline "pc_to_expr"; *)
-  (* print_endline (print_pc (snd pcext)); *)
   let pcnum, pclet, pc = pcext in
   let index = pcmap_index pcext mem in
   try
-
-    (* let _, _, num = mem in
-     * print_endline ("pcnum" ^ (string_of_int pcnum));
-     * print_endline ("memnum" ^ (string_of_int num)); *)
-    (* if !Flags.debug then print_endline ("pcloc:" ^ index); *)
     let f = SiMap.find index !simap in
-    (* if !Flags.debug then print_endline "found pc_to_expr"; *)
-    (* f *)
-    (* print_exp f; *)
     f
-    (* raise Not_found *)
   with Not_found -> (
     match pc with
     | PCTrue -> L (Boolean.mk_true ctx)
@@ -863,8 +872,8 @@ let read_yices fname =
     match lst with
     | ("sv",v)::lst -> v
     |  _ :: lst -> find_sv_solution lst 
-    | [] -> print_endline "Not found";
-            failwith "Not foujnd sv"
+    | [] ->
+       failwith "Not foujnd sv"
   in
   let tmp_file = fname ^ ".yices.out" in
   let chan = open_in tmp_file in
@@ -1003,7 +1012,7 @@ let write_formula_to_file ?model:(model=true) solver =
   filename
 
 
-  
+(* TODO: Add constraints about the posible values to be within the range of functions *) 
 let find_solutions (sv: svalue) (pc : pc_ext)
       (mem: Smemory.t list * int * int) : int list =
   if !Flags.debug then
@@ -1053,9 +1062,10 @@ let find_solutions (sv: svalue) (pc : pc_ext)
     let num_exprs = Goal.get_num_exprs g in
       
  
-    if (!Flags.stats) then
-       Stats.add_new_query "Unknown" (num_exprs) 0.0;
- 
+    if (!Flags.stats) then (
+      let formulas = Goal.get_formulas g in
+      Stats.add_new_query "Unknown" num_exprs formulas SOLUTION 0.0;
+    );
 
     let solver = Solver.mk_solver ctx None in
     List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
@@ -1199,9 +1209,10 @@ let is_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv : s
 
      let num_exprs = Goal.get_num_exprs g in
      (* Some bug causes seg fault *)
-     if (!Flags.stats) then
-        Stats.add_new_query "Unknown" (num_exprs) 0.0;
- 
+     if (!Flags.stats) then (
+       let formulas = Goal.get_formulas g in
+       Stats.add_new_query "Unknown" (num_exprs) formulas IS_CT_UNSAT 0.0;
+     );
      if !Flags.portfolio_only then (
        let filename = write_formula_to_file solver in
        let res = not (run_solvers filename (read_sat "yices")
@@ -1277,11 +1288,11 @@ let is_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv : s
      
 let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv : svalue)
       (mem: Smemory.t list * int * int) : bool =
-   if !Flags.debug then (
-      print_endline "Checking if value is CT..";
-      print_endline ("Model: " ^ (string_of_bool model));
-   );
- 
+  if !Flags.debug then (
+    print_endline "Checking if value is CT..";
+    print_endline ("Model: " ^ (string_of_bool model));
+  );
+  
 
   let start_t = if !Flags.debug then Unix.gettimeofday() else 0.0 in
 
@@ -1301,125 +1312,127 @@ let is_v_ct_unsat ?timeout:(timeout=30) ?model:(model=false) (pc : pc_ext) (sv :
   | L v -> true
   | H (v1, v2) when Expr.equal v1 v2 -> true
   | H (v1, v2) ->
-      let v' = Boolean.mk_eq ctx v1 v2 in
-      let v' = Boolean.mk_not ctx v' in
-      let pcexp = pc_to_expr pc ctx mem in
-      let pcexp' = 
-        match pcexp with
-        | L pcv -> pcv 
-        | H (pcv1, pcv2) -> Boolean.mk_and ctx [pcv1; pcv2]
-      in
-      Goal.add g [v'];
-      Goal.add g [pcexp'];
+     let v' = Boolean.mk_eq ctx v1 v2 in
+     let v' = Boolean.mk_not ctx v' in
+     let pcexp = pc_to_expr pc ctx mem in
+     let pcexp' = 
+       match pcexp with
+       | L pcv -> pcv 
+       | H (pcv1, pcv2) -> Boolean.mk_and ctx [pcv1; pcv2]
+     in
+     Goal.add g [v'];
+     Goal.add g [pcexp'];
 
-      let tac = Tactic.mk_tactic ctx "default" in
+     let tac = Tactic.mk_tactic ctx "default" in
 
-      let solver = Solver.mk_solver_t ctx tac in
+     let solver = Solver.mk_solver_t ctx tac in
 
-      let num_exprs = Goal.get_num_exprs g in
+     let num_exprs = Goal.get_num_exprs g in
 
-      if (!Flags.stats) then (
-         Stats.add_new_query "Unknown" (num_exprs) 0.0);
-      let params = Params.mk_params ctx in
-      let s_formulas = (List.map (fun e -> Expr.simplify e (Some params)) (Goal.get_formulas g)) in
+     if (!Flags.stats) then (
+       let formulas = Goal.get_formulas g in
+       Stats.add_new_query "Unknown" (num_exprs) formulas IS_V_CT_SAT 0.0);
+     
+     let params = Params.mk_params ctx in
+     let s_formulas = (List.map (fun e -> Expr.simplify e (Some params)) (Goal.get_formulas g)) in
 
-      List.iter (fun f -> Solver.add solver [f]) @@ List.rev s_formulas;
+     List.iter (fun f -> Solver.add solver [f]) @@ List.rev s_formulas;
 
-      if !Flags.portfolio_only then (
+     if !Flags.portfolio_only then (
 
-        let filename = write_formula_to_file ~model:model solver in
-        let res = 
-            try (
-                not (run_solvers ~model:model filename (read_sat "yices")
-                         (read_sat "z3")
-                         (read_sat "cvc4") (read_sat "boolector")
-                         (read_sat "bitwuzla") timeout)
-            ) with Timeout -> (
-                false
-            )
-        in
-        remove filename;
-        res
-      ) else if !Flags.z3_only then (
-
-        (if (!Flags.stats) then
-           Stats.update_query_str "Z3_bindings") ;
-        let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
-
-        try
-        match (Solver.check solver []) with
-        | Solver.UNSATISFIABLE ->
-           if (!Flags.stats) then (
-             Stats.update_query_time (Unix.gettimeofday () -. start);
-             Stats.print_last());
-           true
-        | Solver.SATISFIABLE ->
-           if (!Flags.stats) then (
-             Stats.update_query_time (Unix.gettimeofday () -. start);
-             Stats.print_last()
-           );
+       let filename = write_formula_to_file ~model:model solver in
+       let res = 
+         try (
+           not (run_solvers ~model:model filename (read_sat "yices")
+                  (read_sat "z3")
+                  (read_sat "cvc4") (read_sat "boolector")
+                  (read_sat "bitwuzla") timeout)
+         ) with Timeout -> (
            false
-        | _ ->
-          if (!Flags.stats) then (
-            Stats.update_query_time (Unix.gettimeofday () -. start);
-            Stats.print_last());
-          false
-        with _ -> 
-          if !Flags.debug then print_endline "Z3 solver failed - Maybe timeout";
-          if (!Flags.stats) then (
-            Stats.update_query_time (Unix.gettimeofday () -. start);
-            Stats.print_last());
-          false
-      ) else (
-        if num_exprs > !Flags.magic_number_1 then (
-          if !Flags.debug then print_endline "Using portfolio solver..";
- 
-          let filename = write_formula_to_file ~model:model solver in
+         )
+       in
+       remove filename;
+       res
+     ) else if !Flags.z3_only then (
 
-          let res = 
-            try (
-                not (run_solvers ~model:model filename (read_sat "yices") (read_sat "z3")
-                           (read_sat "cvc4") (read_sat "boolector")
-                           (read_sat "bitwuzla") timeout)
-            )
-            with Timeout -> false
-          in
-          remove filename;
-          res
-        ) else (
+       (if (!Flags.stats) then
+          Stats.update_query_str "Z3_bindings") ;
+       let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
 
-          if !Flags.debug then print_endline "Using Z3 solver..";
-
-          (if (!Flags.stats) then 
-             Stats.update_query_str "Z3_bindings") ;
-          let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
-
-          try
-          match (Solver.check solver []) with
-          | Solver.UNSATISFIABLE ->
-             if (!Flags.stats) then (
-               Stats.update_query_time (Unix.gettimeofday () -. start);
-               Stats.print_last());
-             true
-          | Solver.SATISFIABLE ->
-             if (!Flags.stats) then (
-               Stats.update_query_time (Unix.gettimeofday () -. start);
-               Stats.print_last());
-             false
-          | _ ->
-             if (!Flags.stats) then (
-               Stats.update_query_time (Unix.gettimeofday () -. start);
-               Stats.print_last());
-             false
-          with _ -> 
+       try
+         match (Solver.check solver []) with
+         | Solver.UNSATISFIABLE ->
+            if (!Flags.stats) then (
+              Stats.update_query_time (Unix.gettimeofday () -. start);
+              Stats.print_last());
+            true
+         | Solver.SATISFIABLE ->
+            if (!Flags.stats) then (
+              Stats.update_query_time (Unix.gettimeofday () -. start);
+              Stats.print_last()
+            );
+            false
+         | _ ->
+            if (!Flags.stats) then (
+              Stats.update_query_time (Unix.gettimeofday () -. start);
+              Stats.print_last());
+            false
+       with _ -> 
              if !Flags.debug then print_endline "Z3 solver failed - Maybe timeout";
              if (!Flags.stats) then (
                Stats.update_query_time (Unix.gettimeofday () -. start);
                Stats.print_last());
              false
-        )
-        
-      )
+     ) else (
+       if num_exprs > !Flags.magic_number_1 then (
+         if !Flags.debug then print_endline "Using portfolio solver..";
+         
+         let filename = write_formula_to_file ~model:model solver in
+
+         let res = 
+           try (
+             not (run_solvers ~model:model filename (read_sat "yices") (read_sat "z3")
+                    (read_sat "cvc4") (read_sat "boolector")
+                    (read_sat "bitwuzla") timeout)
+           )
+           with Timeout -> false
+         in
+         remove filename;
+         res
+       ) else (
+
+         if !Flags.debug then print_endline "Using Z3 solver..";
+
+         (if (!Flags.stats) then 
+            Stats.update_query_str "Z3_bindings") ;
+         let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
+
+         try
+           match (Solver.check solver []) with
+           | Solver.UNSATISFIABLE ->
+              if (!Flags.stats) then (
+                Stats.update_query_time (Unix.gettimeofday () -. start);
+                Stats.print_last());
+              true
+           | Solver.SATISFIABLE ->
+              if (!Flags.stats) then (
+                Stats.update_query_time (Unix.gettimeofday () -. start);
+                Stats.print_last());
+              false
+           | _ ->
+              if (!Flags.stats) then (
+                Stats.update_query_time (Unix.gettimeofday () -. start);
+                Stats.print_last());
+              false
+         with _ -> 
+               if !Flags.debug then print_endline "Z3 solver failed - Maybe timeout";
+               if (!Flags.stats) then (
+                 Stats.update_query_time (Unix.gettimeofday () -. start);
+                 Stats.print_last());
+               false
+       )
+     
+     )
 
 
       
@@ -1449,7 +1462,7 @@ let is_sat ?timeout:(timeout=30) (pc : pc_ext) (mem: Smemory.t list * int * int)
       (match v with
        | L v -> 
           Goal.add g [v]
-       | H (v1,v2) -> 
+       | H (v1,v2) ->
           Goal.add g [v1;v2]
       );
       let tac = Tactic.mk_tactic ctx "default" in
@@ -1463,9 +1476,10 @@ let is_sat ?timeout:(timeout=30) (pc : pc_ext) (mem: Smemory.t list * int * int)
          print_endline "Done init");
 
 
-      (if (!Flags.stats) then
-         Stats.add_new_query "Unknown" num_exprs 0.0);
-
+      (if (!Flags.stats) then (
+         let formulas = Goal.get_formulas g in
+         Stats.add_new_query "Unknown" num_exprs formulas IS_SAT 0.0);
+      );
 
       if !Flags.portfolio_only then (
         let filename = write_formula_to_file ~model:false solver in
@@ -1722,7 +1736,8 @@ let are_same_i ?timeout:(timeout=30) ?model:(model=false) (v1 : rel_type) (v2 : 
      let num_exprs = Goal.get_num_exprs g in
 
      if (!Flags.stats) then (
-       Stats.add_new_query "Unknown" (num_exprs) 0.0);
+       let formulas = Goal.get_formulas g in
+       Stats.add_new_query "Unknown" (num_exprs) formulas ARE_SAME 0.0);
      
      let params = Params.mk_params ctx in
      (*Params.add_bool params (Symbol.mk_string ctx "sort_store") true;*)

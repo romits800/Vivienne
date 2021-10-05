@@ -1,19 +1,40 @@
+open Z3_stats
 (* Solver statistics *)
 
-type query_t = { solver: string; num_exprs: int; time: float }
+(* correspond to is_sat queries - from branches
+ *               is_v_ct_sat queries - for check branches and loads/stores
+ *               are_same - check if values are same - invariant
+ *               find_solutions - find the solutions for call_indirect 
+ *               is_ct_unsat - not in use - indirect leakages *)
+type q_type = IS_SAT | IS_V_CT_SAT | ARE_SAME | SOLUTION | IS_CT_UNSAT
+
+type query_t = { solver: string; num_exprs: int; time: float;
+                 query_type: q_type; 
+                 expr_stats: z3_stats_t}
+
 type stat_t = { z3 : int; cvc4 : int; boolector : int;
                 bitwuzla : int; yices : int; queries : query_t list} 
 
 let stats = ref { z3 = 0; cvc4 = 0; boolector = 0; yices = 0; bitwuzla = 0;
-                  queries = [] }
+                  queries = []}
 
 let init_stats () =
   stats := { z3 = 0; cvc4 = 0;
              boolector = 0; yices = 0;
              bitwuzla = 0; queries = [] }
 
+let string_of_qtype = function
+    | IS_SAT -> "0"
+    | IS_V_CT_SAT -> "1"
+    | ARE_SAME -> "2"
+    | SOLUTION -> "3"
+    | IS_CT_UNSAT -> "4"
+
 let print_query q =
-  print_endline @@ q.solver ^ ": " ^ string_of_int q.num_exprs ^ ": " ^ string_of_float q.time
+  (* solver : num_exprs : num_numerals : num_consts : num_bvs 
+            : num_bool : num_array : num_adds : solver time*)
+  print_endline @@ q.solver ^ ":" ^ string_of_qtype q.query_type ^ ":" ^  string_of_int q.num_exprs 
+                   ^ ":" ^ z3stats_to_string q.expr_stats ^ ":" ^ string_of_float q.time
   
 let print_stats () =
   print_endline @@ "Z3 : " ^ (string_of_int !stats.z3);
@@ -23,10 +44,12 @@ let print_stats () =
   print_endline @@ "Bitwuzla : " ^ (string_of_int !stats.bitwuzla);
   List.iter print_query !stats.queries
 
-let add_new_query sol num_exprs t =
+let add_new_query sol num_exprs exprs qtyp t =
   stats := {!stats with queries = ({solver = sol;
                                     num_exprs = num_exprs;
-                                    time = t}::!stats.queries)}
+                                    time = t;
+                                    query_type = qtyp;
+                                    expr_stats = get_stats_z3exp exprs}::!stats.queries)}
 
 
 let update_query_str sol =
