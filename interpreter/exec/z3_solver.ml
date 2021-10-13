@@ -1180,7 +1180,8 @@ let find_solutions (sv: svalue) (pc : pc_ext)
              | Some m ->
                 (match Model.get_const_interp_e m v' with
                  | Some ex when Expr.is_numeral ex ->
-                    let v = Int64.of_int @@ BitVector.get_int ex in
+                    let nstr = BitVector.numeral_to_string ex in
+                    let v = Int64.of_string  nstr  in
                     find_solutions_i sv pc mem (v::acc)
                  | _ -> acc
                 );
