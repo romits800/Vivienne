@@ -6,7 +6,7 @@ open Z3_stats
  *               are_same - check if values are same - invariant
  *               find_solutions - find the solutions for call_indirect 
  *               is_ct_unsat - not in use - indirect leakages *)
-type q_type = IS_SAT | IS_V_CT_SAT | ARE_SAME | SOLUTION | IS_CT_UNSAT
+type q_type = IS_SAT | IS_V_CT_UNSAT | ARE_SAME | SOLUTION | IS_CT_UNSAT
 
 type query_t = { solver: string; num_exprs: int; time: float;
                  query_type: q_type; 
@@ -35,10 +35,19 @@ let update_stats = function
 
 let string_of_qtype = function
     | IS_SAT      -> "0"
-    | IS_V_CT_SAT -> "1"
+    | IS_V_CT_UNSAT -> "1"
     | ARE_SAME    -> "2"
     | SOLUTION    -> "3"
     | IS_CT_UNSAT -> "4"
+
+
+let int_of_qtype = function
+    | IS_SAT      -> 0
+    | IS_V_CT_UNSAT -> 1
+    | ARE_SAME    -> 2
+    | SOLUTION    -> 3
+    | IS_CT_UNSAT -> 4
+
 
 let print_query q =
   print_endline @@ q.solver ^ ":" ^ string_of_qtype q.query_type ^ ":" ^  string_of_int q.num_exprs 
@@ -68,6 +77,10 @@ let add_new_query sol num_exprs exprs qtyp t =
                                     query_type = qtyp;
                                     expr_stats = get_stats_z3exp exprs}::!stats.queries)}
 
+
+let features_to_array num_exprs exprs qtyp =
+  let intqtyp = int_of_qtype qtyp in
+  all_features_to_array num_exprs intqtyp exprs
 
 let update_query_str sol =
   match !stats.queries with

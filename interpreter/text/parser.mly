@@ -95,7 +95,7 @@ let empty_context () =
   }
 
 let force_locals (c : context) =
-  List.fold_right Pervasives.(@@) !(c.deferred_locals) ();
+  List.fold_right Stdlib.(@@) !(c.deferred_locals) ();
   c.deferred_locals := []
 
 let enter_func (c : context) =

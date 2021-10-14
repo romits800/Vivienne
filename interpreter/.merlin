@@ -1,4 +1,6 @@
 PKG z3
+PKG sklearn
+PKG np
 
 S binary
 S runtime

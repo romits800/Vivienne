@@ -18,12 +18,13 @@ JSLIB =		wast.js
 WINMAKE =	winmake.bat
 
 #PACKAGE =       
-PACKAGE =       -package z3 -package unix -package num
+PACKAGE =       -package z3 -package unix -package num -package sklearn #-package py
+#PACKAGE =       -package z3 -package unix -package num -package py -package sklearn
 DIRS =		util syntax binary text valid smtlib runtime exec script host main
-LIBS =		bigarray
+LIBS =		#bigarray
 #FLAGS = 	-lexflags -ml -cflags '-w +a-4-27-42-44-45 -warn-error +a-3'
-FLAGS = 	-lexflags -ml -cflags '-w +a-4-27-42-44-45 -warn-error +a-3' -lflags ' -cclib -lstdc++ -cclib -lpthread'
-OCB =		ocamlbuild $(FLAGS) $(DIRS:%=-I %) $(LIBS:%=-libs %) ${PACKAGE}
+FLAGS = 	-lexflags -ml -cflags '-w +a-4-27-42-44-45 -warn-error +a-3' -lflags ' -cclib -lstdc++ -cclib -lpthread -cclib -lpython3.7m'
+OCB =		ocamlbuild  $(FLAGS) $(DIRS:%=-I %) $(LIBS:%=-libs %) ${PACKAGE}
 JS =		# set to JS shell command to run JS tests
 
 
@@ -53,6 +54,7 @@ comma =		,
 _tags:
 		echo >$@ "true: bin_annot"
 		echo >>$@ "true: debug"
+		#echo >>$@ "true: thread"
 		echo >>$@ "true: use_menhir"
 		echo >>$@ "<{$(subst $(space),$(comma),$(DIRS))}/*.cmx>: for-pack($(PACK))"
 

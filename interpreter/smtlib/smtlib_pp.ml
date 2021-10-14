@@ -1,4 +1,4 @@
-(**************************************************************************)
+
 (*  This file is part of BINSEC.                                          *)
 (*                                                                        *)
 (*  Copyright (C) 2016-2019                                               *)
@@ -300,7 +300,7 @@ let pp ppf (s: script) =
 
 
 let pp_tofile filename program =
-  let oc = Pervasives.open_out_bin filename in
+  let oc = Stdlib.open_out_bin filename in
   let ppf = Format.formatter_of_out_channel oc in
   Format.fprintf ppf "%a@." pp program;
   close_out oc;

@@ -257,7 +257,7 @@ and get_stats_exp (exp: Z3.Expr.expr) (stats: z3_stats_t) : z3_stats_t =
            else if Z3Array.is_select exp then
              inc_array_select stats |> inc_array
             else
-             inc_array_other stats |> inc_array
+              inc_array_other stats |> inc_array
          with _ ->               
            inc_array stats)
      | _ -> stats
@@ -285,3 +285,35 @@ and get_stats_exp (exp: Z3.Expr.expr) (stats: z3_stats_t) : z3_stats_t =
 let get_stats_z3exp (exps: Z3.Expr.expr list) : z3_stats_t  =
   let nstats = empty_stats() in
   get_stats_exps exps nstats 
+
+
+
+
+let all_features_to_array num_exprs intqtype exprs =
+  let stats = get_stats_z3exp exprs in
+  [|[| intqtype;
+       num_exprs;
+       stats.num_consts;
+       stats.num_array;
+       stats.num_array_store;
+       stats.num_array_select;
+       stats.num_array_other;
+       stats.num_bvs;
+       stats.num_adds;
+       stats.num_muls;
+       stats.num_divs;
+       stats.num_comps;
+       stats.num_logs;
+       stats.num_shifts;
+       stats.num_numerals;
+       stats.num_exts;
+       stats.num_other;
+       stats.num_bool;
+       stats.num_bool_ites;
+       stats.num_bool_eqs;
+       stats.num_bool_nots;
+       stats.num_bool_trues;
+       stats.num_bool_falses;
+       stats.num_bool_ands;
+       stats.num_bool_ors;
+       stats.num_bool_other |] |]

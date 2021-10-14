@@ -222,7 +222,39 @@ let get_size e =
  *   with Not_found ->
  *         let m' = ExprMem.add s' true m in
  *         (m', true) *)
-        
+
+
+type regs_t = {
+               z3_reg: Sklearn.Tree.DecisionTreeRegressor.t;
+               z3_bind_reg: Sklearn.Tree.DecisionTreeRegressor.t;
+               cvc4_reg: Sklearn.Tree.DecisionTreeRegressor.t;
+               boolector_reg: Sklearn.Tree.DecisionTreeRegressor.t;
+               yices_reg: Sklearn.Tree.DecisionTreeRegressor.t;
+               bitwuzla_reg: Sklearn.Tree.DecisionTreeRegressor.t;
+               
+             }
+
+let load_pickle picklename =
+  let open Sklearn.Tree in
+  Np.Numpy.load ~allow_pickle:(true) ~file:(`S picklename) () |>
+    DecisionTreeRegressor.of_pyobject
+
+let regs = ref {
+               z3_reg = load_pickle "pred_Z3.pickle";
+               z3_bind_reg = load_pickle "pred_Z3_bindings.pickle";
+               cvc4_reg = load_pickle "pred_CVC4.pickle";
+               boolector_reg = load_pickle "pred_Boolector.pickle";
+               yices_reg = load_pickle "pred_Yices.pickle";
+               bitwuzla_reg = load_pickle "pred_BitWuzla.pickle";
+             }
+
+let predict_value features solver_reg =
+  let open Sklearn.Tree in
+  let pred_val = DecisionTreeRegressor.predict ~x:features solver_reg |>
+                   Np.Numpy.Ndarray.to_float_array in
+  Array.get pred_val 0
+
+
 
 let to_int rt =
   try
@@ -1072,6 +1104,32 @@ let write_formula_to_file ?model:(model=true) solver =
   filename
 
 
+
+
+let predict_solver num_exprs formulas qtype =
+  let arr = features_to_array num_exprs formulas qtype in
+  let nptemp = Np.Numpy.matrixi arr in
+  let pred_val_z3b = predict_value nptemp (!regs.z3_bind_reg) in
+  let pred_val_z3 = predict_value nptemp (!regs.z3_reg) in
+  let pred_val_cvc4 = predict_value nptemp (!regs.cvc4_reg) in
+  let pred_val_yices = predict_value nptemp (!regs.yices_reg) in
+  let pred_val_bool = predict_value nptemp (!regs.boolector_reg) in
+  let pred_val_bitw = predict_value nptemp (!regs.bitwuzla_reg) in
+  (* print_endline @@ Printf.sprintf "%.5f" pred_val ; *)
+  let predictions = [pred_val_z3b; pred_val_z3; pred_val_cvc4;
+                     pred_val_yices; pred_val_bool; pred_val_bitw] in
+  (* let open Float in *)
+  let mval = List.fold_left  (fun x -> fun m -> min x m) max_float predictions in
+  (* print_endline @@ Printf.sprintf "%.5f" mval; *)
+  (* print_endline @@ Printf.sprintf "%.5f" pred_val_z3b;
+   * print_endline @@ Printf.sprintf "%.5f" pred_val_z3;
+   * print_endline @@ Printf.sprintf "%.5f" pred_val_cvc4;
+   * print_endline @@ Printf.sprintf "%.5f" pred_val_bool;
+   * print_endline @@ Printf.sprintf "%.5f" pred_val_yices;
+   * print_endline @@ Printf.sprintf "%.5f" pred_val_bitw; *)
+  (mval == pred_val_z3b) && (pred_val_z3b < 0.5)
+
+
 (* TODO: Add constraints about the posible values to be within the range of functions *) 
 let find_solutions (sv: svalue) (pc : pc_ext)
       (mem: Smemory.t list * int * int) : int list =
@@ -1120,10 +1178,9 @@ let find_solutions (sv: svalue) (pc : pc_ext)
     );
 
     let num_exprs = Goal.get_num_exprs g in
-      
+    let formulas = Goal.get_formulas g in
  
     if (!Flags.stats) then (
-      let formulas = Goal.get_formulas g in
       Stats.add_new_query "Unknown" num_exprs formulas SOLUTION 0.0;
     );
 
@@ -1131,7 +1188,63 @@ let find_solutions (sv: svalue) (pc : pc_ext)
     List.iter (fun f -> Solver.add solver [f]) (Goal.get_formulas g);
 
     match !Flags.solver with
-    | Flags.PORTFOLIO | Flags.MIXED  -> (* TODO split this? *) 
+    | Flags.MIXED ->
+       if (num_exprs < !Flags.very_small_num_expr ||
+             predict_solver num_exprs formulas SOLUTION) then (
+
+         (if (!Flags.stats) then
+            Stats.update_query_str "Z3_bindings");
+         let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
+         
+         try 
+           match (Solver.check solver []) with
+           | Solver.SATISFIABLE ->
+              (if (!Flags.stats) then ( 
+                 Stats.update_query_time (Unix.gettimeofday () -. start);
+                 Stats.print_last();
+              ));
+              let model = Solver.get_model solver in
+              (match model with
+               | None -> acc
+               | Some m ->
+                  (match Model.get_const_interp_e m v' with
+                   | Some ex when Expr.is_numeral ex ->
+                      let nstr = BitVector.numeral_to_string ex in
+                      let v = Int64.of_string  nstr  in
+                      find_solutions_i sv pc mem (v::acc)
+                   | _ -> acc
+                  );
+              )
+           | _ ->
+              if (!Flags.stats) then (
+                Stats.update_query_time (Unix.gettimeofday () -. start);
+                Stats.print_last()
+              );
+              acc
+         with _ ->
+               if !Flags.debug then print_endline "Z3 solver failed - Maybe Timeout";
+               if (!Flags.stats) then (
+                 Stats.update_query_time (Unix.gettimeofday () -. start);
+                 Stats.print_last()
+               );
+               acc
+       ) else ( (*Run portfolio*)
+         let filename = write_formula_to_file solver in
+         let timeout = 0 in
+         let ret = (match run_solvers filename read_yices read_z3
+                            read_cvc4 read_boolector read_bitwuzla timeout with
+                    | None -> acc
+                    | Some v -> 
+                       if !Flags.debug then(
+                         print_endline "Found_solution";
+                         print_endline (Int64.to_string v));
+                       find_solutions_i sv pc mem (v::acc)
+
+                   ) in
+         remove filename;
+         ret 
+       )
+    | Flags.PORTFOLIO  -> (* TODO split this? *) 
        let filename = write_formula_to_file solver in
        let timeout = 0 in
        let ret = (match run_solvers filename read_yices read_z3
@@ -1323,8 +1436,8 @@ let is_ct_unsat ?timeout:(timeout=300) ?model:(model=false) (pc : pc_ext)
 
      let num_exprs = Goal.get_num_exprs g in
      (* Some bug causes seg fault *)
+     let formulas = Goal.get_formulas g in
      if (!Flags.stats) then (
-       let formulas = Goal.get_formulas g in
        Stats.add_new_query "Unknown" (num_exprs) formulas IS_CT_UNSAT 0.0;
      );
      match !Flags.solver with
@@ -1364,39 +1477,42 @@ let is_ct_unsat ?timeout:(timeout=300) ?model:(model=false) (pc : pc_ext)
                );
                false)
      | Flags.MIXED ->
-       if num_exprs > !Flags.magic_number_1 then (
-         let filename = write_formula_to_file ~model:model solver in
-         let timeout = 0 in
-         let res = not (run_solvers ~model:model filename (read_sat "yices")
-                          (read_sat "z3") (read_sat "cvc4")
-                          (read_sat "boolector") (read_sat "bitwuzla") 
-                          timeout) in
-         remove filename;
-         res
-       ) else (
-         (if (!Flags.stats) then
-            Stats.update_query_str "Z3_bindings");
-         let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
-         try
-           match (Solver.check solver []) with
-           | Solver.UNSATISFIABLE ->
-              if (!Flags.stats) then (
-                Stats.update_query_time (Unix.gettimeofday () -. start);
-                Stats.print_last ();
-              );
-              true
-           | _ ->
-              if (!Flags.stats) then (
-                Stats.update_query_time (Unix.gettimeofday () -. start);
-                Stats.print_last());
-              false
-         with _ ->
-               if !Flags.debug then print_endline "Z3 solver failed - Maybe timeout";
+        (*let open Py in
+       let np = PyModule.import "numpy" in
+       let _ = np $. (String "array") in*)
+        if num_exprs < !Flags.very_small_num_expr ||
+             predict_solver num_exprs formulas IS_CT_UNSAT then (
+          (if (!Flags.stats) then
+             Stats.update_query_str "Z3_bindings");
+          let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
+          try
+            match (Solver.check solver []) with
+            | Solver.UNSATISFIABLE ->
+               if (!Flags.stats) then (
+                 Stats.update_query_time (Unix.gettimeofday () -. start);
+                 Stats.print_last ();
+               );
+               true
+            | _ ->
                if (!Flags.stats) then (
                  Stats.update_query_time (Unix.gettimeofday () -. start);
                  Stats.print_last());
                false
-               
+          with _ ->
+                if !Flags.debug then print_endline "Z3 solver failed - Maybe timeout";
+                if (!Flags.stats) then (
+                  Stats.update_query_time (Unix.gettimeofday () -. start);
+                  Stats.print_last());
+                false
+        ) else (
+          let filename = write_formula_to_file ~model:model solver in
+          let timeout = 0 in
+          let res = not (run_solvers ~model:model filename (read_sat "yices")
+                           (read_sat "z3") (read_sat "cvc4")
+                           (read_sat "boolector") (read_sat "bitwuzla") 
+                           timeout) in
+          remove filename;
+          res               
        )
      | Flags.Z3 | Flags.CVC4 | Flags.BOOLECTOR | Flags.BITWUZLA | Flags.YICES2 ->
         let filename = write_formula_to_file solver in
@@ -1405,7 +1521,10 @@ let is_ct_unsat ?timeout:(timeout=300) ?model:(model=false) (pc : pc_ext)
                          (read_sat "boolector") (read_sat "bitwuzla") timeout) in
         remove filename;
         res
-     
+
+
+
+        
 let is_v_ct_unsat ?timeout:(timeout=300) ?model:(model=false) (pc : pc_ext) (sv : svalue)
       (mem: Smemory.t list * int * int) : bool =
   if !Flags.debug then (
@@ -1449,9 +1568,9 @@ let is_v_ct_unsat ?timeout:(timeout=300) ?model:(model=false) (pc : pc_ext) (sv 
 
      let num_exprs = Goal.get_num_exprs g in
 
+     let formulas = Goal.get_formulas g in
      if (!Flags.stats) then (
-       let formulas = Goal.get_formulas g in
-       Stats.add_new_query "Unknown" (num_exprs) formulas IS_V_CT_SAT 0.0);
+       Stats.add_new_query "Unknown" (num_exprs) formulas IS_V_CT_UNSAT 0.0);
      
      let params = Params.mk_params ctx in
      let s_formulas = (List.map (fun e -> Expr.simplify e (Some params)) (Goal.get_formulas g)) in
@@ -1505,23 +1624,9 @@ let is_v_ct_unsat ?timeout:(timeout=300) ?model:(model=false) (pc : pc_ext) (sv 
                 false
         )
      | Flags.MIXED -> 
-        if num_exprs > !Flags.magic_number_1 then (
-          if !Flags.debug then print_endline "Using portfolio solver..";
-          
-          let filename = write_formula_to_file ~model:model solver in
-
-          let res = 
-            try (
-              not (run_solvers ~model:model filename (read_sat "yices") (read_sat "z3")
-                     (read_sat "cvc4") (read_sat "boolector")
-                     (read_sat "bitwuzla") timeout)
-            )
-            with Timeout -> false
-          in
-          remove filename;
-          res
-        ) else (
-
+        
+        if num_exprs < !Flags.very_small_num_expr ||
+             predict_solver num_exprs formulas IS_V_CT_UNSAT then (
           if !Flags.debug then print_endline "Using Z3 solver..";
 
           (if (!Flags.stats) then 
@@ -1551,6 +1656,23 @@ let is_v_ct_unsat ?timeout:(timeout=300) ?model:(model=false) (pc : pc_ext) (sv 
                   Stats.update_query_time (Unix.gettimeofday () -. start);
                   Stats.print_last());
                 false
+        ) else (
+          (* let _ =  in *)  
+          if !Flags.debug then print_endline "Using portfolio solver..";
+          
+          let filename = write_formula_to_file ~model:model solver in
+
+          let res = 
+            try (
+              not (run_solvers ~model:model filename (read_sat "yices") (read_sat "z3")
+                     (read_sat "cvc4") (read_sat "boolector")
+                     (read_sat "bitwuzla") timeout)
+            )
+            with Timeout -> false
+          in
+          remove filename;
+          res
+
         )
      | Flags.Z3 | Flags.CVC4 | Flags.BOOLECTOR
        | Flags.BITWUZLA | Flags.YICES2 ->
@@ -1569,12 +1691,12 @@ let is_v_ct_unsat ?timeout:(timeout=300) ?model:(model=false) (pc : pc_ext) (sv 
         res
 
 
-      
-
-
 let is_sat ?timeout:(timeout=300) (pc : pc_ext) (mem: Smemory.t list * int * int) : bool =
   if !Flags.debug then 
     print_endline "Checking satisfiability..";
+
+       (* let print arr = Format.printf "%a\n" Np.Numpy.pp arr in *)
+       (* Np.Numpy.(ones [3; 4] |> print); *)
 
 
   let start_t = if !Flags.debug then Unix.gettimeofday() else 0.0 in
@@ -1609,9 +1731,9 @@ let is_sat ?timeout:(timeout=300) (pc : pc_ext) (mem: Smemory.t list * int * int
       (if (!Flags.debug) then
          print_endline "Done init");
 
+      let formulas = Goal.get_formulas g in
 
       (if (!Flags.stats) then (
-         let formulas = Goal.get_formulas g in
          Stats.add_new_query "Unknown" num_exprs formulas IS_SAT 0.0);
       );
 
@@ -1659,48 +1781,47 @@ let is_sat ?timeout:(timeout=300) (pc : pc_ext) (mem: Smemory.t list * int * int
                  
          )
       | Flags.MIXED ->
-        if  num_exprs > !Flags.magic_number_2  then (
-          let filename = write_formula_to_file ~model:false solver in
-          if !Flags.debug then
-            print_endline ("is_sat after write formula " ^ filename); 
-          
-          let res = 
-            try ( 
-              run_solvers ~model:false filename (read_sat "yices") (read_sat "z3")
-                (read_sat "cvc4") (read_sat "boolector") 
-                (read_sat "bitwuzla") timeout
-            )
-            with Timeout -> true
-          in
-          remove filename;
-          res
-        ) else (
+         if num_exprs < !Flags.very_small_num_expr  ||
+               predict_solver num_exprs formulas IS_SAT then (
+           (if (!Flags.stats) then
+              Stats.update_query_str "Z3_bindings") ;
+           let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
 
-          (if (!Flags.stats) then
-             Stats.update_query_str "Z3_bindings") ;
-          let start = if !Flags.stats then Unix.gettimeofday() else 0.0 in
-
-          try
-          let check_solver = Solver.check solver [] in
-          match check_solver with
-          | Solver.SATISFIABLE ->
-             if (!Flags.stats) then (
-               Stats.update_query_time (Unix.gettimeofday () -. start);
-               Stats.print_last());
-             true
-          | _ ->
-             if (!Flags.stats) then (
-               Stats.update_query_time (Unix.gettimeofday () -. start);
-               Stats.print_last());
-             false
-          with _ -> 
-             if !Flags.debug then print_endline "Z3 solver failed - Maybe timeout";
-             if (!Flags.stats) then (
-               Stats.update_query_time (Unix.gettimeofday () -. start);
-               Stats.print_last());
-             false
- 
-        )  
+           try
+             let check_solver = Solver.check solver [] in
+             match check_solver with
+             | Solver.SATISFIABLE ->
+                if (!Flags.stats) then (
+                  Stats.update_query_time (Unix.gettimeofday () -. start);
+                  Stats.print_last());
+                true
+             | _ ->
+                if (!Flags.stats) then (
+                  Stats.update_query_time (Unix.gettimeofday () -. start);
+                  Stats.print_last());
+                false
+           with _ -> 
+                 if !Flags.debug then print_endline "Z3 solver failed - Maybe timeout";
+                 if (!Flags.stats) then (
+                   Stats.update_query_time (Unix.gettimeofday () -. start);
+                   Stats.print_last());
+                 false
+         ) else (
+             let filename = write_formula_to_file ~model:false solver in
+             if !Flags.debug then
+               print_endline ("is_sat after write formula " ^ filename); 
+             
+             let res = 
+               try ( 
+                 run_solvers ~model:false filename (read_sat "yices") (read_sat "z3")
+                   (read_sat "cvc4") (read_sat "boolector") 
+                   (read_sat "bitwuzla") timeout
+               )
+               with Timeout -> true
+             in
+           remove filename;
+           res 
+         )  
       | Flags.Z3 | Flags.CVC4 | Flags.BOOLECTOR
         | Flags.BITWUZLA | Flags.YICES2 ->
          let filename = write_formula_to_file ~model:false solver in
@@ -1878,9 +1999,8 @@ let are_same_i ?timeout:(timeout=300) ?model:(model=false) (v1 : rel_type) (v2 :
      let solver = Solver.mk_solver ctx None in
 
      let num_exprs = Goal.get_num_exprs g in
-
+     let formulas = Goal.get_formulas g in
      if (!Flags.stats) then (
-       let formulas = Goal.get_formulas g in
        Stats.add_new_query "Unknown" (num_exprs) formulas ARE_SAME 0.0);
      
      let params = Params.mk_params ctx in
@@ -1894,7 +2014,7 @@ let are_same_i ?timeout:(timeout=300) ?model:(model=false) (v1 : rel_type) (v2 :
      | Flags.PORTFOLIO -> 
         let filename = write_formula_to_file ~model:model solver in
         if !Flags.debug then
-          print_endline ("is_v_ct_unsat after write formula " ^ filename); 
+          print_endline ("are_same after write formula " ^ filename); 
         let res = 
           try (
             not (run_solvers ~model:model filename (read_sat "yices")
@@ -1943,23 +2063,8 @@ let are_same_i ?timeout:(timeout=300) ?model:(model=false) (v1 : rel_type) (v2 :
                 false
         )
      | Flags.MIXED ->
-        if num_exprs > !Flags.magic_number_1 then (
-          if !Flags.debug then print_endline "Using portfolio solver..";
-          
-          let filename = write_formula_to_file ~model:model solver in
-
-          let res = 
-            try (
-              not (run_solvers ~model:model filename (read_sat "yices") (read_sat "z3")
-                     (read_sat "cvc4") (read_sat "boolector")
-                     (read_sat "bitwuzla") timeout)
-            )
-            with Timeout -> false
-          in
-          remove filename;
-          res
-        ) else (
-
+        if num_exprs < !Flags.very_small_num_expr ||
+             predict_solver num_exprs formulas ARE_SAME  then (
           if !Flags.debug then print_endline "Using Z3 solver..";
 
           (if (!Flags.stats) then
@@ -1989,13 +2094,27 @@ let are_same_i ?timeout:(timeout=300) ?model:(model=false) (v1 : rel_type) (v2 :
                   Stats.update_query_time (Unix.gettimeofday () -. start);
                   Stats.print_last());
                 false
-                
+        ) else (
+          if !Flags.debug then print_endline "Using portfolio solver..";
+          
+          let filename = write_formula_to_file ~model:model solver in
+
+          let res = 
+            try (
+              not (run_solvers ~model:model filename (read_sat "yices") (read_sat "z3")
+                     (read_sat "cvc4") (read_sat "boolector")
+                     (read_sat "bitwuzla") timeout)
+            )
+            with Timeout -> false
+          in
+          remove filename;
+          res                
         )
      | Flags.Z3 | Flags.CVC4 | Flags.BOOLECTOR |
          Flags.BITWUZLA | Flags.YICES2 -> 
         let filename = write_formula_to_file ~model:model solver in
         if !Flags.debug then
-          print_endline ("is_v_ct_unsat after write formula " ^ filename); 
+          print_endline ("are_same after write formula " ^ filename); 
         let res = 
           try (
             not (run_solvers ~model:model filename (read_sat "yices")

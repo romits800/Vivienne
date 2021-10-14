@@ -24,6 +24,7 @@ let end_of_ro_data = ref (-1)
 let generate_model = ref false
 let magic_number_2 = ref 1000
 let magic_number_1 = ref 1000
+let very_small_num_expr = ref 100
 
 
 type solver_id_t = MIXED | PORTFOLIO | Z3_BINDINGS | Z3 | CVC4 | BITWUZLA | BOOLECTOR | YICES2 
