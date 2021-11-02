@@ -8,26 +8,35 @@ For compiling Vivienne, you need to make sure that you have the following
 prerequisites.
 
 ### OCaml
-Vivienne is tested with OCaml version 4.06.
+Vivienne is tested with OCaml version 4.10.
 To install the OCaml build system using opam run:
 ```bash
 $ sudo apt-get install opam
 ```
-To initialize opam and install OCaml version 4.06.0 run:
+To initialize opam and install OCaml version 4.10.0 run:
 
 ```bash
 $ opam init 
-$ opam switch 4.06.0
+$ opam switch 4.10.0
 ```
 
 Install the following dependencies:
 ```bash
-$ sudo apt-get install libgmp-dev python2.7
+$ sudo apt-get install libgmp-dev python3.7
 ```
 
 Then, install the following packages with opam:
 ```bash
-$ opam install ocamlbuild z3 menhir num
+$ opam install ocamlbuild z3 menhir num sklearn
+```
+
+### Install environment for python3.7
+TODO: Instructions
+
+Activate the environment run in the terminal that you will run the Vivienne:
+
+```bash
+$ . venv3.7/bin/activate
 ```
 
 ### Z3 OCaml bindings
