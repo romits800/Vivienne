@@ -40,7 +40,7 @@ let argspec = Arg.align
   (* "--z3-only", Arg.Set Flags.z3_only, " run using the z3 bindings";
    * "--portfolio-only", Arg.Set Flags.portfolio_only, " run using the portfolio solver"; *)
 
-  "--solver", Arg.String (fun str -> Flags.set_solver str), " run using the portfolio solver"; 
+  "--solver", Arg.String (fun str -> Flags.set_solver str), " select solver z3_bindings|z3|yices|cvc4|boolector|bitwuzla|portfolio (requires the respective solver in the $PATH)"; 
 
   "--elim-indvar", Arg.Set Flags.elim_induction_variables, " perform induction variable elimination";
   "--unroll-one", Arg.Set Flags.unroll_one, " use with -l to unroll the first iteration of each loop";
