@@ -17,10 +17,14 @@ To compile and run Vivienne, there is a number of prerequisites described in int
 ```bash
 cd interpreter
 make
-```
 
-# citing
+```
+# Experiments
+
+The experiments used in our paper are available at [Vivienne_eval](https://github.com/romits800/Vivienne_eval). 
+
+## citing
 
 For citing WebAssembly in LaTeX, use [this bibtex file](wasm-specs.bib).
 
-For citing Vivienne in LaTeX, the reference will follow.
+For citing Vivienne in LaTeX, use [this bibtex file](vivienne.bib)
