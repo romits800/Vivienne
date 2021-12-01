@@ -9,6 +9,7 @@ open Stats
 
    
 let path = ref (getenv "VIV_PATH")
+let pred_path = ref (!path ^ "predictors/")
 
 let gl_expr_counter = ref 0
 let si_expr_counter = ref 0
@@ -240,12 +241,12 @@ let load_pickle picklename =
     DecisionTreeRegressor.of_pyobject
 
 let regs = ref {
-               z3_reg = load_pickle "pred_Z3.pickle";
-               z3_bind_reg = load_pickle "pred_Z3_bindings.pickle";
-               cvc4_reg = load_pickle "pred_CVC4.pickle";
-               boolector_reg = load_pickle "pred_Boolector.pickle";
-               yices_reg = load_pickle "pred_Yices.pickle";
-               bitwuzla_reg = load_pickle "pred_BitWuzla.pickle";
+               z3_reg = load_pickle (!pred_path ^ "pred_Z3.pickle");
+               z3_bind_reg = load_pickle (!pred_path ^ "pred_Z3_bindings.pickle");
+               cvc4_reg = load_pickle (!pred_path ^ "pred_CVC4.pickle");
+               boolector_reg = load_pickle (!pred_path ^ "pred_Boolector.pickle");
+               yices_reg = load_pickle (!pred_path ^ "pred_Yices.pickle");
+               bitwuzla_reg = load_pickle (!pred_path ^ "pred_BitWuzla.pickle");
              }
 
 let predict_value features solver_reg =
@@ -2117,7 +2118,7 @@ let are_same_i ?timeout:(timeout=300) ?model:(model=false) (v1 : rel_type) (v2 :
           print_endline ("are_same after write formula " ^ filename); 
         let res = 
           try (
-            not (run_solvers ~model:model filename (read_sat "yices")
+            not (run_solver ~model:model filename (read_sat "yices")
                    (read_sat "z3")
                    (read_sat "cvc4") (read_sat "boolector")
                    (read_sat "bitwuzla") timeout)
